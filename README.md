@@ -1,3 +1,5 @@
+<img width="150" height="150" alt="aact logo" src="https://github.com/user-attachments/assets/abbcea49-51c9-4e57-8cbe-a1ed11d1fa48" />
+
 # Architecture As Code Tools
 [![test workflow](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml)
 
