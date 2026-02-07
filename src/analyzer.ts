@@ -1,4 +1,4 @@
-import { ArchitectureModel, Boundary, Container, Relation } from "./entities";
+import { ArchitectureModel, Boundary, Container, Relation } from "./model";
 
 export interface CouplingRelation {
   from: string;

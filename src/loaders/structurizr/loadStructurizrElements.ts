@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { ArchitectureModel, Boundary, Container, Relation } from "../entities";
+import { ArchitectureModel, Boundary, Container, Relation } from "../../model";
 import {
   StructurizrRelationship,
   StructurizrSoftwareSystem,

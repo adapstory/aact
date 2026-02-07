@@ -6,7 +6,7 @@ import {
   UMLElement,
 } from "plantuml-parser";
 
-import { ArchitectureModel, Boundary, Container } from "../entities";
+import { ArchitectureModel, Boundary, Container } from "../../model";
 
 const addDependency = (
   containers: Container[],

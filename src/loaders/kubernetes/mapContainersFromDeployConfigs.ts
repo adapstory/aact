@@ -1,4 +1,4 @@
-import { Section } from "../entities";
+import { Section } from "../../model";
 import { DeployConfig } from "./index";
 
 const mapFromConfig = (deployConfig: DeployConfig): DeployConfig => {

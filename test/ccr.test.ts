@@ -2,7 +2,7 @@ import { analyzeArchitecture, BoundaryAnalysis } from "../src/analyzer";
 import {
   loadPlantumlElements,
   mapContainersFromPlantumlElements,
-} from "../src/plantuml";
+} from "../src/loaders/plantuml";
 
 /**
  * Core diagrams https://github.com/plantuml-stdlib/C4-PlantUML/blob/master/samples/C4CoreDiagrams.md

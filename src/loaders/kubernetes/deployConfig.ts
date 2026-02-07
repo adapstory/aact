@@ -1,4 +1,4 @@
-import { Section } from "../entities";
+import { Section } from "../../model";
 
 export interface EnvValue {
   prod?: string;
