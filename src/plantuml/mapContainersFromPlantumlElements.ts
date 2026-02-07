@@ -6,7 +6,7 @@ import {
   UMLElement,
 } from "plantuml-parser";
 
-import { Boundary,Container, PumlFile } from "../entities";
+import { Boundary, Container, PumlFile } from "../entities";
 
 const addDependency = (
   containers: Container[],
@@ -57,7 +57,7 @@ export const mapContainersFromPlantumlElements = (
   const boundaries: Boundary[] = elements
     .filter((element) => element instanceof Stdlib_C4_Boundary)
     .map((element) => {
-      const component = element as Stdlib_C4_Boundary;
+      const component = element;
       return {
         name: component.alias,
         label: component.label,
@@ -68,30 +68,26 @@ export const mapContainersFromPlantumlElements = (
             .filter(
               (element) => element instanceof Stdlib_C4_Container_Component,
             )
-            .some(
-              (e) =>
-                (e as Stdlib_C4_Container_Component).alias == container.name,
-            ),
+            .some((e) => e.alias == container.name),
         ),
       };
     });
 
   for (const boundary of boundaries) {
-    var component = elements.filter(
+    const component = elements.find(
       (element) =>
-        element instanceof Stdlib_C4_Boundary &&
-        (element as Stdlib_C4_Boundary).alias == boundary.name,
-    )[0] as Stdlib_C4_Boundary;
+        element instanceof Stdlib_C4_Boundary && element.alias == boundary.name,
+    ) as Stdlib_C4_Boundary;
 
     boundary.boundaries = boundaries.filter((b) =>
       component.elements
         .filter((element) => element instanceof Stdlib_C4_Boundary)
-        .some((e) => (e as Stdlib_C4_Boundary).alias == b.name),
+        .some((e) => e.alias == b.name),
     );
-    }
+  }
 
   return {
-    allContainers: containers.sort((a, b) => a.name.localeCompare(b.name)),
+    allContainers: containers.toSorted((a, b) => a.name.localeCompare(b.name)),
     boundaries: boundaries,
   };
 };

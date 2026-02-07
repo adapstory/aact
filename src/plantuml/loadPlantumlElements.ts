@@ -1,7 +1,12 @@
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 
-import { Comment, parse as parsePuml, Stdlib_C4_Dynamic_Rel, UMLElement } from "plantuml-parser";
+import {
+  Comment,
+  parse as parsePuml,
+  Stdlib_C4_Dynamic_Rel,
+  UMLElement,
+} from "plantuml-parser";
 
 import { filterElements } from "./lib/filterElements";
 
@@ -21,8 +26,7 @@ export const loadPlantumlElements = async (
   for (const element of elements) {
     if (element instanceof Comment) continue;
     const relation = element as Stdlib_C4_Dynamic_Rel;
-    if(relation.type_.name.startsWith("Rel_Back"))
-    {
+    if (relation.type_.name.startsWith("Rel_Back")) {
       const from = relation.from;
       relation.from = relation.to;
       relation.to = from;

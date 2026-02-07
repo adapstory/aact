@@ -1,5 +1,5 @@
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 import YAML from "yaml";
 
@@ -27,6 +27,14 @@ const getMicroserviceFilepaths = async (): Promise<string[]> => {
   return filenames.map((filename) => path.join(deploysPath, filename));
 };
 
+interface RawDeployYaml {
+  microservice?: RawDeployYaml;
+  name?: string;
+  fileName?: string;
+  environment?: { [key: string]: object };
+  sections?: { name: string; prod_value: string }[];
+}
+
 export const loadMicroserviceDeployConfigs = async (): Promise<
   DeployConfig[]
 > => {
@@ -34,10 +42,12 @@ export const loadMicroserviceDeployConfigs = async (): Promise<
   return Promise.all(
     filepaths.map(async (filePath): Promise<DeployConfig> => {
       const content = await fs.readFile(filePath, "utf8");
-      let parsed = YAML.parse(content.replaceAll("env:", "environment:"));
+      let parsed = YAML.parse(
+        content.replaceAll("env:", "environment:"),
+      ) as RawDeployYaml;
       if (parsed.microservice) parsed = parsed.microservice;
       parsed.fileName = path.parse(filePath).name;
-      return parsed;
+      return parsed as DeployConfig;
     }),
   );
 };

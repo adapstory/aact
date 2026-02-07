@@ -1,24 +1,23 @@
 import { Section } from "../entities";
-
 import { DeployConfig } from "./index";
 
 const mapFromConfig = (deployConfig: DeployConfig): DeployConfig => {
-  const envWhitelist = [
+  const envWhitelist: (string | RegExp)[] = [
     "BASE_URL",
     "PROTOCOL",
-    /[A-Z_]+(?<!ERROR)_TOPIC/,
+    "_TOPIC",
     "__BaseAddress",
     "__BaseAddress",
     "__Endpoint",
     "__SmtpServer",
     "QueueName",
   ];
-  const envNamePartsToCleanup = [
+  const envNamePartsToCleanup: (string | RegExp)[] = [
     "_BASE_URL",
     "_API",
     "_CLIENT",
     "_PROTOCOL",
-    /_KAFKA_[A-Z_]+_TOPIC/,
+    /_KAFKA_(?:[A-Z]+_)+TOPIC/,
   ];
 
   const synonymes = new Map<string, string[]>([]);
@@ -26,20 +25,22 @@ const mapFromConfig = (deployConfig: DeployConfig): DeployConfig => {
   const environment = deployConfig?.environment ?? {};
   const envKeys = Object.keys(environment);
   const filteredEnvKeys = envKeys.filter((envName) =>
-    envWhitelist.some((white) => envName.match(white)),
+    envWhitelist.some((white) =>
+      typeof white === "string"
+        ? envName.includes(white)
+        : white.exec(envName) !== null,
+    ),
   );
 
   const sections: Section[] = filteredEnvKeys
     .map((envName) => {
-      const value = environment[envName] as any;
+      const value = environment[envName];
       return {
-        prod_value: value.prod ?? value.default,
-        name: envNamePartsToCleanup
-          .reduce(
-            (acc, partToCleanup) => acc.toString().replace(partToCleanup, ""),
-            envName,
-          )
-          .toString(),
+        prod_value: value?.prod ?? value?.default ?? "",
+        name: envNamePartsToCleanup.reduce<string>(
+          (acc, partToCleanup) => acc.replace(partToCleanup, ""),
+          envName,
+        ),
       };
     })
     .map((relation) => {
@@ -49,8 +50,8 @@ const mapFromConfig = (deployConfig: DeployConfig): DeployConfig => {
       }
       return relation;
     });
-  deployConfig.name = (deployConfig.name ?? deployConfig.fileName).replace(
-    /[\s-\(\)]/g,
+  deployConfig.name = (deployConfig.name ?? deployConfig.fileName).replaceAll(
+    /[\s\-()]/g,
     "_",
   );
   deployConfig.sections = sections;

@@ -4,7 +4,7 @@ import {
   Stdlib_C4_Dynamic_Rel,
   UMLElement,
 } from "plantuml-parser";
-import { Stdlib_C4_Boundary } from "plantuml-parser/dist/types";
+import { Stdlib_C4_Boundary } from "plantuml-parser";
 
 export interface ArchitectureElements {
   components: Stdlib_C4_Container_Component[];
@@ -39,7 +39,7 @@ export const groupElements = (elements: UMLElement[]) => {
       result.boundaries.push({
         boundary: element as Stdlib_C4_Boundary,
         couplingRelations: [],
-        cohesion: 0
+        cohesion: 0,
       });
     } else {
       result.components.push(element as Stdlib_C4_Container_Component);

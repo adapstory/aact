@@ -1,6 +1,5 @@
 import { Container } from "./container";
 
-
 export interface Boundary {
   readonly name: string;
   readonly label: string;
@@ -8,4 +7,3 @@ export interface Boundary {
   boundaries: Boundary[];
   readonly containers: Container[];
 }
-

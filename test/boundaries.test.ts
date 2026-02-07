@@ -1,7 +1,4 @@
-/* eslint-disable no-console */
-
 import { Boundary, PumlFile } from "../src/entities";
-
 import {
   loadPlantumlElements,
   mapContainersFromPlantumlElements,
@@ -18,15 +15,6 @@ describe("Architecture", () => {
     pumlFile = mapContainersFromPlantumlElements(pumlElements);
   });
 
-  beforeEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, n/global-require
-    global.console = require("console");
-  });
-
-  afterEach(() => {
-    global.console = console;
-  });
-
   it("check coupling and cohesion", () => {
     // для всех наших контекстов и периметров
     for (const boundary of pumlFile.boundaries) {
@@ -39,7 +27,7 @@ describe("Architecture", () => {
       // во-первых, внутренняя прочность периметра должна быть больше внешней связанности
       expect(cohesion).toBeGreaterThan(coupling);
 
-      // во-вторых, если у периметр содержит в себе другие периметры — его прочность должна быть меньше суммы прочностей внутренних периметров
+      // во-вторых, если у периметр содержит в себе другие периметры — его прочность должна быть меньше суммы прочностей внутренних периметров
       if (boundary.boundaries.length > 0)
         expect(cohesion).toBeLessThan(
           boundary.boundaries.reduce(
@@ -53,7 +41,7 @@ describe("Architecture", () => {
 });
 
 function GetBoundaryCohesion(boundary: Boundary) {
-  var result = 0;
+  let result = 0;
   for (const container of boundary.containers) {
     result += container.relations.filter((r) =>
       boundary.containers.some((c) => c.name == r.to.name),
@@ -66,7 +54,7 @@ function GetBoundaryCohesion(boundary: Boundary) {
 }
 
 function GetBoundaryCoupling(boundary: Boundary) {
-  var result = 0;
+  let result = 0;
 
   for (const container of boundary.containers) {
     result += container.relations.filter(

@@ -1,15 +1,14 @@
-/* eslint-disable no-console */
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 import { Stdlib_C4_Dynamic_Rel } from "plantuml-parser";
 
-import { Container } from "../src/entities";
 import {
   DeployConfig,
   loadMicroserviceDeployConfigs,
   mapFromConfigs,
 } from "../src/deployConfigs";
+import { Container } from "../src/entities";
 import {
   loadPlantumlElements,
   mapContainersFromPlantumlElements,
@@ -35,15 +34,6 @@ describe("Architecture", () => {
     deployConfigsForContainers = deployConfigs.filter((x) =>
       containersFromPuml.find((y) => x.name === y.name),
     );
-  });
-
-  beforeEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, n/global-require
-    global.console = require("console");
-  });
-
-  afterEach(() => {
-    global.console = console;
   });
 
   it("find diff in configs and uml containers", () => {
@@ -261,7 +251,7 @@ Boundary(project, "Our system"){
           for (const rel of containers) {
             addRel(config.name, rel.name, "", true);
           }
-          if (containers.length == 0) {
+          if (containers.length === 0) {
             addRel(
               config.name,
               section.name.replaceAll("kafka_", "").replaceAll("_topic", ""),
@@ -290,7 +280,7 @@ Boundary(project, "Our system"){
             (x.to === fromName && x.from === toName),
         )
       ) {
-        var transportAttribute = "";
+        let transportAttribute = "";
         if (!intContainers.includes(toName) && !extSystems.includes(toName)) {
           data += `System_Ext(${toName}, "${toName}", " ")
 `;
