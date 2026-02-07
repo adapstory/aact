@@ -6,7 +6,7 @@ import {
   UMLElement,
 } from "plantuml-parser";
 
-import { Boundary, Container, PumlFile } from "../entities";
+import { ArchitectureModel, Boundary, Container } from "../entities";
 
 const addDependency = (
   containers: Container[],
@@ -25,7 +25,7 @@ const addDependency = (
 
 export const mapContainersFromPlantumlElements = (
   elements: UMLElement[],
-): PumlFile => {
+): ArchitectureModel => {
   const containers: Container[] = elements
     .filter(
       (element) =>

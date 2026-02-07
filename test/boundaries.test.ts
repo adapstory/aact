@@ -1,4 +1,4 @@
-import { Boundary, PumlFile } from "../src/entities";
+import { ArchitectureModel, Boundary } from "../src/entities";
 import {
   loadPlantumlElements,
   mapContainersFromPlantumlElements,
@@ -8,7 +8,7 @@ const SystemExternalType = "System_Ext";
 const ContainerType = "Container";
 
 describe("Architecture", () => {
-  let pumlFile: PumlFile;
+  let pumlFile: ArchitectureModel;
 
   beforeAll(async () => {
     const pumlElements = await loadPlantumlElements("boundaries.puml");

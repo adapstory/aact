@@ -1,5 +1,4 @@
-import { Container, PumlFile } from "../src/entities";
-import { Relation } from "../src/entities/relation";
+import { ArchitectureModel, Container, Relation } from "../src/entities";
 import { loadStructurizrElements } from "../src/structurizr";
 
 const SystemExternalType = "System_Ext";
@@ -7,11 +6,11 @@ const ContainerDbType = "ContainerDb";
 const ContainerType = "Container";
 
 describe("Structurizr Architecture Rules", () => {
-  let result: PumlFile;
+  let result: ArchitectureModel;
   let containers: Container[];
 
   beforeAll(async () => {
-    result = await loadStructurizrElements("workspace_globrix.json");
+    result = await loadStructurizrElements("workspace.json");
     containers = result.allContainers;
   });
 

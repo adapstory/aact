@@ -1,25 +1,29 @@
-import {
-  Stdlib_C4_Boundary,
-  Stdlib_C4_Container_Component,
-  Stdlib_C4_Dynamic_Rel,
-} from "plantuml-parser";
+import { ArchitectureModel, Boundary, Container, Relation } from "./entities";
 
-import { loadPlantumlElements } from "./plantuml";
-import {
-  ArchitectureElements,
-  groupElements,
-} from "./plantuml/lib/groupElements";
-
-interface AnalyzedArchitecture {
-  elements: ArchitectureElements;
-  report: AnalysisReport;
+export interface CouplingRelation {
+  from: string;
+  to: string;
 }
 
-interface AnalysisReport {
+export interface BoundaryAnalysis {
+  name: string;
+  label: string;
+  cohesion: number;
+  coupling: number;
+  couplingRelations: CouplingRelation[];
+}
+
+export interface AnalysisReport {
   elementsCount: number;
   syncApiCalls: number;
   asyncApiCalls: number;
   databases: DatabasesInfo;
+  boundaries: BoundaryAnalysis[];
+}
+
+export interface AnalyzedArchitecture {
+  model: ArchitectureModel;
+  report: AnalysisReport;
 }
 
 interface DatabasesInfo {
@@ -27,83 +31,121 @@ interface DatabasesInfo {
   consumes: number;
 }
 
+interface RelationWithSource {
+  from: Container;
+  relation: Relation;
+}
+
 const apiTechnologies = ["http", "grpc", "tcp"];
 
-const boundaryContainsAlias = (
-  boundary: ArchitectureElements["boundaries"][number],
-  alias: string,
-): boolean =>
-  boundary.boundary.elements.some(
-    (e) => (e as Stdlib_C4_Container_Component).alias === alias,
+const allRelations = (model: ArchitectureModel): RelationWithSource[] =>
+  model.allContainers.flatMap((container) =>
+    container.relations.map((relation) => ({ from: container, relation })),
   );
 
-const classifyRelation = (
-  archBoundary: ArchitectureElements["boundaries"][number],
-  parentBoundary: ArchitectureElements["boundaries"][number] | undefined,
-  relation: Stdlib_C4_Dynamic_Rel,
-): void => {
-  if (!boundaryContainsAlias(archBoundary, relation.from)) return;
+const boundaryContainsName = (boundary: Boundary, name: string): boolean =>
+  boundary.containers.some((c) => c.name === name);
 
-  if (boundaryContainsAlias(archBoundary, relation.to)) {
-    archBoundary.cohesion++;
+const classifyRelation = (
+  boundary: Boundary,
+  parentBoundary: Boundary | undefined,
+  from: Container,
+  relation: Relation,
+  result: BoundaryAnalysis,
+  parentResult: BoundaryAnalysis | undefined,
+): void => {
+  if (!boundaryContainsName(boundary, from.name)) return;
+
+  if (boundaryContainsName(boundary, relation.to.name)) {
+    result.cohesion++;
     return;
   }
 
   const isInParentSibling =
-    parentBoundary?.boundary.elements.some((b) =>
-      (b as Stdlib_C4_Boundary).elements?.some(
-        (e) => (e as Stdlib_C4_Container_Component).alias === relation.to,
-      ),
+    parentBoundary?.boundaries.some((b) =>
+      b.containers.some((c) => c.name === relation.to.name),
     ) ?? false;
 
   if (!parentBoundary || isInParentSibling) {
-    archBoundary.couplingRelations.push(relation);
-    if (parentBoundary) parentBoundary.cohesion++;
-  } else {
-    parentBoundary.couplingRelations.push(relation);
+    result.coupling++;
+    result.couplingRelations.push({ from: from.name, to: relation.to.name });
+    if (parentResult) parentResult.cohesion++;
+  } else if (parentResult) {
+    parentResult.coupling++;
+    parentResult.couplingRelations.push({
+      from: from.name,
+      to: relation.to.name,
+    });
   }
 };
 
-const analyzeElements = (elements: ArchitectureElements): AnalysisReport => {
-  const asyncApiCalls = elements.relations.filter((it) =>
-    (it.descr ?? "").includes("async"),
+const analyzeModel = (model: ArchitectureModel): AnalysisReport => {
+  const relations = allRelations(model);
+
+  const asyncApiCalls = relations.filter((it) =>
+    it.relation.tags?.includes("async"),
   );
-  const syncApiCalls = elements.relations.filter((it) => {
-    const component = elements.components.find((ct) => ct.alias === it.to);
-    const isExternalApi = (component!.type_.name as string) === "System_Ext";
+  const syncApiCalls = relations.filter((it) => {
+    const isExternalApi = it.relation.to.type === "System_Ext";
     const isApiTechnology = apiTechnologies.some((apiTechn) =>
-      (it.techn ?? "").toLowerCase().includes(apiTechn),
+      (it.relation.technology ?? "").toLowerCase().includes(apiTechn),
     );
-    return it.descr !== "async" && (isExternalApi || isApiTechnology);
+    return (
+      !it.relation.tags?.includes("async") && (isExternalApi || isApiTechnology)
+    );
   });
 
-  for (const archBoundary of elements.boundaries) {
-    const parentBoundary = elements.boundaries.find((b) =>
-      b.boundary.elements.some(
-        (e) => (e as Stdlib_C4_Boundary).alias === archBoundary.boundary.alias,
-      ),
+  const boundaryResults = new Map<string, BoundaryAnalysis>();
+  for (const boundary of model.boundaries) {
+    boundaryResults.set(boundary.name, {
+      name: boundary.name,
+      label: boundary.label,
+      cohesion: 0,
+      coupling: 0,
+      couplingRelations: [],
+    });
+  }
+
+  for (const boundary of model.boundaries) {
+    const parentBoundary = model.boundaries.find((b) =>
+      b.boundaries.some((child) => child.name === boundary.name),
     );
 
-    for (const relation of elements.relations) {
-      classifyRelation(archBoundary, parentBoundary, relation);
+    const result = boundaryResults.get(boundary.name)!;
+    const parentResult = parentBoundary
+      ? boundaryResults.get(parentBoundary.name)
+      : undefined;
+
+    for (const { from, relation } of relations) {
+      classifyRelation(
+        boundary,
+        parentBoundary,
+        from,
+        relation,
+        result,
+        parentResult,
+      );
     }
   }
 
   return {
-    elementsCount: elements.components.length,
+    elementsCount: model.allContainers.length,
     syncApiCalls: syncApiCalls.length,
     asyncApiCalls: asyncApiCalls.length,
-    databases: analyzeDatabases(elements),
+    databases: analyzeDatabases(model),
+    boundaries: [...boundaryResults.values()],
   };
 };
 
-const analyzeDatabases = (elements: ArchitectureElements): DatabasesInfo => {
-  const dbContainers = elements.components.filter(
-    (it) => it.type_.name === "ContainerDb",
+const analyzeDatabases = (model: ArchitectureModel): DatabasesInfo => {
+  const dbContainers = model.allContainers.filter(
+    (it) => it.type === "ContainerDb",
   );
 
-  const dbRelations = elements.relations.filter((it) =>
-    dbContainers.some((ct) => [it.from, it.to].includes(ct.alias)),
+  const dbRelations = model.allContainers.flatMap((container) =>
+    container.relations.filter((r) =>
+      dbContainers.some((db) => db.name === r.to.name),
+    ),
   );
 
   return {
@@ -112,14 +154,11 @@ const analyzeDatabases = (elements: ArchitectureElements): DatabasesInfo => {
   };
 };
 
-export const analyzeArchitecture = async (
-  filename: string,
-): Promise<AnalyzedArchitecture> => {
-  const pumlElements = await loadPlantumlElements(filename);
-  const groupedElements = groupElements(pumlElements);
-
+export const analyzeArchitecture = (
+  model: ArchitectureModel,
+): AnalyzedArchitecture => {
   return {
-    elements: groupedElements,
-    report: analyzeElements(groupedElements),
+    model,
+    report: analyzeModel(model),
   };
 };

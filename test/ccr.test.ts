@@ -1,40 +1,42 @@
+import { analyzeArchitecture, BoundaryAnalysis } from "../src/analyzer";
 import {
-  Stdlib_C4_Boundary,
-  Stdlib_C4_Container_Component,
-} from "plantuml-parser";
-
-import { analyzeArchitecture } from "../src/analyzer";
+  loadPlantumlElements,
+  mapContainersFromPlantumlElements,
+} from "../src/plantuml";
 
 /**
  * Core diagrams https://github.com/plantuml-stdlib/C4-PlantUML/blob/master/samples/C4CoreDiagrams.md
  */
 describe("Cascade coupling reduction", () => {
   it("test1", async () => {
-    // const L2Report = await analyzeArchitecture("banking/C4L2.puml");
-    // const L3Report = await analyzeArchitecture("banking/C4L3.puml");
+    const pumlElements = await loadPlantumlElements("boundaries.puml");
+    const model = mapContainersFromPlantumlElements(pumlElements);
+    const BoundariesReport = analyzeArchitecture(model);
 
-    const BoundariesReport = await analyzeArchitecture("boundaries.puml");
-
-    // console.log(L2Report, L3Report, BoundariesReport);
-
-    for (const b of BoundariesReport.elements.boundaries) {
+    for (const b of BoundariesReport.report.boundaries) {
       console.log(
-        b.boundary.label,
+        b.label,
         `, cohesion: ${b.cohesion}`,
         `, coupling: ${b.couplingRelations.length}`,
       );
 
-      const parentBoundary = BoundariesReport.elements.boundaries.find((pb) =>
-        pb.boundary.elements.some(
-          (e) => (e as Stdlib_C4_Boundary).alias === b.boundary.alias,
-        ),
+      const parentBoundary = BoundariesReport.report.boundaries.find(
+        (pb: BoundaryAnalysis) =>
+          BoundariesReport.model.boundaries
+            .find((mb) => mb.name === pb.name)
+            ?.boundaries.some((child) => child.name === b.name) ?? false,
       );
 
       if (parentBoundary) {
+        const childBoundary = BoundariesReport.model.boundaries.find(
+          (mb) => mb.name === b.name,
+        )!;
+        const childContainerNames = new Set(
+          childBoundary.containers.map((c) => c.name),
+        );
+
         const parentCoupling = parentBoundary.couplingRelations.filter((r) =>
-          b.boundary.elements.some(
-            (e) => (e as Stdlib_C4_Container_Component).alias === r.from,
-          ),
+          childContainerNames.has(r.from),
         ).length;
 
         expect(b.cohesion).toBeGreaterThanOrEqual(b.couplingRelations.length);
@@ -47,8 +49,5 @@ describe("Cascade coupling reduction", () => {
         );
       }
     }
-
-    // console.log(BoundariesReport);
-    // console.log(BoundariesReport.elements.boundaries[0]);
   });
 });

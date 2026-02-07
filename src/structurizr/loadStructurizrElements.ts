@@ -1,8 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { Boundary, Container, PumlFile } from "../entities";
-import { Relation } from "../entities/relation";
+import { ArchitectureModel, Boundary, Container, Relation } from "../entities";
 import {
   StructurizrRelationship,
   StructurizrSoftwareSystem,
@@ -160,7 +159,7 @@ const addRelations = (
 
 export const mapContainersFromStructurizr = (
   workspace: StructurizrWorkspace,
-): PumlFile => {
+): ArchitectureModel => {
   const registry: ElementRegistry = {
     allElements: new Map<string, Container>(),
     containers: [],
@@ -212,7 +211,7 @@ export const mapContainersFromStructurizr = (
 
 export const loadStructurizrElements = async (
   fileName: string,
-): Promise<PumlFile> => {
+): Promise<ArchitectureModel> => {
   const workspace = await loadStructurizrWorkspace(fileName);
   return mapContainersFromStructurizr(workspace);
 };

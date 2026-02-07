@@ -1,8 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { Stdlib_C4_Dynamic_Rel } from "plantuml-parser";
-
 import {
   DeployConfig,
   loadMicroserviceDeployConfigs,
@@ -13,6 +11,11 @@ import {
   loadPlantumlElements,
   mapContainersFromPlantumlElements,
 } from "../src/plantuml";
+
+interface RelRecord {
+  from: string;
+  to: string;
+}
 
 const SystemExternalType = "System_Ext";
 const ContainerType = "Container";
@@ -218,7 +221,7 @@ AddElementTag("acl",  $bgColor = "#6F9355")
 Boundary(project, "Our system"){
 `;
 
-    const rels: Stdlib_C4_Dynamic_Rel[] = [];
+    const rels: RelRecord[] = [];
     const extSystems: string[] = [];
     const intContainers: string[] = [];
 
@@ -293,10 +296,7 @@ Boundary(project, "Our system"){
         data += `)
 `;
 
-        rels.push({
-          from: fromName,
-          to: toName,
-        } as Stdlib_C4_Dynamic_Rel);
+        rels.push({ from: fromName, to: toName });
       }
     }
   });
