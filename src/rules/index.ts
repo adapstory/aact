@@ -9,4 +9,5 @@ export * from "./dbPerService";
 export * from "./fix";
 export * from "./fixAcl";
 export * from "./fixDbPerService";
+export * from "./registry";
 export * from "./stableDependencies";

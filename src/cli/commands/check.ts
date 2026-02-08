@@ -7,22 +7,11 @@ import consola from "consola";
 
 import type { AactConfig } from "../../config";
 import type { ArchitectureModel } from "../../model";
-import type { AclOptions, Violation } from "../../rules/acl";
-import type { ApiGatewayOptions } from "../../rules/apiGateway";
-import type { DbPerServiceOptions } from "../../rules/dbPerService";
-import type { StableDependenciesOptions } from "../../rules/stableDependencies";
 import type { FixResult, SourceSyntax } from "../../rules/fix";
+import type { Violation } from "../../rules/types";
 import { plantumlSyntax } from "../../loaders/plantuml/syntax";
-import { checkAcl } from "../../rules/acl";
-import { checkAcyclic } from "../../rules/acyclic";
-import { checkApiGateway } from "../../rules/apiGateway";
-import { checkCohesion } from "../../rules/cohesion";
-import { checkCrud } from "../../rules/crud";
-import { checkDbPerService } from "../../rules/dbPerService";
-import { checkStableDependencies } from "../../rules/stableDependencies";
 import { applyEdits } from "../../rules/fix";
-import { fixAcl } from "../../rules/fixAcl";
-import { fixDbPerService } from "../../rules/fixDbPerService";
+import { ruleRegistry } from "../../rules/registry";
 import { loadModel } from "../loadModel";
 
 interface RuleResult {
@@ -36,69 +25,11 @@ const runRules = (
 ): RuleResult[] => {
   const results: RuleResult[] = [];
 
-  if (rules?.acl !== false) {
-    const options = typeof rules?.acl === "object" ? rules.acl : undefined;
-    results.push({
-      name: "acl",
-      violations: checkAcl(model.allContainers, options),
-    });
-  }
-
-  if (rules?.acyclic !== false) {
-    results.push({
-      name: "acyclic",
-      violations: checkAcyclic(model.allContainers),
-    });
-  }
-
-  if (rules?.apiGateway !== false) {
-    const options =
-      typeof rules?.apiGateway === "object"
-        ? (rules.apiGateway as ApiGatewayOptions)
-        : undefined;
-    results.push({
-      name: "apiGateway",
-      violations: checkApiGateway(model.allContainers, options),
-    });
-  }
-
-  if (rules?.crud !== false) {
-    const options = typeof rules?.crud === "object" ? rules.crud : undefined;
-    results.push({
-      name: "crud",
-      violations: checkCrud(model.allContainers, options),
-    });
-  }
-
-  if (rules?.dbPerService !== false) {
-    const options =
-      typeof rules?.dbPerService === "object"
-        ? rules.dbPerService
-        : undefined;
-    results.push({
-      name: "dbPerService",
-      violations: checkDbPerService(model.allContainers, options),
-    });
-  }
-
-  if (rules?.cohesion !== false) {
-    const options =
-      typeof rules?.cohesion === "object" ? rules.cohesion : undefined;
-    results.push({
-      name: "cohesion",
-      violations: checkCohesion(model, options),
-    });
-  }
-
-  if (rules?.stableDependencies !== false) {
-    const options =
-      typeof rules?.stableDependencies === "object"
-        ? (rules.stableDependencies as StableDependenciesOptions)
-        : undefined;
-    results.push({
-      name: "stableDependencies",
-      violations: checkStableDependencies(model.allContainers, options),
-    });
+  for (const rule of ruleRegistry) {
+    const configValue = rules?.[rule.name as keyof typeof rules];
+    if (configValue === false) continue;
+    const options = typeof configValue === "object" ? configValue : undefined;
+    results.push({ name: rule.name, violations: rule.check(model, options) });
   }
 
   return results;
@@ -123,27 +54,11 @@ const generateFixes = (
 
   for (const result of results) {
     if (result.violations.length === 0) continue;
-
-    switch (result.name) {
-      case "dbPerService": {
-        const options =
-          typeof rules?.dbPerService === "object"
-            ? (rules.dbPerService as DbPerServiceOptions)
-            : undefined;
-        fixes.push(
-          ...fixDbPerService(model, result.violations, syntax, options),
-        );
-        break;
-      }
-      case "acl": {
-        const options =
-          typeof rules?.acl === "object"
-            ? (rules.acl as AclOptions)
-            : undefined;
-        fixes.push(...fixAcl(model, result.violations, syntax, options));
-        break;
-      }
-    }
+    const ruleDef = ruleRegistry.find((r) => r.name === result.name);
+    if (!ruleDef?.fix) continue;
+    const configValue = rules?.[ruleDef.name as keyof typeof rules];
+    const options = typeof configValue === "object" ? configValue : undefined;
+    fixes.push(...ruleDef.fix(model, result.violations, syntax, options));
   }
 
   return fixes;
