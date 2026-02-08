@@ -5,12 +5,12 @@ import {
   DeployConfig,
   loadMicroserviceDeployConfigs,
   mapFromConfigs,
-} from "../src/loaders/kubernetes";
+} from "../../src/loaders/kubernetes";
 import {
   loadPlantumlElements,
   mapContainersFromPlantumlElements,
-} from "../src/loaders/plantuml";
-import { Container } from "../src/model";
+} from "../../src/loaders/plantuml";
+import { Container } from "../../src/model";
 
 interface RelRecord {
   from: string;
