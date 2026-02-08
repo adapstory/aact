@@ -1,4 +1,5 @@
 export * from "./acl";
+export * from "./types";
 export * from "./acyclic";
 export * from "./apiGateway";
 export * from "./cohesion";

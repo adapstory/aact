@@ -1,5 +1,5 @@
 import { Container } from "../model";
-import { Violation } from "./acl";
+import { Violation } from "./types";
 
 export interface DbPerServiceOptions {
   dbType?: string;

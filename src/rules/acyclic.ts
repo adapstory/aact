@@ -1,5 +1,5 @@
 import { Container, Relation } from "../model";
-import { Violation } from "./acl";
+import { Violation } from "./types";
 
 export const checkAcyclic = (containers: Container[]): Violation[] => {
   const violations: Violation[] = [];

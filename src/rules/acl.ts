@@ -1,9 +1,7 @@
 import { Container } from "../model";
+import { Violation } from "./types";
 
-export interface Violation {
-  container: string;
-  message: string;
-}
+export type { Violation } from "./types";
 
 export interface AclOptions {
   tag?: string;

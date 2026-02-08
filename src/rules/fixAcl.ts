@@ -1,5 +1,6 @@
 import type { ArchitectureModel } from "../model";
-import type { AclOptions, Violation } from "./acl";
+import type { AclOptions } from "./acl";
+import type { Violation } from "./types";
 import type { FixResult, SourceSyntax } from "./fix";
 
 export const fixAcl = (
