@@ -1,9 +1,8 @@
-import { loadConfig } from "c12";
 import { defineCommand } from "citty";
 import consola from "consola";
 
 import { analyzeArchitecture } from "../../analyzer";
-import type { AactConfig } from "../../config";
+import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
 export const analyze = defineCommand({
@@ -15,11 +14,7 @@ export const analyze = defineCommand({
     },
   },
   async run({ args }) {
-    const { config } = await loadConfig<AactConfig>({ name: "aact" });
-    if (!config?.source) {
-      throw new Error("No source configured. Create an aact.config.ts file.");
-    }
-
+    const config = await loadAndValidateConfig();
     const model = await loadModel(config);
     const { report } = analyzeArchitecture(model);
 

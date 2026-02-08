@@ -1,30 +1,49 @@
-import type { AclOptions } from "./rules/acl";
-import type { ApiGatewayOptions } from "./rules/apiGateway";
-import type { CohesionOptions } from "./rules/cohesion";
-import type { CrudOptions } from "./rules/crud";
-import type { DbPerServiceOptions } from "./rules/dbPerService";
-import type { StableDependenciesOptions } from "./rules/stableDependencies";
+import * as v from "valibot";
 
-export interface AactConfig {
-  source: {
-    type: "plantuml" | "structurizr";
-    path: string;
-  };
-  rules?: {
-    acl?: boolean | AclOptions;
-    acyclic?: boolean;
-    apiGateway?: boolean | ApiGatewayOptions;
-    crud?: boolean | CrudOptions;
-    dbPerService?: boolean | DbPerServiceOptions;
-    cohesion?: boolean | CohesionOptions;
-    stableDependencies?: boolean | StableDependenciesOptions;
-  };
-  generate?: {
-    kubernetes?: {
-      path?: string;
-    };
-    boundaryLabel?: string;
-  };
-}
+const ruleOption = <T extends v.ObjectEntries>(entries: T) =>
+  v.optional(v.union([v.boolean(), v.strictObject(entries)]));
+
+export const AactConfigSchema = v.strictObject({
+  source: v.strictObject({
+    type: v.picklist(["plantuml", "structurizr"]),
+    path: v.string(),
+  }),
+  rules: v.optional(
+    v.strictObject({
+      acl: ruleOption({
+        tag: v.optional(v.string()),
+        externalType: v.optional(v.string()),
+      }),
+      acyclic: v.optional(v.boolean()),
+      apiGateway: ruleOption({
+        aclTag: v.optional(v.string()),
+        externalType: v.optional(v.string()),
+        gatewayPattern: v.optional(v.instance(RegExp)),
+      }),
+      crud: ruleOption({
+        repoTags: v.optional(v.array(v.string())),
+        dbType: v.optional(v.string()),
+      }),
+      dbPerService: ruleOption({
+        dbType: v.optional(v.string()),
+      }),
+      cohesion: ruleOption({
+        externalType: v.optional(v.string()),
+        internalType: v.optional(v.string()),
+      }),
+      stableDependencies: ruleOption({
+        externalType: v.optional(v.string()),
+      }),
+    }),
+  ),
+  generate: v.optional(
+    v.strictObject({
+      kubernetes: v.optional(v.strictObject({ path: v.optional(v.string()) })),
+      boundaryLabel: v.optional(v.string()),
+    }),
+  ),
+});
+
+export type AactConfig = v.InferOutput<typeof AactConfigSchema>;
 
 export const defineConfig = (config: AactConfig): AactConfig => config;

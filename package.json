@@ -69,6 +69,7 @@
   "dependencies": {
     "c12": "4.0.0-beta.2",
     "citty": "^0.2.0",
-    "consola": "^3.4.2"
+    "consola": "^3.4.2",
+    "valibot": "^1.2.0"
   }
 }

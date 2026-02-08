@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { loadConfig } from "c12";
 import { defineCommand } from "citty";
 import consola from "consola";
 
@@ -10,6 +9,7 @@ import { generateKubernetes } from "../../generators/kubernetes";
 import { generatePlantuml } from "../../generators/plantuml";
 import { loadMicroserviceDeployConfigs } from "../../loaders/kubernetes/loadMicroserviceDeployConfigs";
 import { mapFromConfigs } from "../../loaders/kubernetes/mapContainersFromDeployConfigs";
+import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
 const runPlantuml = async (
@@ -69,7 +69,7 @@ export const generate = defineCommand({
     },
   },
   async run({ args }) {
-    const { config } = await loadConfig<AactConfig>({ name: "aact" });
+    const config = await loadAndValidateConfig();
     const format = args.format ?? "plantuml";
 
     switch (format) {
@@ -78,11 +78,6 @@ export const generate = defineCommand({
         break;
       }
       case "kubernetes": {
-        if (!config?.source) {
-          throw new Error(
-            "No source configured. Create an aact.config.ts file.",
-          );
-        }
         await runKubernetes(config, args.output);
         break;
       }

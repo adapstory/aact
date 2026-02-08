@@ -1,7 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { loadConfig } from "c12";
 import { defineCommand } from "citty";
 import consola from "consola";
 
@@ -12,6 +11,7 @@ import type { Violation } from "../../rules/types";
 import { plantumlSyntax } from "../../loaders/plantuml/syntax";
 import { applyEdits } from "../../rules/fix";
 import { ruleRegistry } from "../../rules/registry";
+import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
 interface RuleResult {
@@ -145,11 +145,7 @@ export const check = defineCommand({
     },
   },
   async run({ args }) {
-    const { config } = await loadConfig<AactConfig>({ name: "aact" });
-    if (!config?.source) {
-      throw new Error("No source configured. Create an aact.config.ts file.");
-    }
-
+    const config = await loadAndValidateConfig();
     const model = await loadModel(config);
     const results = runRules(model, config.rules);
     const format = detectFormat(args.format);

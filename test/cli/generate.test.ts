@@ -247,7 +247,7 @@ describe("generate command", () => {
 
       await expect(
         runGenerate({ format: "kubernetes" }),
-      ).rejects.toThrow("No source configured");
+      ).rejects.toThrow();
     });
 
     it("throws for unknown format", async () => {

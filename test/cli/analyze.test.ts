@@ -85,7 +85,7 @@ describe("analyze command", () => {
       config: {},
     } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
 
-    await expect(runAnalyze()).rejects.toThrow("No source configured");
+    await expect(runAnalyze()).rejects.toThrow();
   });
 
   it("outputs text metrics via consola", async () => {

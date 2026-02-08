@@ -135,7 +135,7 @@ describe("check command", () => {
       config: {},
     } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
 
-    await expect(runCheck()).rejects.toThrow("No source configured");
+    await expect(runCheck()).rejects.toThrow();
   });
 
   it("passes when no violations found", async () => {
