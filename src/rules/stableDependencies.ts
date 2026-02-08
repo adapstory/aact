@@ -1,15 +1,56 @@
-// TODO: Stable Dependencies Principle
-//
-// Компонент должен зависеть только от более стабильных компонентов.
-//
-// Стабильность (I) = Ce / (Ca + Ce), где:
-//   Ca — afferent coupling (кто зависит от меня)
-//   Ce — efferent coupling (от кого завишу я)
-//
-// I=0 — максимально стабильный (много зависимостей на меня, мало от меня)
-// I=1 — максимально нестабильный (мало на меня, много от меня)
-//
-// Правило: для каждой связи A→B должно выполняться I(A) >= I(B)
-//
+import { Container } from "../model";
+import { Violation } from "./acl";
 
-export {};
+export interface StableDependenciesOptions {
+  externalType?: string;
+}
+
+export const checkStableDependencies = (
+  containers: Container[],
+  options?: StableDependenciesOptions,
+): Violation[] => {
+  const externalType = options?.externalType ?? "System_Ext";
+  const violations: Violation[] = [];
+
+  const internal = containers.filter((c) => c.type !== externalType);
+  const internalNames = new Set(internal.map((c) => c.name));
+
+  const ca = new Map<string, number>();
+  const ce = new Map<string, number>();
+
+  for (const c of internal) {
+    ca.set(c.name, 0);
+    ce.set(c.name, 0);
+  }
+
+  for (const c of internal) {
+    for (const rel of c.relations) {
+      if (!internalNames.has(rel.to.name)) continue;
+      ce.set(c.name, ce.get(c.name)! + 1);
+      ca.set(rel.to.name, ca.get(rel.to.name)! + 1);
+    }
+  }
+
+  const instability = (name: string): number => {
+    const afferent = ca.get(name)!;
+    const efferent = ce.get(name)!;
+    if (afferent + efferent === 0) return 1;
+    return efferent / (afferent + efferent);
+  };
+
+  for (const c of internal) {
+    for (const rel of c.relations) {
+      if (!internalNames.has(rel.to.name)) continue;
+      const iSource = instability(c.name);
+      const iTarget = instability(rel.to.name);
+      if (iSource < iTarget) {
+        violations.push({
+          container: c.name,
+          message: `depends on less stable ${rel.to.name} (I=${iSource.toFixed(2)} → I=${iTarget.toFixed(2)})`,
+        });
+      }
+    }
+  }
+
+  return violations;
+};
