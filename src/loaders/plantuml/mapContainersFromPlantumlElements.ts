@@ -39,7 +39,7 @@ export const mapContainersFromPlantumlElements = (
         label: component.label,
         type: component.type_.name,
         relations: [],
-        tags: component.sprite,
+        tags: component.sprite ? [component.sprite] : undefined,
         description: component.descr,
       };
     });

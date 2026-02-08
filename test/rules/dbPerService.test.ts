@@ -16,7 +16,7 @@ describe("checkDbPerService", () => {
         name: "orders_repo",
         label: "Orders Repo",
         type: "Container",
-        tags: "repo",
+        tags: ["repo"],
         description: "",
         relations: [{ to: db }],
       },

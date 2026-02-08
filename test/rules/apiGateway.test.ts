@@ -16,7 +16,7 @@ describe("checkApiGateway", () => {
         name: "my_acl",
         label: "My ACL",
         type: "Container",
-        tags: "acl",
+        tags: ["acl"],
         description: "",
         relations: [
           { to: externalSystem, technology: "https://gateway.int.com:443/api/v1" },
@@ -34,7 +34,7 @@ describe("checkApiGateway", () => {
         name: "my_acl",
         label: "My ACL",
         type: "Container",
-        tags: "acl",
+        tags: ["acl"],
         description: "",
         relations: [
           { to: externalSystem, technology: "https://direct.api.com/v1" },
@@ -62,7 +62,7 @@ describe("checkApiGateway", () => {
         name: "my_acl",
         label: "My ACL",
         type: "Container",
-        tags: "acl",
+        tags: ["acl"],
         description: "",
         relations: [{ to: db }],
       },
@@ -85,7 +85,7 @@ describe("checkApiGateway", () => {
         name: "adapter",
         label: "Adapter",
         type: "Container",
-        tags: "adapter",
+        tags: ["adapter"],
         description: "",
         relations: [
           { to: legacy, technology: "https://proxy.internal/api" },
@@ -131,7 +131,7 @@ describe("checkApiGateway", () => {
         name: "my_acl",
         label: "My ACL",
         type: "Container",
-        tags: "acl",
+        tags: ["acl"],
         description: "",
         relations: [
           { to: ext1, technology: "https://gateway.int.com/v1" },

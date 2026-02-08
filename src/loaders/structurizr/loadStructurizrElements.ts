@@ -52,8 +52,8 @@ const isDatabase = (technology?: string, name?: string): boolean => {
   return false;
 };
 
-const enrichTags = (existingTags?: string, name?: string): string => {
-  const tags: string[] = existingTags?.split(",").map((t) => t.trim()) ?? [];
+const enrichTags = (existingTags?: string, name?: string): string[] => {
+  const tags: string[] = existingTags?.split(",").map((t) => t.trim()).filter(Boolean) ?? [];
   const nameLower = name?.toLowerCase() ?? "";
 
   // Add "repo" tag for CRUD services
@@ -66,7 +66,7 @@ const enrichTags = (existingTags?: string, name?: string): string => {
     tags.push("acl");
   }
 
-  return tags.join(",");
+  return tags;
 };
 
 export const loadStructurizrWorkspace = async (
@@ -91,7 +91,7 @@ const processExternalSystem = (
     name: system.id,
     label: system.name,
     type: "System_Ext",
-    tags: system.tags,
+    tags: system.tags?.split(",").map((t) => t.trim()).filter(Boolean),
     description: system.description ?? "",
     relations: [],
   };
@@ -179,7 +179,7 @@ export const mapContainersFromStructurizr = (
       name: person.id,
       label: person.name,
       type: "Person",
-      tags: person.tags,
+      tags: person.tags?.split(",").map((t) => t.trim()).filter(Boolean),
       description: person.description ?? "",
       relations: [],
     };
