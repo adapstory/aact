@@ -5,17 +5,23 @@ import YAML from "yaml";
 
 import { DeployConfig } from "./deployConfig";
 
-const getMicroserviceFilepaths = async (): Promise<string[]> => {
+const defaultDeploysPath = path.join(
+  "resources/kubernetes",
+  "microservices",
+);
+
+const getMicroserviceFilepaths = async (
+  deploysPath?: string,
+): Promise<string[]> => {
   const partialNamesToExclude = ["migrator", "platform", "citest", "tests"];
   const namesToExclude = new Set(["ignore.yml"]);
 
-  const deploysPath = path.join(
+  const resolvedPath = path.resolve(
     process.cwd(),
-    "resources/kubernetes",
-    "microservices",
+    deploysPath ?? defaultDeploysPath,
   );
 
-  const filenames = (await fs.readdir(deploysPath, "utf8"))
+  const filenames = (await fs.readdir(resolvedPath, "utf8"))
     .filter((filename) =>
       new Set([".yml", ".yaml"]).has(path.extname(filename)),
     )
@@ -24,7 +30,7 @@ const getMicroserviceFilepaths = async (): Promise<string[]> => {
       partialNamesToExclude.every((toExclude) => !filename.includes(toExclude)),
     );
 
-  return filenames.map((filename) => path.join(deploysPath, filename));
+  return filenames.map((filename) => path.join(resolvedPath, filename));
 };
 
 interface RawDeployYaml {
@@ -35,10 +41,10 @@ interface RawDeployYaml {
   sections?: { name: string; prod_value: string }[];
 }
 
-export const loadMicroserviceDeployConfigs = async (): Promise<
-  DeployConfig[]
-> => {
-  const filepaths = await getMicroserviceFilepaths();
+export const loadMicroserviceDeployConfigs = async (
+  deploysPath?: string,
+): Promise<DeployConfig[]> => {
+  const filepaths = await getMicroserviceFilepaths(deploysPath);
   return Promise.all(
     filepaths.map(async (filePath): Promise<DeployConfig> => {
       const content = await fs.readFile(filePath, "utf8");
