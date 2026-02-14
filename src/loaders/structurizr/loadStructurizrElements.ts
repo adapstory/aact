@@ -8,10 +8,6 @@ import {
   StructurizrWorkspace,
 } from "./types";
 
-const getFilepath = (fileName: string): string => {
-  return path.join(process.cwd(), "resources/architecture", fileName);
-};
-
 const DATABASE_TECHNOLOGIES = [
   "postgresql",
   "postgres",
@@ -74,9 +70,9 @@ const enrichTags = (existingTags?: string, name?: string): string[] => {
 };
 
 export const loadStructurizrWorkspace = async (
-  fileName: string,
+  filePath: string,
 ): Promise<StructurizrWorkspace> => {
-  const filepath = getFilepath(fileName);
+  const filepath = path.resolve(filePath);
   const data = await fs.readFile(filepath, "utf8");
   return JSON.parse(data) as StructurizrWorkspace;
 };
@@ -220,8 +216,8 @@ export const mapContainersFromStructurizr = (
 };
 
 export const loadStructurizrElements = async (
-  fileName: string,
+  filePath: string,
 ): Promise<ArchitectureModel> => {
-  const workspace = await loadStructurizrWorkspace(fileName);
+  const workspace = await loadStructurizrWorkspace(filePath);
   return mapContainersFromStructurizr(workspace);
 };

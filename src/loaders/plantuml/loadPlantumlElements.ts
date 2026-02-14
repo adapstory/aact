@@ -10,14 +10,10 @@ import {
 
 import { filterElements } from "./lib/filterElements";
 
-const getFilepath = (fileName: string): string => {
-  return path.join(process.cwd(), "resources/architecture", fileName);
-};
-
 export const loadPlantumlElements = async (
-  fileName: string,
+  filePath: string,
 ): Promise<UMLElement[]> => {
-  const filepath = getFilepath(fileName);
+  const filepath = path.resolve(filePath);
 
   let data = await fs.readFile(filepath, "utf8");
   data = data.replaceAll(/, \$tags=(".+?")/g, ", $1").replaceAll('""', '" "');

@@ -5,5 +5,5 @@ export default defineBuildConfig({
   declaration: true,
   clean: true,
   externals: ["plantuml-parser", "yaml"],
-  failOnWarn: false,
+  failOnWarn: true,
 });

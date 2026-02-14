@@ -5,7 +5,9 @@ describe("Structurizr Loader", () => {
   let model: ArchitectureModel;
 
   beforeAll(async () => {
-    model = await loadStructurizrElements("workspace.json");
+    model = await loadStructurizrElements(
+      "resources/architecture/workspace.json",
+    );
   });
 
   it("loads containers from workspace.json", () => {
@@ -36,5 +38,11 @@ describe("Structurizr Loader", () => {
       0,
     );
     expect(relationsCount).toBeGreaterThan(0);
+  });
+
+  it("rejects with ENOENT for nonexistent file", async () => {
+    await expect(loadStructurizrElements("nonexistent.json")).rejects.toThrow(
+      /ENOENT/,
+    );
   });
 });

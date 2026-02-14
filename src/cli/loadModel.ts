@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { AactConfig } from "../config";
 import { loadPlantumlElements } from "../loaders/plantuml/loadPlantumlElements";
 import { mapContainersFromPlantumlElements } from "../loaders/plantuml/mapContainersFromPlantumlElements";
@@ -7,13 +9,15 @@ import type { ArchitectureModel } from "../model";
 export const loadModel = async (
   config: AactConfig,
 ): Promise<ArchitectureModel> => {
+  const resolvedPath = path.resolve(config.source.path);
+
   switch (config.source.type) {
     case "plantuml": {
-      const elements = await loadPlantumlElements(config.source.path);
+      const elements = await loadPlantumlElements(resolvedPath);
       return mapContainersFromPlantumlElements(elements);
     }
     case "structurizr": {
-      return loadStructurizrElements(config.source.path);
+      return loadStructurizrElements(resolvedPath);
     }
     default: {
       const sourceType: never = config.source.type;

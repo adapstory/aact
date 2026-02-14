@@ -9,7 +9,9 @@ import {
  */
 describe("Cascade coupling reduction", () => {
   it("test1", async () => {
-    const pumlElements = await loadPlantumlElements("boundaries.puml");
+    const pumlElements = await loadPlantumlElements(
+      "resources/architecture/boundaries.puml",
+    );
     const model = mapContainersFromPlantumlElements(pumlElements);
     const BoundariesReport = analyzeArchitecture(model);
 

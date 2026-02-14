@@ -6,22 +6,17 @@ import consola from "consola";
 
 import type { AactConfig } from "../../config";
 import { generateKubernetes } from "../../generators/kubernetes";
-import { generatePlantuml } from "../../generators/plantuml";
-import { loadMicroserviceDeployConfigs } from "../../loaders/kubernetes/loadMicroserviceDeployConfigs";
-import { mapFromConfigs } from "../../loaders/kubernetes/mapContainersFromDeployConfigs";
+import { generatePlantumlFromModel } from "../../generators/plantumlFromModel";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
 const runPlantuml = async (
-  config: AactConfig | undefined,
+  config: AactConfig,
   outputPath?: string,
 ): Promise<void> => {
-  const kubernetesPath = config?.generate?.kubernetes?.path;
-  const configs = mapFromConfigs(
-    await loadMicroserviceDeployConfigs(kubernetesPath),
-  );
-  const puml = generatePlantuml(configs, {
-    boundaryLabel: config?.generate?.boundaryLabel,
+  const model = await loadModel(config);
+  const puml = generatePlantumlFromModel(model, {
+    boundaryLabel: config.generate?.boundaryLabel,
   });
 
   if (outputPath) {

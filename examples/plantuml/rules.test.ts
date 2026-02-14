@@ -15,7 +15,9 @@ describe("Rules demo on C4L2.puml", () => {
   >["allContainers"];
 
   beforeAll(async () => {
-    const elements = await loadPlantumlElements("C4L2.puml");
+    const elements = await loadPlantumlElements(
+      "resources/architecture/C4L2.puml",
+    );
     containers = mapContainersFromPlantumlElements(elements).allContainers;
   });
 

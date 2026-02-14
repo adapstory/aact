@@ -8,7 +8,9 @@ describe("PlantUML Loader", () => {
   let model: ArchitectureModel;
 
   beforeAll(async () => {
-    const pumlElements = await loadPlantumlElements("boundaries.puml");
+    const pumlElements = await loadPlantumlElements(
+      "resources/architecture/boundaries.puml",
+    );
     model = mapContainersFromPlantumlElements(pumlElements);
   });
 
@@ -34,5 +36,11 @@ describe("PlantUML Loader", () => {
         boundary.containers.length + boundary.boundaries.length,
       ).toBeGreaterThan(0);
     }
+  });
+
+  it("rejects with ENOENT for nonexistent file", async () => {
+    await expect(loadPlantumlElements("nonexistent.puml")).rejects.toThrow(
+      /ENOENT/,
+    );
   });
 });

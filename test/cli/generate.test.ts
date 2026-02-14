@@ -1,17 +1,8 @@
-import type { DeployConfig } from "../../src/loaders/kubernetes";
 import type { ArchitectureModel } from "../../src/model";
 import type { Container } from "../../src/model/container";
 
 vi.mock("c12", () => ({
   loadConfig: vi.fn(),
-}));
-
-vi.mock("../../src/loaders/kubernetes/loadMicroserviceDeployConfigs", () => ({
-  loadMicroserviceDeployConfigs: vi.fn(),
-}));
-
-vi.mock("../../src/loaders/kubernetes/mapContainersFromDeployConfigs", () => ({
-  mapFromConfigs: vi.fn(),
 }));
 
 vi.mock("../../src/cli/loadModel", () => ({
@@ -38,24 +29,21 @@ import { loadConfig } from "c12";
 import consola from "consola";
 
 import { loadModel } from "../../src/cli/loadModel";
-import { loadMicroserviceDeployConfigs } from "../../src/loaders/kubernetes/loadMicroserviceDeployConfigs";
-import { mapFromConfigs } from "../../src/loaders/kubernetes/mapContainersFromDeployConfigs";
 
 const mockLoadConfig = vi.mocked(loadConfig);
-const mockLoadK8s = vi.mocked(loadMicroserviceDeployConfigs);
-const mockMapFromConfigs = vi.mocked(mapFromConfigs);
 const mockWriteFile = vi.mocked(fs.writeFile);
 const mockMkdir = vi.mocked(fs.mkdir);
 const mockLoadModel = vi.mocked(loadModel);
 
-const testConfigs: DeployConfig[] = [
-  {
-    name: "orders",
-    // eslint-disable-next-line sonarjs/no-clear-text-protocols
-    sections: [{ name: "payments", prod_value: "http://payments" }],
-  },
-  { name: "payments", sections: [] },
-];
+const makeContainer = (
+  overrides: Partial<Container> & Pick<Container, "name">,
+): Container => ({
+  label: overrides.name,
+  type: "Container",
+  description: "",
+  relations: [],
+  ...overrides,
+});
 
 const setupConfig = (overrides?: {
   generate?: Record<string, unknown>;
@@ -69,24 +57,12 @@ const setupConfig = (overrides?: {
   } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
 };
 
-const setupK8s = (): void => {
-  mockLoadK8s.mockResolvedValue(testConfigs);
-  mockMapFromConfigs.mockReturnValue(testConfigs);
-};
-
-const makeContainer = (
-  overrides: Partial<Container> & Pick<Container, "name">,
-): Container => ({
-  label: overrides.name,
-  type: "Container",
-  description: "",
-  relations: [],
-  ...overrides,
-});
-
-const setupModel = (containers: Container[]): void => {
+const setupModel = (
+  containers: Container[],
+  boundaries: ArchitectureModel["boundaries"] = [],
+): void => {
   const model: ArchitectureModel = {
-    boundaries: [],
+    boundaries,
     allContainers: containers,
   };
   mockLoadModel.mockResolvedValue(model);
@@ -111,8 +87,9 @@ describe("generate command", () => {
 
   describe("plantuml format (default)", () => {
     it("outputs plantuml to stdout by default", async () => {
+      const orders = makeContainer({ name: "orders" });
       setupConfig();
-      setupK8s();
+      setupModel([orders]);
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate();
@@ -126,7 +103,7 @@ describe("generate command", () => {
 
     it("outputs plantuml when --format plantuml", async () => {
       setupConfig();
-      setupK8s();
+      setupModel([makeContainer({ name: "svc" })]);
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate({ format: "plantuml" });
@@ -138,7 +115,7 @@ describe("generate command", () => {
 
     it("writes to file when --output is provided", async () => {
       setupConfig();
-      setupK8s();
+      setupModel([makeContainer({ name: "svc" })]);
       mockWriteFile.mockResolvedValue();
 
       await runGenerate({ output: "out.puml" });
@@ -150,29 +127,9 @@ describe("generate command", () => {
       expect(consola.success).toHaveBeenCalled();
     });
 
-    it("passes kubernetes path from config", async () => {
-      setupConfig({ generate: { kubernetes: { path: "custom/k8s/path" } } });
-      setupK8s();
-      vi.spyOn(console, "log").mockImplementation(() => {});
-
-      await runGenerate();
-
-      expect(mockLoadK8s).toHaveBeenCalledWith("custom/k8s/path");
-    });
-
-    it("passes undefined kubernetes path when not configured", async () => {
-      setupConfig();
-      setupK8s();
-      vi.spyOn(console, "log").mockImplementation(() => {});
-
-      await runGenerate();
-
-      expect(mockLoadK8s).toHaveBeenCalledWith(undefined);
-    });
-
     it("passes boundaryLabel from config", async () => {
       setupConfig({ generate: { boundaryLabel: "My Platform" } });
-      setupK8s();
+      setupModel([makeContainer({ name: "svc" })]);
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate();
@@ -181,15 +138,30 @@ describe("generate command", () => {
       expect(output).toContain('Boundary(project, "My Platform")');
     });
 
-    it("uses default boundaryLabel when not configured", async () => {
+    it("renders relations in output", async () => {
+      const payments = makeContainer({ name: "payments" });
+      const orders = makeContainer({
+        name: "orders",
+        relations: [{ to: payments, technology: "REST" }],
+      });
       setupConfig();
-      setupK8s();
+      setupModel([orders, payments]);
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate();
 
       const output = spy.mock.calls[0][0] as string;
-      expect(output).toContain('Boundary(project, "Our system")');
+      expect(output).toContain("Rel(orders, payments");
+    });
+
+    it("loads model via loadModel", async () => {
+      setupConfig();
+      setupModel([makeContainer({ name: "svc" })]);
+      vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await runGenerate();
+
+      expect(mockLoadModel).toHaveBeenCalledOnce();
     });
   });
 

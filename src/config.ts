@@ -38,7 +38,12 @@ export const AactConfigSchema = v.strictObject({
   ),
   generate: v.optional(
     v.strictObject({
-      kubernetes: v.optional(v.strictObject({ path: v.optional(v.string()) })),
+      kubernetes: v.optional(
+        v.strictObject({
+          path: v.optional(v.string()),
+          exclude: v.optional(v.array(v.string())),
+        }),
+      ),
       boundaryLabel: v.optional(v.string()),
     }),
   ),
