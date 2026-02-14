@@ -145,7 +145,7 @@ describe("check command", () => {
     setupConfig();
     mockMapContainers.mockReturnValue(cleanModel());
 
-    await expect(runCheck()).resolves.toBeUndefined();
+    await expect(runCheck({ format: "text" })).resolves.toBeUndefined();
     expect(consola.success).toHaveBeenCalled();
   });
 
