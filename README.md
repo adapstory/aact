@@ -1,20 +1,96 @@
 <img width="150" height="150" alt="aact logo" src="https://github.com/user-attachments/assets/abbcea49-51c9-4e57-8cbe-a1ed11d1fa48" />
 
-# Architecture As Code Tools
+# Architecture As Code Tools (aact)
 
 [![test workflow](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml)
 
+CLI и библиотека для валидации, анализа и генерации архитектуры микросервисных систем, описанной "as Code" (PlantUML C4, Structurizr).
+
 Инструменты для работы с архитектурой в формате "as Code":
 
-1. Код и примеры покрытия тестами микросервисной архитектуры, описанной в plantuml ([#](#%D0%BF%D0%BE%D0%BA%D1%80%D1%8B%D1%82%D0%B8%D0%B5-%D0%B0%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D1%8B-%D1%82%D0%B5%D1%81%D1%82%D0%B0%D0%BC%D0%B8))
-2. Автогенерация архитектуры ([#](#%D0%B0%D0%B2%D1%82%D0%BE%D0%B3%D0%B5%D0%BD%D0%B5%D1%80%D0%B0%D1%86%D0%B8%D1%8F-%D0%B0%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D1%8B-1))
-3. Тестирование архитектуры модульного монолита ([#](#%D1%82%D0%B5%D1%81%D1%82%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-%D0%BC%D0%BE%D0%B4%D1%83%D0%BB%D1%8C%D0%BD%D0%BE%D0%B3%D0%BE-%D0%BC%D0%BE%D0%BD%D0%BE%D0%BB%D0%B8%D1%82%D0%B0))
+1. Код и примеры покрытия тестами микросервисной архитектуры, описанной в plantuml ([#](#покрытие-архитектуры-тестами))
+2. Автогенерация архитектуры ([#](#автогенерация-архитектуры-1))
+3. Тестирование архитектуры модульного монолита ([#](#тестирование-модульного-монолита))
 
-[Планы развития инструментов и репозитория](https://github.com/Byndyusoft/aact/blob/main/roadmap.md). PullRequest'ы и Issues'ы приветствуются.
+[Планы развития инструментов и репозитория](roadmap.md). PullRequest'ы и Issues'ы приветствуются.
 
-[Справочник](https://github.com/Byndyusoft/aact/blob/main/patterns.md) принципов и паттернов проектирования с примерами покрытия их тестами (пополняется...)
+[Справочник](patterns.md) принципов и паттернов проектирования с примерами покрытия их тестами (пополняется...)
 
 <img src="https://github.com/Byndyusoft/aact/assets/1096954/a3c3b3b0-a09b-4da7-aca4-5538159b371c" width="15"/> Телеграм-канал: [Архитектура распределённых систем](https://t.me/rsa_enc)
+
+## Quick Start (CLI)
+
+```bash
+# Инициализация конфига
+npx aact init
+
+# Проверка правил архитектуры
+npx aact check
+
+# Анализ метрик
+npx aact analyze
+
+# Генерация артефактов
+npx aact generate --format plantuml
+npx aact generate --format kubernetes
+```
+
+### Конфигурация
+
+`aact init` создаст файл `aact.config.ts`:
+
+```ts
+import { defineConfig } from "aact";
+
+export default defineConfig({
+  source: {
+    type: "plantuml", // "plantuml" | "structurizr"
+    path: "./architecture.puml",
+  },
+  rules: {
+    acl: true,
+    acyclic: true,
+    crud: true,
+    dbPerService: true,
+    cohesion: true,
+  },
+});
+```
+
+## Использование как библиотеки
+
+```ts
+import {
+  loadPlantumlElements,
+  mapContainersFromPlantumlElements,
+  checkAcl,
+  checkAcyclic,
+  checkCrud,
+  analyzeArchitecture,
+} from "aact";
+
+const elements = await loadPlantumlElements("architecture.puml");
+const model = mapContainersFromPlantumlElements(elements);
+
+// Проверка правил
+const aclViolations = checkAcl(model.allContainers);
+const cyclicViolations = checkAcyclic(model.allContainers);
+
+// Анализ метрик
+const { report } = analyzeArchitecture(model);
+console.log(`Elements: ${report.elementsCount}`);
+```
+
+## Примеры
+
+- [Banking (PlantUML)](examples/banking-plantuml/) — проверка правил, CCR-анализ, генерация K8s-конфигов
+- [Microservices (Structurizr)](examples/microservices-structurizr/) — полный цикл: правила, анализ, генерация
+
+## Документация
+
+- [Справочник паттернов](patterns.md) — принципы и паттерны с примерами тестов
+- [ADR](ADRs/) — Architecture Decision Records
+- [Roadmap](roadmap.md) — планы развития
 
 ## Публичные материалы
 
@@ -39,7 +115,7 @@ https://www.youtube.com/watch?v=fb2UjqjHGUE
 
 Тема идеи и данный открытый репозиторий вызвал неожиданную волну позитивных отзывов о попадании в яблочко болей и о применимости и полезности решения :)
 
-Подход помогает решить **проблемы неактуальности, декларативности и отсутствия контроля ИТ-архитектур и инфраструктуры** (ограничение и требование — архитектура и инфраструктура должны быть "as code").
+Подход помогает решить **проблемы неактуальности, декларативности и отсутствия контроля ИТ-архитектур и инфраструктуры** (ограничение и требование — архитектура и инфраструктура должны быть "as code").
 
 Тесты проверяют 2 больших блока:
 
@@ -62,17 +138,15 @@ https://www.youtube.com/watch?v=fb2UjqjHGUE
 
 ## Пример тестов
 
-1. [Finds diff in configs and uml containers](https://github.com/razonrus/aact/blob/721edde3767dc0e51d19c80c3b6adba9fbf7b007/test/architecture.test.ts#L43C10-L43C48) — проверяет актуальность списка микросервисов на архитектуре и в [конфигурации инфраструктуры](https://github.com/razonrus/aact/tree/main/resources/kubernetes/microservices)
-2. [Finds diff in configs and uml dependencies](https://github.com/razonrus/aact/blob/721edde3767dc0e51d19c80c3b6adba9fbf7b007/test/architecture.test.ts#L52C9-L52C9) — проверяет актуальность зависимостей (связей) микросервисов на архитектуре и в [конфигурации инфраструктуры](https://github.com/razonrus/aact/tree/main/resources/kubernetes/microservices)
-3. [Check that urls and topics from relations exists in config](https://github.com/razonrus/aact/blob/721edde3767dc0e51d19c80c3b6adba9fbf7b007/test/architecture.test.ts#L86C5-L86C5) — проверяет соответствие между параметрами связей микросервисов (REST-урлы, топики kafka) на архитектуре и в [конфигурации инфраструктуры](https://github.com/razonrus/aact/tree/main/resources/kubernetes/microservices)
-4. [Only acl can depence from external systems](https://github.com/razonrus/aact/blob/721edde3767dc0e51d19c80c3b6adba9fbf7b007/test/architecture.test.ts#L111C7-L111C49) — проверяет, что не нарушен выбранный принцип построения интеграций с внешними системами только через ACL (Anti Corruption Layer). Проверяет, что только acl-микросервисы имеют зависимости от внешних систем.
-5. [Connect to external systems only by API Gateway or kafka](https://github.com/razonrus/aact/blob/721edde3767dc0e51d19c80c3b6adba9fbf7b007/test/architecture.test.ts#L127C16-L127C16) — проверяет, что все внешние интеграции идут через API Gateway или через kafka
+1. [find diff in configs and uml containers](examples/banking-plantuml/architecture.test.ts) — проверяет актуальность списка микросервисов на архитектуре и в [конфигурации инфраструктуры](resources/kubernetes/microservices)
+2. [find diff in configs and uml dependencies](examples/banking-plantuml/architecture.test.ts) — проверяет актуальность зависимостей (связей) микросервисов на архитектуре и в [конфигурации инфраструктуры](resources/kubernetes/microservices)
+3. [check that urls and topics from relations exist in config](examples/banking-plantuml/architecture.test.ts) — проверяет соответствие между параметрами связей микросервисов (REST-урлы, топики kafka) на архитектуре и в [конфигурации инфраструктуры](resources/kubernetes/microservices)
+4. [only acl can depend on external systems](test/rules/acl.test.ts) — проверяет, что не нарушен выбранный принцип построения интеграций с внешними системами только через ACL (Anti Corruption Layer). Проверяет, что только acl-микросервисы имеют зависимости от внешних систем.
+5. [connect to external systems only by API Gateway or kafka](examples/banking-plantuml/architecture.test.ts) — проверяет, что все внешние интеграции идут через API Gateway или через kafka
 
 # Автогенерация архитектуры
 
 ## Генерация архитектуры из описанной «as Code» инфраструктуры
-
-Добавил [код](https://github.com/Byndyusoft/aact/blob/39d8141a241f1139d5e58061f8674a22341b72de/test/architecture.test.ts#L214), который полностью с нуля генерирует архитектуру в plantuml по данным из IaC.
 
 Сравнение ~~белковой~~ составленной вручную архитектуры и сгенерированной.
 
