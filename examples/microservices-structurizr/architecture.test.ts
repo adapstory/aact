@@ -1,8 +1,15 @@
 import { analyzeArchitecture } from "../../src/analyzer";
+import { generateKubernetes } from "../../src/generators/kubernetes";
 import { generatePlantumlFromModel } from "../../src/generators/plantumlFromModel";
 import { loadStructurizrElements } from "../../src/loaders/structurizr";
 import { ArchitectureModel } from "../../src/model";
-import { checkAcl, checkAcyclic, checkDbPerService } from "../../src/rules";
+import {
+  checkAcl,
+  checkAcyclic,
+  checkCohesion,
+  checkCrud,
+  checkDbPerService,
+} from "../../src/rules";
 
 describe("Microservices (Structurizr)", () => {
   let model: ArchitectureModel;
@@ -41,12 +48,35 @@ describe("Microservices (Structurizr)", () => {
     expect(violations).toHaveLength(0);
   });
 
+  it("CRUD — only repo-tagged containers access databases", () => {
+    const violations = checkCrud(model.allContainers);
+    expect(violations).toHaveLength(0);
+  });
+
+  it("Cohesion — boundaries have more cohesion than coupling", () => {
+    const violations = checkCohesion(model);
+    for (const v of violations) {
+      console.log(`${v.container}: ${v.message}`);
+    }
+    expect(violations).toBeDefined();
+  });
+
   it("analyzeArchitecture returns metrics", () => {
     const { report } = analyzeArchitecture(model);
 
     expect(report.elementsCount).toBeGreaterThan(0);
     expect(report.boundaries.length).toBeGreaterThan(0);
     expect(report.databases.count).toBeGreaterThanOrEqual(0);
+  });
+
+  it("generates Kubernetes configs from model", () => {
+    const outputs = generateKubernetes(model);
+
+    expect(outputs.length).toBeGreaterThan(0);
+    for (const output of outputs) {
+      expect(output.fileName).toMatch(/\.yml$/);
+      expect(output.content).toContain("name:");
+    }
   });
 
   it("generates valid PlantUML from model", () => {

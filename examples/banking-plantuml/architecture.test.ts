@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { generateKubernetes } from "../../src/generators/kubernetes";
 import { generatePlantumlFromModel } from "../../src/generators/plantumlFromModel";
 import {
   DeployConfig,
@@ -205,6 +206,16 @@ describe("Architecture", () => {
       })
     );
   }
+
+  it("generate kubernetes configs from model", () => {
+    const outputs = generateKubernetes(model);
+
+    expect(outputs.length).toBeGreaterThan(0);
+    for (const output of outputs) {
+      expect(output.fileName).toMatch(/\.yml$/);
+      expect(output.content).toContain("name:");
+    }
+  });
 
   it("generate puml from model", async () => {
     const filepath = path.join(
