@@ -1,7 +1,6 @@
 {
   "name": "aact",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
   "description": "Architecture analysis and compliance tool",
   "bin": {
@@ -21,7 +20,10 @@
     "url": "https://github.com/Byndyusoft/aact.git"
   },
   "packageManager": "pnpm@9.15.4",
-  "license": "ISC",
+  "files": [
+    "dist"
+  ],
+  "license": "GPL-3.0",
   "author": "Ruslan Safin (Byndyusoft)",
   "scripts": {
     "build": "unbuild",
@@ -54,14 +56,12 @@
     "husky": "9.1.7",
     "lint-staged": "16.2.7",
     "markdownlint-cli": "0.31.1",
-    "plantuml-parser": "0.4.0",
     "prettier": "3.8.1",
     "prettier-plugin-packagejson": "3.0.0",
     "typescript": "5.9.3",
     "typescript-eslint": "^8",
     "unbuild": "^3.0.0",
-    "vitest": "^4.0.18",
-    "yaml": "2.8.2"
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=20"
@@ -70,6 +70,8 @@
     "c12": "4.0.0-beta.2",
     "citty": "^0.2.0",
     "consola": "^3.4.2",
-    "valibot": "^1.2.0"
+    "plantuml-parser": "0.4.0",
+    "valibot": "^1.2.0",
+    "yaml": "2.8.2"
   }
 }
