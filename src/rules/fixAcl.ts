@@ -1,7 +1,7 @@
 import type { ArchitectureModel } from "../model";
 import type { AclOptions } from "./acl";
-import type { Violation } from "./types";
 import type { FixResult, SourceSyntax } from "./fix";
+import type { Violation } from "./types";
 
 export const fixAcl = (
   model: ArchitectureModel,
@@ -39,16 +39,18 @@ export const fixAcl = (
 
     for (const rel of externalRels) {
       const tech = rel.technology ?? "";
-      fix.edits.push({
-        type: "replace",
-        search: syntax.relationPattern(container.name, rel.to.name),
-        content: syntax.relationDecl(container.name, aclName, tech),
-      });
-      fix.edits.push({
-        type: "add",
-        search: syntax.relationPattern(container.name, aclName),
-        content: syntax.relationDecl(aclName, rel.to.name, tech),
-      });
+      fix.edits.push(
+        {
+          type: "replace",
+          search: syntax.relationPattern(container.name, rel.to.name),
+          content: syntax.relationDecl(container.name, aclName, tech),
+        },
+        {
+          type: "add",
+          search: syntax.relationPattern(container.name, aclName),
+          content: syntax.relationDecl(aclName, rel.to.name, tech),
+        },
+      );
     }
 
     results.push(fix);

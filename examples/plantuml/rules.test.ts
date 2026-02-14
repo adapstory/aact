@@ -10,7 +10,9 @@ import {
 } from "../../src/rules";
 
 describe("Rules demo on C4L2.puml", () => {
-  let containers: ReturnType<typeof mapContainersFromPlantumlElements>["allContainers"];
+  let containers: ReturnType<
+    typeof mapContainersFromPlantumlElements
+  >["allContainers"];
 
   beforeAll(async () => {
     const elements = await loadPlantumlElements("C4L2.puml");

@@ -19,7 +19,10 @@ describe("checkApiGateway", () => {
         tags: ["acl"],
         description: "",
         relations: [
-          { to: externalSystem, technology: "https://gateway.int.com:443/api/v1" },
+          {
+            to: externalSystem,
+            technology: "https://gateway.int.com:443/api/v1",
+          },
         ],
       },
       externalSystem,
@@ -87,9 +90,7 @@ describe("checkApiGateway", () => {
         type: "Container",
         tags: ["adapter"],
         description: "",
-        relations: [
-          { to: legacy, technology: "https://proxy.internal/api" },
-        ],
+        relations: [{ to: legacy, technology: "https://proxy.internal/api" }],
       },
       legacy,
     ];

@@ -6,19 +6,13 @@ vi.mock("c12", () => ({
   loadConfig: vi.fn(),
 }));
 
-vi.mock(
-  "../../src/loaders/kubernetes/loadMicroserviceDeployConfigs",
-  () => ({
-    loadMicroserviceDeployConfigs: vi.fn(),
-  }),
-);
+vi.mock("../../src/loaders/kubernetes/loadMicroserviceDeployConfigs", () => ({
+  loadMicroserviceDeployConfigs: vi.fn(),
+}));
 
-vi.mock(
-  "../../src/loaders/kubernetes/mapContainersFromDeployConfigs",
-  () => ({
-    mapFromConfigs: vi.fn(),
-  }),
-);
+vi.mock("../../src/loaders/kubernetes/mapContainersFromDeployConfigs", () => ({
+  mapFromConfigs: vi.fn(),
+}));
 
 vi.mock("../../src/cli/loadModel", () => ({
   loadModel: vi.fn(),
@@ -39,6 +33,7 @@ vi.mock("node:fs/promises", () => ({
 }));
 
 import fs from "node:fs/promises";
+
 import { loadConfig } from "c12";
 import consola from "consola";
 
@@ -54,7 +49,11 @@ const mockMkdir = vi.mocked(fs.mkdir);
 const mockLoadModel = vi.mocked(loadModel);
 
 const testConfigs: DeployConfig[] = [
-  { name: "orders", sections: [{ name: "payments", prod_value: "http://payments" }] },
+  {
+    name: "orders",
+    // eslint-disable-next-line sonarjs/no-clear-text-protocols
+    sections: [{ name: "payments", prod_value: "http://payments" }],
+  },
   { name: "payments", sections: [] },
 ];
 
@@ -203,7 +202,7 @@ describe("generate command", () => {
         relations: [{ to: payments }],
       });
       setupModel([orders, payments]);
-      mockMkdir.mockResolvedValue(undefined);
+      mockMkdir.mockResolvedValue();
       mockWriteFile.mockResolvedValue();
 
       await runGenerate({ format: "kubernetes", output: "./k8s" });
@@ -218,7 +217,7 @@ describe("generate command", () => {
     it("uses config kubernetes path as default output dir", async () => {
       setupConfig({ generate: { kubernetes: { path: "custom/k8s" } } });
       setupModel([makeContainer({ name: "svc" })]);
-      mockMkdir.mockResolvedValue(undefined);
+      mockMkdir.mockResolvedValue();
       mockWriteFile.mockResolvedValue();
 
       await runGenerate({ format: "kubernetes" });
@@ -229,7 +228,7 @@ describe("generate command", () => {
     it("uses default path when no config and no --output", async () => {
       setupConfig();
       setupModel([makeContainer({ name: "svc" })]);
-      mockMkdir.mockResolvedValue(undefined);
+      mockMkdir.mockResolvedValue();
       mockWriteFile.mockResolvedValue();
 
       await runGenerate({ format: "kubernetes" });
@@ -245,17 +244,15 @@ describe("generate command", () => {
         config: {},
       } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
 
-      await expect(
-        runGenerate({ format: "kubernetes" }),
-      ).rejects.toThrow();
+      await expect(runGenerate({ format: "kubernetes" })).rejects.toThrow();
     });
 
     it("throws for unknown format", async () => {
       setupConfig();
 
-      await expect(
-        runGenerate({ format: "unknown" }),
-      ).rejects.toThrow("Unknown format: unknown");
+      await expect(runGenerate({ format: "unknown" })).rejects.toThrow(
+        "Unknown format: unknown",
+      );
     });
   });
 });

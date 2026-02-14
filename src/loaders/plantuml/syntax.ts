@@ -2,9 +2,13 @@ import type { SourceSyntax } from "../../rules/fix";
 
 export const plantumlSyntax: SourceSyntax = {
   containerPattern: (name) => `Container(${name},`,
-  containerDecl: (name, label, tags) =>
-    `Container(${name}, "${label}"${tags ? `, "", "", $tags="${tags}"` : ""})`,
+  containerDecl: (name, label, tags) => {
+    const tagsPart = tags ? `, "", "", $tags="${tags}"` : "";
+    return `Container(${name}, "${label}"${tagsPart})`;
+  },
   relationPattern: (from, to) => `Rel(${from}, ${to}`,
-  relationDecl: (from, to, tech, tags) =>
-    `Rel(${from}, ${to}, "${tech ?? ""}"${tags ? `, $tags="${tags}"` : ""})`,
+  relationDecl: (from, to, tech, tags) => {
+    const tagsPart = tags ? `, $tags="${tags}"` : "";
+    return `Rel(${from}, ${to}, "${tech ?? ""}"${tagsPart})`;
+  },
 };

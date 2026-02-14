@@ -1,7 +1,7 @@
 import { loadConfig } from "c12";
 import * as v from "valibot";
 
-import { AactConfigSchema, type AactConfig } from "../config";
+import { type AactConfig, AactConfigSchema } from "../config";
 
 export const loadAndValidateConfig = async (): Promise<AactConfig> => {
   const { config } = await loadConfig({ name: "aact" });

@@ -29,7 +29,10 @@ const buildEnvVar = (
   const targetUpper = toEnvKey(targetKebab);
 
   if (targetType === "ContainerDb") {
-    const value = options.dbConnectionTemplate.replaceAll("{name}", sourceKebab);
+    const value = options.dbConnectionTemplate.replaceAll(
+      "{name}",
+      sourceKebab,
+    );
     return { key: "PG_CONNECTION_STRING", value };
   }
 
@@ -44,7 +47,8 @@ const buildEnvVar = (
   }
 
   if (targetType === "Container") {
-    const value = relation.technology ?? `http://${targetKebab}:${options.defaultPort}`;
+    const value =
+      relation.technology ?? `http://${targetKebab}:${options.defaultPort}`;
     return { key: `${targetUpper}_BASE_URL`, value };
   }
 

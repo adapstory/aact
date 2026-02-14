@@ -1,5 +1,5 @@
-import type { DeployConfig } from "../../src/loaders/kubernetes";
 import { generatePlantuml } from "../../src/generators/plantuml";
+import type { DeployConfig } from "../../src/loaders/kubernetes";
 
 describe("generatePlantuml", () => {
   it("generates header and boundary", () => {
@@ -25,17 +25,13 @@ describe("generatePlantuml", () => {
   });
 
   it("replaces underscores with spaces in container label", () => {
-    const configs: DeployConfig[] = [
-      { name: "order_service", sections: [] },
-    ];
+    const configs: DeployConfig[] = [{ name: "order_service", sections: [] }];
     const result = generatePlantuml(configs);
     expect(result).toContain('Container(order_service, "order service")');
   });
 
   it("adds acl tag to containers ending with acl", () => {
-    const configs: DeployConfig[] = [
-      { name: "payments_acl", sections: [] },
-    ];
+    const configs: DeployConfig[] = [{ name: "payments_acl", sections: [] }];
     const result = generatePlantuml(configs);
     expect(result).toContain(
       'Container(payments_acl, "payments acl", "", "", $tags="acl")',
@@ -59,6 +55,7 @@ describe("generatePlantuml", () => {
     const configs: DeployConfig[] = [
       {
         name: "orders",
+        // eslint-disable-next-line sonarjs/no-clear-text-protocols
         sections: [{ name: "payments", prod_value: "http://payments" }],
       },
       { name: "payments", sections: [] },
@@ -72,9 +69,7 @@ describe("generatePlantuml", () => {
     const configs: DeployConfig[] = [
       {
         name: "orders",
-        sections: [
-          { name: "ext_gateway", prod_value: "https://ext.com/api" },
-        ],
+        sections: [{ name: "ext_gateway", prod_value: "https://ext.com/api" }],
       },
     ];
     const result = generatePlantuml(configs);
@@ -107,9 +102,7 @@ describe("generatePlantuml", () => {
     const configs: DeployConfig[] = [
       {
         name: "orders",
-        sections: [
-          { name: "kafka_billing_topic", prod_value: "billing-v1" },
-        ],
+        sections: [{ name: "kafka_billing_topic", prod_value: "billing-v1" }],
       },
     ];
     const result = generatePlantuml(configs);
@@ -122,10 +115,12 @@ describe("generatePlantuml", () => {
     const configs: DeployConfig[] = [
       {
         name: "a",
+        // eslint-disable-next-line sonarjs/no-clear-text-protocols
         sections: [{ name: "b", prod_value: "http://b" }],
       },
       {
         name: "b",
+        // eslint-disable-next-line sonarjs/no-clear-text-protocols
         sections: [{ name: "a", prod_value: "http://a" }],
       },
     ];

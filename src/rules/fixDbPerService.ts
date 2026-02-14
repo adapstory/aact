@@ -1,7 +1,7 @@
 import type { ArchitectureModel } from "../model";
-import type { Violation } from "./types";
 import type { DbPerServiceOptions } from "./dbPerService";
 import type { FixResult, SourceSyntax } from "./fix";
+import type { Violation } from "./types";
 
 export const fixDbPerService = (
   model: ArchitectureModel,

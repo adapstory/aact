@@ -16,8 +16,8 @@ export const loadModel = async (
       return loadStructurizrElements(config.source.path);
     }
     default: {
-      const _exhaustive: never = config.source.type;
-      throw new Error(`Unsupported source type: ${config.source.type}`);
+      const sourceType: never = config.source.type;
+      throw new Error(`Unsupported source type: ${String(sourceType)}`);
     }
   }
 };

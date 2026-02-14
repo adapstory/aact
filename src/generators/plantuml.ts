@@ -9,6 +9,7 @@ interface RelRecord {
   to: string;
 }
 
+/* eslint-disable sonarjs/cognitive-complexity */
 export const generatePlantuml = (
   configs: DeployConfig[],
   options?: PlantumlGenerateOptions,
@@ -90,9 +91,7 @@ Boundary(project, "${boundaryLabel}"){
     }
 
     const transportAttribute =
-      !intContainers.includes(toName) && transport
-        ? `, "${transport}"`
-        : "";
+      !intContainers.includes(toName) && transport ? `, "${transport}"` : "";
 
     data += `Rel(${fromName}, ${toName}, ""${transportAttribute}`;
     if (async) data += `, $tags="async"`;
@@ -101,3 +100,4 @@ Boundary(project, "${boundaryLabel}"){
     rels.push({ from: fromName, to: toName });
   }
 };
+/* eslint-enable sonarjs/cognitive-complexity */

@@ -1,5 +1,5 @@
-import type { ArchitectureModel, Container } from "../../src/model";
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
+import type { ArchitectureModel, Container } from "../../src/model";
 import { applyEdits } from "../../src/rules/fix";
 import { fixDbPerService } from "../../src/rules/fixDbPerService";
 
@@ -23,9 +23,7 @@ const makeContainer = (
 });
 
 const makeModel = (containers: Container[]): ArchitectureModel => ({
-  boundaries: [
-    { name: "root", label: "Root", containers, boundaries: [] },
-  ],
+  boundaries: [{ name: "root", label: "Root", containers, boundaries: [] }],
   allContainers: containers,
 });
 
@@ -40,9 +38,16 @@ describe("fixDbPerService", () => {
     const svc = makeContainer("orders_repo", [{ to: db }]);
     const model = makeModel([svc, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "accessed by multiple services: orders_repo" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [
+        {
+          container: "orders_db",
+          message: "accessed by multiple services: orders_repo",
+        },
+      ],
+      plantumlSyntax,
+    );
     expect(results).toHaveLength(0);
   });
 
@@ -52,9 +57,16 @@ describe("fixDbPerService", () => {
     const svc2 = makeContainer("payments", [{ to: db }]);
     const model = makeModel([svc1, svc2, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "accessed by multiple services: orders_repo, payments" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [
+        {
+          container: "orders_db",
+          message: "accessed by multiple services: orders_repo, payments",
+        },
+      ],
+      plantumlSyntax,
+    );
     expect(results).toHaveLength(1);
   });
 
@@ -64,9 +76,16 @@ describe("fixDbPerService", () => {
     const svc2 = makeContainer("payments", [{ to: db }]);
     const model = makeModel([svc1, svc2, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "accessed by multiple services: orders_repo, payments" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [
+        {
+          container: "orders_db",
+          message: "accessed by multiple services: orders_repo, payments",
+        },
+      ],
+      plantumlSyntax,
+    );
     const edits = results[0].edits;
     expect(edits).toHaveLength(1);
     expect(edits[0].type).toBe("replace");
@@ -80,9 +99,11 @@ describe("fixDbPerService", () => {
     const svc2 = makeContainer("payments", [{ to: db }]);
     const model = makeModel([svc1, svc2, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
     expect(results[0].edits[0].content).toContain("orders_repo");
   });
 
@@ -92,9 +113,11 @@ describe("fixDbPerService", () => {
     const svc2 = makeContainer("beta", [{ to: db }]);
     const model = makeModel([svc1, svc2, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
     expect(results[0].edits[0].content).toContain("alpha");
   });
 
@@ -105,9 +128,11 @@ describe("fixDbPerService", () => {
     const svc3 = makeContainer("analytics", [{ to: db }]);
     const model = makeModel([svc1, svc2, svc3, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
     expect(results[0].edits).toHaveLength(2);
     expect(results[0].edits[0].search).toContain("payments");
     expect(results[0].edits[1].search).toContain("analytics");
@@ -121,10 +146,14 @@ describe("fixDbPerService", () => {
     const svc3 = makeContainer("svc3", [{ to: db2 }]);
     const model = makeModel([svc1, svc2, svc3, db1, db2]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-      { container: "users_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [
+        { container: "orders_db", message: "" },
+        { container: "users_db", message: "" },
+      ],
+      plantumlSyntax,
+    );
     expect(results).toHaveLength(2);
   });
 
@@ -134,9 +163,11 @@ describe("fixDbPerService", () => {
     const svc2 = makeContainer("payments", [{ to: db }]);
     const model = makeModel([svc1, svc2, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
     expect(results[0].description).toContain("orders_db");
     expect(results[0].description).toContain("orders_repo");
   });
@@ -155,9 +186,11 @@ describe("fixDbPerService", () => {
       'Rel(payments, orders_db, "reads")',
     ].join("\n");
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
     const patched = applyEdits(puml, results[0].edits);
     expect(patched).toContain("Rel(payments, orders_repo");
     expect(patched).not.toContain("Rel(payments, orders_db");
@@ -172,9 +205,11 @@ describe("fixDbPerService", () => {
     const svc2 = makeContainer("payments", [{ to: db }, { to: other }]);
     const model = makeModel([svc1, svc2, other, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
     expect(results[0].edits).toHaveLength(1);
     expect(results[0].edits[0].search).not.toContain("notifications");
   });
@@ -182,14 +217,14 @@ describe("fixDbPerService", () => {
   it("works with async tags in Rel", () => {
     const db = makeDb();
     const svc1 = makeContainer("orders_repo", [{ to: db }]);
-    const svc2 = makeContainer("payments", [
-      { to: db, tags: ["async"] },
-    ]);
+    const svc2 = makeContainer("payments", [{ to: db, tags: ["async"] }]);
     const model = makeModel([svc1, svc2, db]);
 
-    const results = fixDbPerService(model, [
-      { container: "orders_db", message: "" },
-    ], plantumlSyntax);
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
     expect(results[0].edits[0].content).toContain('$tags="async"');
   });
 });

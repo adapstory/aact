@@ -27,7 +27,7 @@ describe("Kubernetes Loader", () => {
     expect(mapped.length).toBe(raw.length);
 
     const names = mapped.map((c) => c.name);
-    expect(names).toEqual([...names].sort());
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
   });
 
   it("normalizes names (replaces dashes with underscores)", async () => {

@@ -1,9 +1,6 @@
 import YAML from "yaml";
 
-import {
-  generateKubernetes,
-  type KubernetesOutput,
-} from "../../src/generators/kubernetes";
+import { generateKubernetes } from "../../src/generators/kubernetes";
 import type { ArchitectureModel } from "../../src/model";
 import type { Container } from "../../src/model/container";
 
@@ -76,6 +73,7 @@ describe("generateKubernetes", () => {
     const parsed = YAML.parse(ordersOut.content);
 
     expect(parsed.environment.PAYMENTS_BASE_URL.default).toBe(
+      // eslint-disable-next-line sonarjs/no-clear-text-protocols
       "http://payments:8080",
     );
   });
@@ -84,6 +82,7 @@ describe("generateKubernetes", () => {
     const payments = makeContainer({ name: "payments" });
     const orders = makeContainer({
       name: "orders",
+      // eslint-disable-next-line sonarjs/no-clear-text-protocols
       relations: [{ to: payments, technology: "http://payments:3000/api" }],
     });
     const model = makeModel([orders, payments]);
@@ -93,6 +92,7 @@ describe("generateKubernetes", () => {
     const parsed = YAML.parse(ordersOut.content);
 
     expect(parsed.environment.PAYMENTS_BASE_URL.default).toBe(
+      // eslint-disable-next-line sonarjs/no-clear-text-protocols
       "http://payments:3000/api",
     );
   });
@@ -216,6 +216,7 @@ describe("generateKubernetes", () => {
     const parsed = YAML.parse(ordersOut.content);
 
     expect(parsed.environment.PAYMENTS_BASE_URL.default).toBe(
+      // eslint-disable-next-line sonarjs/no-clear-text-protocols
       "http://payments:3000",
     );
   });
@@ -254,11 +255,7 @@ describe("generateKubernetes", () => {
 
     const orders = makeContainer({
       name: "orders",
-      relations: [
-        { to: payments },
-        { to: billing },
-        { to: db },
-      ],
+      relations: [{ to: payments }, { to: billing }, { to: db }],
     });
     const model = makeModel([orders, payments, billing, db]);
 
@@ -267,7 +264,7 @@ describe("generateKubernetes", () => {
     const parsed = YAML.parse(ordersOut.content);
 
     const keys = Object.keys(parsed.environment);
-    expect(keys).toEqual([...keys].sort());
+    expect(keys).toEqual([...keys].sort((a, b) => a.localeCompare(b)));
   });
 
   it("uses custom dbConnectionTemplate", () => {

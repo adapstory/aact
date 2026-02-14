@@ -5,16 +5,10 @@ export interface StableDependenciesOptions {
   externalType?: string;
 }
 
-export const checkStableDependencies = (
-  containers: Container[],
-  options?: StableDependenciesOptions,
-): Violation[] => {
-  const externalType = options?.externalType ?? "System_Ext";
-  const violations: Violation[] = [];
-
-  const internal = containers.filter((c) => c.type !== externalType);
-  const internalNames = new Set(internal.map((c) => c.name));
-
+const computeCoupling = (
+  internal: Container[],
+  internalNames: Set<string>,
+): { ca: Map<string, number>; ce: Map<string, number> } => {
   const ca = new Map<string, number>();
   const ce = new Map<string, number>();
 
@@ -30,6 +24,20 @@ export const checkStableDependencies = (
       ca.set(rel.to.name, ca.get(rel.to.name)! + 1);
     }
   }
+
+  return { ca, ce };
+};
+
+export const checkStableDependencies = (
+  containers: Container[],
+  options?: StableDependenciesOptions,
+): Violation[] => {
+  const externalType = options?.externalType ?? "System_Ext";
+  const violations: Violation[] = [];
+
+  const internal = containers.filter((c) => c.type !== externalType);
+  const internalNames = new Set(internal.map((c) => c.name));
+  const { ca, ce } = computeCoupling(internal, internalNames);
 
   const instability = (name: string): number => {
     const afferent = ca.get(name)!;

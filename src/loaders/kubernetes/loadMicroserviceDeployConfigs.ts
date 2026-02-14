@@ -5,10 +5,7 @@ import YAML from "yaml";
 
 import { DeployConfig } from "./deployConfig";
 
-const defaultDeploysPath = path.join(
-  "resources/kubernetes",
-  "microservices",
-);
+const defaultDeploysPath = path.join("resources/kubernetes", "microservices");
 
 const getMicroserviceFilepaths = async (
   deploysPath?: string,

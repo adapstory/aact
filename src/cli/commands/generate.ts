@@ -51,9 +51,7 @@ const runKubernetes = async (
     await fs.writeFile(filePath, output.content);
   }
 
-  consola.success(
-    `Generated ${outputs.length} file(s) in ${targetDir}`,
-  );
+  consola.success(`Generated ${outputs.length} file(s) in ${targetDir}`);
 };
 
 export const generate = defineCommand({

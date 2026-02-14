@@ -1,5 +1,5 @@
-import type { ArchitectureModel, Container } from "../../src/model";
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
+import type { ArchitectureModel, Container } from "../../src/model";
 import { applyEdits } from "../../src/rules/fix";
 import { fixAcl } from "../../src/rules/fixAcl";
 
@@ -24,9 +24,7 @@ const makeContainer = (
 });
 
 const makeModel = (containers: Container[]): ArchitectureModel => ({
-  boundaries: [
-    { name: "root", label: "Root", containers, boundaries: [] },
-  ],
+  boundaries: [{ name: "root", label: "Root", containers, boundaries: [] }],
   allContainers: containers,
 });
 
@@ -40,9 +38,16 @@ describe("fixAcl", () => {
     const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
     const model = makeModel([svc, extSystem]);
 
-    const results = fixAcl(model, [
-      { container: "my_service", message: "depends on external systems: ext_system" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [
+        {
+          container: "my_service",
+          message: "depends on external systems: ext_system",
+        },
+      ],
+      plantumlSyntax,
+    );
     expect(results).toHaveLength(1);
     expect(results[0].rule).toBe("acl");
   });
@@ -51,9 +56,11 @@ describe("fixAcl", () => {
     const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
     const model = makeModel([svc, extSystem]);
 
-    const results = fixAcl(model, [
-      { container: "my_service", message: "" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
     const addEdit = results[0].edits.find(
       (e) => e.type === "add" && e.content?.includes("my_service_acl"),
     );
@@ -66,9 +73,11 @@ describe("fixAcl", () => {
     const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
     const model = makeModel([svc, extSystem]);
 
-    const results = fixAcl(model, [
-      { container: "my_service", message: "" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
     const replaceEdit = results[0].edits.find((e) => e.type === "replace");
     expect(replaceEdit).toBeDefined();
     expect(replaceEdit!.search).toContain("Rel(my_service, ext_system");
@@ -79,11 +88,15 @@ describe("fixAcl", () => {
     const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
     const model = makeModel([svc, extSystem]);
 
-    const results = fixAcl(model, [
-      { container: "my_service", message: "" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
     const addRelEdit = results[0].edits.find(
-      (e) => e.type === "add" && e.content?.includes("Rel(my_service_acl, ext_system"),
+      (e) =>
+        e.type === "add" &&
+        e.content?.includes("Rel(my_service_acl, ext_system"),
     );
     expect(addRelEdit).toBeDefined();
   });
@@ -118,9 +131,11 @@ describe("fixAcl", () => {
     ]);
     const model = makeModel([svc, extSystem, ext2]);
 
-    const results = fixAcl(model, [
-      { container: "my_service", message: "" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
     const replaceEdits = results[0].edits.filter((e) => e.type === "replace");
     expect(replaceEdits).toHaveLength(2);
   });
@@ -135,9 +150,11 @@ describe("fixAcl", () => {
       'Rel(my_service, ext_system, "")',
     ].join("\n");
 
-    const results = fixAcl(model, [
-      { container: "my_service", message: "" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
     const patched = applyEdits(puml, results[0].edits);
     expect(patched).toContain("Container(my_service_acl,");
     expect(patched).toContain("Rel(my_service, my_service_acl");
@@ -149,9 +166,11 @@ describe("fixAcl", () => {
     const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
     const model = makeModel([svc, extSystem]);
 
-    const results = fixAcl(model, [
-      { container: "my_service", message: "" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
     expect(results[0].description).toContain("my_service");
   });
 
@@ -161,9 +180,11 @@ describe("fixAcl", () => {
     ]);
     const model = makeModel([svc, extSystem]);
 
-    const results = fixAcl(model, [
-      { container: "order_processor", message: "" },
-    ], plantumlSyntax);
+    const results = fixAcl(
+      model,
+      [{ container: "order_processor", message: "" }],
+      plantumlSyntax,
+    );
     const addEdit = results[0].edits.find(
       (e) => e.type === "add" && e.content?.includes("Container("),
     );

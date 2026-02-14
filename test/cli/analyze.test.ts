@@ -67,12 +67,14 @@ const setupConfig = (): void => {
   } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
 };
 
-const runAnalyze = async (
-  args: { format?: string } = {},
-): Promise<void> => {
+const runAnalyze = async (args: { format?: string } = {}): Promise<void> => {
   const mod = await import("../../src/cli/commands/analyze");
   const command = mod.analyze;
-  await (command as unknown as { run: (ctx: { args: Record<string, unknown> }) => Promise<void> }).run({ args });
+  await (
+    command as unknown as {
+      run: (ctx: { args: Record<string, unknown> }) => Promise<void>;
+    }
+  ).run({ args });
 };
 
 describe("analyze command", () => {
@@ -94,9 +96,9 @@ describe("analyze command", () => {
 
     await runAnalyze();
 
-    const infoCalls = vi.mocked(consola.info).mock.calls.map(
-      (c) => c[0] as string,
-    );
+    const infoCalls = vi
+      .mocked(consola.info)
+      .mock.calls.map((c) => c[0] as string);
     expect(infoCalls.some((c) => c.includes("Elements:"))).toBe(true);
     expect(infoCalls.some((c) => c.includes("Sync API calls:"))).toBe(true);
     expect(infoCalls.some((c) => c.includes("Async API calls:"))).toBe(true);

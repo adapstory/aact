@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/todo-tag */
 // TODO: Common Reuse Principle
 //
 // Контейнеры внутри одной границы должны переиспользоваться вместе.
@@ -8,4 +9,5 @@
 // Нарушение — если в границе есть контейнер, с которым не связан ни один
 // другой контейнер этой же границы.
 
+// eslint-disable-next-line unicorn/require-module-specifiers
 export {};

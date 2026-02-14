@@ -13,6 +13,7 @@ vi.mock("node:fs/promises", () => ({
 }));
 
 import fs from "node:fs/promises";
+
 import consola from "consola";
 
 const mockAccess = vi.mocked(fs.access);
@@ -48,7 +49,7 @@ describe("init command", () => {
   });
 
   it("skips when aact.config.ts already exists", async () => {
-    mockAccess.mockResolvedValue(undefined);
+    mockAccess.mockResolvedValue();
 
     await runInit();
 

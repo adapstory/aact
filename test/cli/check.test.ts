@@ -30,9 +30,10 @@ vi.mock("consola", () => ({
   },
 }));
 
+import { readFile, writeFile } from "node:fs/promises";
+
 import { loadConfig } from "c12";
 import consola from "consola";
-import { readFile, writeFile } from "node:fs/promises";
 
 import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
 
@@ -108,9 +109,7 @@ const violatingModel = (): ArchitectureModel => ({
   ],
 });
 
-const setupConfig = (
-  overrides?: { rules?: Record<string, unknown> },
-): void => {
+const setupConfig = (overrides?: { rules?: Record<string, unknown> }): void => {
   mockLoadConfig.mockResolvedValue({
     config: {
       source: { type: "plantuml", path: "test.puml" },
@@ -122,7 +121,11 @@ const setupConfig = (
 const runCheck = async (args: Record<string, unknown> = {}): Promise<void> => {
   const mod = await import("../../src/cli/commands/check");
   const command = mod.check;
-  await (command as unknown as { run: (ctx: { args: Record<string, unknown> }) => Promise<void> }).run({ args });
+  await (
+    command as unknown as {
+      run: (ctx: { args: Record<string, unknown> }) => Promise<void>;
+    }
+  ).run({ args });
 };
 
 describe("check command", () => {
@@ -222,7 +225,7 @@ describe("check command", () => {
       ].join("\n");
 
       mockReadFile.mockResolvedValue(pumlSource);
-      mockWriteFile.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue();
 
       await runCheck({ fix: true });
 
@@ -243,7 +246,7 @@ describe("check command", () => {
           'Rel(my_service, ext_system, "")',
         ].join("\n"),
       );
-      mockWriteFile.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue();
 
       await runCheck({ fix: true });
 

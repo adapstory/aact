@@ -1,5 +1,4 @@
 export * from "./acl";
-export * from "./types";
 export * from "./acyclic";
 export * from "./apiGateway";
 export * from "./cohesion";
@@ -11,3 +10,4 @@ export * from "./fixAcl";
 export * from "./fixDbPerService";
 export * from "./registry";
 export * from "./stableDependencies";
+export * from "./types";

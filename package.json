@@ -30,7 +30,7 @@
     "test": "vitest run",
     "lint": "npm run lint:eslint && npm run lint:markdown && npm run lint:prettier",
     "lint:eslint": "eslint .",
-    "lint:markdown": "markdownlint --ignore-path ./.gitignore \"./**/*.md\"",
+    "lint:markdown": "markdownlint --ignore-path ./.markdownlintignore \"./**/*.md\"",
     "lint:prettier": "prettier --ignore-path ./.gitignore --check \"./**/*.{ts,js,json,yaml,yml,md}\"",
     "prepare": "husky"
   },

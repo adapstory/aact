@@ -1,16 +1,16 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { defineCommand } from "citty";
 import consola from "consola";
 
 import type { AactConfig } from "../../config";
+import { plantumlSyntax } from "../../loaders/plantuml/syntax";
 import type { ArchitectureModel } from "../../model";
 import type { FixResult, SourceSyntax } from "../../rules/fix";
-import type { Violation } from "../../rules/types";
-import { plantumlSyntax } from "../../loaders/plantuml/syntax";
 import { applyEdits } from "../../rules/fix";
 import { ruleRegistry } from "../../rules/registry";
+import type { Violation } from "../../rules/types";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
@@ -36,12 +36,10 @@ const runRules = (
 };
 
 const getSyntax = (sourceType: string): SourceSyntax => {
-  switch (sourceType) {
-    case "plantuml":
-      return plantumlSyntax;
-    default:
-      throw new Error(`Write-back not supported for ${sourceType}`);
+  if (sourceType === "plantuml") {
+    return plantumlSyntax;
   }
+  throw new Error(`Write-back not supported for ${sourceType}`);
 };
 
 const generateFixes = (
@@ -144,6 +142,7 @@ export const check = defineCommand({
       description: "Show fixes without applying them",
     },
   },
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   async run({ args }) {
     const config = await loadAndValidateConfig();
     const model = await loadModel(config);
@@ -188,14 +187,14 @@ export const check = defineCommand({
         return;
       }
 
-      const sourcePath = resolve(config.source.path);
-      let source = await readFile(sourcePath, "utf-8");
+      const sourcePath = path.resolve(config.source.path);
+      let source = await readFile(sourcePath, "utf8");
 
       for (const fix of fixes) {
         source = applyEdits(source, fix.edits);
       }
 
-      await writeFile(sourcePath, source, "utf-8");
+      await writeFile(sourcePath, source, "utf8");
 
       const reModel = await loadModel(config);
       const reResults = runRules(reModel, config.rules);
