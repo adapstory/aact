@@ -98,7 +98,7 @@ console.log(`Elements: ${report.elementsCount}`);
 
 <a href="https://www.youtube.com/watch?v=POIbWZh68Cg"><img src="https://github.com/Byndyusoft/aact/assets/1096954/e011958e-12c8-4fb9-97f4-a61779408e4f" width="400"/></a>
 <a href="https://www.youtube.com/watch?v=tZ-FQeObSjY"><img src="https://github.com/Byndyusoft/aact/assets/1096954/daea29de-776b-49a0-b781-ad4eba9a2221" width="400"/></a>
-https://www.youtube.com/watch?v=POIbWZh68Cg $~~~~~~~~~~$ https://www.youtube.com/watch?v=tZ-FQeObSjY
+https://www.youtube.com/watch?v=POIbWZh68Cg &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; https://www.youtube.com/watch?v=tZ-FQeObSjY
 
 [Статья на Хабре](https://habr.com/ru/articles/800205/)
 
