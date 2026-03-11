@@ -13,6 +13,11 @@ import {
   Relation,
 } from "../../model";
 import {
+  STRUCTURIZR_INTERACTION_ASYNC,
+  STRUCTURIZR_LOCATION_EXTERNAL,
+  STRUCTURIZR_TAG_ASYNC,
+} from "./dslTypes";
+import {
   StructurizrRelationship,
   StructurizrSoftwareSystem,
   StructurizrWorkspace,
@@ -156,8 +161,8 @@ const addRelations = (
     if (!targetContainer) continue;
 
     let tags = rel.tags?.split(",").map((t) => t.trim());
-    if (rel.interactionStyle === "Asynchronous") {
-      tags = [...(tags ?? []), "async"];
+    if (rel.interactionStyle === STRUCTURIZR_INTERACTION_ASYNC) {
+      tags = [...(tags ?? []), STRUCTURIZR_TAG_ASYNC];
     }
 
     const relation: Relation = {
@@ -182,7 +187,10 @@ export const mapContainersFromStructurizr = (
   };
 
   for (const system of workspace.model.softwareSystems ?? []) {
-    if (system.location === "External" || system.tags?.includes("External")) {
+    if (
+      system.location === STRUCTURIZR_LOCATION_EXTERNAL ||
+      system.tags?.includes(STRUCTURIZR_LOCATION_EXTERNAL)
+    ) {
       processExternalSystem(system, registry);
     } else {
       processInternalSystem(system, registry);
