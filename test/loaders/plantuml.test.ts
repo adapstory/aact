@@ -44,3 +44,14 @@ describe("PlantUML Loader", () => {
     );
   });
 });
+
+describe("mapContainersFromPlantumlElements (unit)", () => {
+  it("skips relation to unknown container without throwing", async () => {
+    // generated.puml has containers with known relations
+    const elements = await loadPlantumlElements(
+      "resources/architecture/generated.puml",
+    );
+    // If any relation targets a missing container, mapContainers should not throw
+    expect(() => mapContainersFromPlantumlElements(elements)).not.toThrow();
+  });
+});

@@ -74,6 +74,35 @@ describe("checkDbPerService", () => {
     expect(checkDbPerService(containers)).toHaveLength(0);
   });
 
+  it("respects custom dbType option", () => {
+    const cache: Container = {
+      name: "redis",
+      label: "Redis",
+      type: "Cache",
+      description: "",
+      relations: [],
+    };
+    const svc1: Container = {
+      name: "svc_a",
+      label: "A",
+      type: "Container",
+      description: "",
+      relations: [{ to: cache }],
+    };
+    const svc2: Container = {
+      name: "svc_b",
+      label: "B",
+      type: "Container",
+      description: "",
+      relations: [{ to: cache }],
+    };
+
+    expect(checkDbPerService([svc1, svc2, cache])).toHaveLength(0);
+    expect(
+      checkDbPerService([svc1, svc2, cache], { dbType: "Cache" }),
+    ).toHaveLength(1);
+  });
+
   it("handles multiple databases correctly", () => {
     const db2: Container = {
       name: "users_db",

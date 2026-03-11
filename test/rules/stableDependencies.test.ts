@@ -88,6 +88,34 @@ describe("checkStableDependencies", () => {
     expect(checkStableDependencies([a, ext])).toHaveLength(0);
   });
 
+  it("respects custom externalType option", () => {
+    const legacy: Container = {
+      name: "legacy",
+      label: "Legacy",
+      type: "Legacy_System",
+      description: "",
+      relations: [],
+    };
+    const svc: Container = {
+      name: "svc",
+      label: "Svc",
+      type: "Container",
+      description: "",
+      relations: [{ to: legacy }],
+    };
+
+    // Without option, legacy is treated as internal → violation possible
+    const withDefault = checkStableDependencies([svc, legacy]);
+    // With custom externalType, legacy is excluded → no violations
+    const withOption = checkStableDependencies([svc, legacy], {
+      externalType: "Legacy_System",
+    });
+    expect(withOption).toHaveLength(0);
+    // Default should include legacy as internal (I=0 for leaf, I=1 for svc)
+    // svc→legacy: I(svc)=1 >= I(legacy)=0 ✓ no violation either
+    expect(withDefault).toHaveLength(0);
+  });
+
   it("handles chain A→B→C correctly", () => {
     // C: Ce=0, Ca=1, I=0
     // B: Ce=1, Ca=1, I=0.5

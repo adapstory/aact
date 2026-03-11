@@ -79,6 +79,25 @@ describe("checkAcyclic", () => {
     expect(violations.length).toBeGreaterThan(0);
   });
 
+  it("detects self-cycle A -> A", () => {
+    const a: Container = {
+      name: "a",
+      label: "A",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    a.relations.push({ to: a });
+
+    const violations = checkAcyclic([a]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].container).toBe("a");
+  });
+
+  it("returns no violations for empty list", () => {
+    expect(checkAcyclic([])).toHaveLength(0);
+  });
+
   it("returns no violations for isolated containers", () => {
     const containers: Container[] = [
       {

@@ -65,6 +65,32 @@ describe("checkAcl", () => {
     expect(checkAcl(containers)).toHaveLength(0);
   });
 
+  it("returns no violations for empty list", () => {
+    expect(checkAcl([])).toHaveLength(0);
+  });
+
+  it("violation message lists all external dependencies", () => {
+    const ext2: Container = {
+      name: "ext_payments",
+      label: "External Payments",
+      type: "System_Ext",
+      description: "",
+      relations: [],
+    };
+    const svc: Container = {
+      name: "my_service",
+      label: "My Service",
+      type: "Container",
+      description: "",
+      relations: [{ to: externalSystem }, { to: ext2 }],
+    };
+
+    const violations = checkAcl([svc, externalSystem, ext2]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("ext_system");
+    expect(violations[0].message).toContain("ext_payments");
+  });
+
   it("supports custom tag and externalType options", () => {
     const customExt: Container = {
       name: "legacy",
