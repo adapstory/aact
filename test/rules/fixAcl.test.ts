@@ -65,7 +65,7 @@ describe("fixAcl", () => {
       (e) => e.type === "add" && e.content?.includes("my_service_acl"),
     );
     expect(addEdit).toBeDefined();
-    expect(addEdit!.search).toContain("Container(my_service,");
+    expect(addEdit!.search).toContain("(my_service,");
     expect(addEdit!.content).toContain('$tags="acl"');
   });
 
@@ -84,7 +84,7 @@ describe("fixAcl", () => {
         e.content?.includes("Rel(my_service, my_service_acl"),
     );
     expect(addRelEdit).toBeDefined();
-    expect(addRelEdit!.search).toContain("Container(my_service_acl,");
+    expect(addRelEdit!.search).toContain("(my_service_acl,");
   });
 
   it("replaces Rel(svc, ext) with Rel(acl, ext)", () => {

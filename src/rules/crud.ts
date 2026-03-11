@@ -4,6 +4,7 @@ import { Violation } from "./types";
 export interface CrudOptions {
   repoTags?: string[];
   dbType?: string;
+  repoSuffix?: string;
 }
 
 export const checkCrud = (

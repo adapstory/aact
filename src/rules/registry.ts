@@ -12,6 +12,7 @@ import type { DbPerServiceOptions } from "./dbPerService";
 import { checkDbPerService } from "./dbPerService";
 import type { FixResult, SourceSyntax } from "./fix";
 import { fixAcl } from "./fixAcl";
+import { fixCrud } from "./fixCrud";
 import { fixDbPerService } from "./fixDbPerService";
 import type { StableDependenciesOptions } from "./stableDependencies";
 import { checkStableDependencies } from "./stableDependencies";
@@ -55,6 +56,7 @@ export const ruleRegistry: readonly RuleDefinition[] = [
   defineRule<CrudOptions>({
     name: "crud",
     check: (m, o) => checkCrud(m.allContainers, o),
+    fix: fixCrud,
   }),
   defineRule<DbPerServiceOptions>({
     name: "dbPerService",

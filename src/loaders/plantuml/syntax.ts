@@ -1,7 +1,7 @@
 import type { SourceSyntax } from "../../rules/fix";
 
 export const plantumlSyntax: SourceSyntax = {
-  containerPattern: (name) => `Container(${name},`,
+  containerPattern: (name) => `(${name},`,
   containerDecl: (name, label, tags) => {
     const tagsPart = tags ? `, "", "", $tags="${tags}"` : "";
     return `Container(${name}, "${label}"${tagsPart})`;

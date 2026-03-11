@@ -1,0 +1,156 @@
+import consola from "consola";
+
+import type { ArchitectureModel, Container } from "../model";
+import { CONTAINER_DB_TYPE } from "../model";
+import type { CrudOptions } from "./crud";
+import type { FixResult, SourceSyntax } from "./fix";
+import type { Violation } from "./types";
+
+const deriveRepoName = (dbName: string, suffix: string): string => {
+  const base = dbName
+    .replace(/[_-]?(?:db|database)$/i, "")
+    .replace(/[_-]+$/, "");
+  return `${base || dbName}${suffix}`;
+};
+
+const deriveRepoLabel = (dbName: string): string => {
+  const base = dbName
+    .replace(/[_-]?(?:db|database)$/i, "")
+    .replace(/[_-]+$/, "");
+  const word = base || dbName;
+  return (
+    word.charAt(0).toUpperCase() + word.slice(1).replaceAll("_", " ") + " Repo"
+  );
+};
+
+const fixNonRepoAccessesDb = (
+  accessor: Container,
+  model: ArchitectureModel,
+  syntax: SourceSyntax,
+  dbType: string,
+  ownerTags: string[],
+  repoSuffix: string,
+): FixResult | undefined => {
+  const dbRels = accessor.relations.filter((r) => r.to.type === dbType);
+  if (dbRels.length === 0) return undefined;
+
+  const edits = dbRels.flatMap((rel) => {
+    const db = rel.to;
+
+    const existingRepo = model.allContainers.find(
+      (c) =>
+        c !== accessor &&
+        c.relations.some((r) => r.to.name === db.name) &&
+        ownerTags.some((t) => c.tags?.includes(t)),
+    );
+
+    if (existingRepo) {
+      return [
+        {
+          type: "replace" as const,
+          search: syntax.relationPattern(accessor.name, db.name),
+          content: syntax.relationDecl(
+            accessor.name,
+            existingRepo.name,
+            rel.technology,
+          ),
+        },
+      ];
+    }
+
+    const repoName = deriveRepoName(db.name, repoSuffix);
+
+    if (model.allContainers.some((c) => c.name === repoName)) {
+      consola.warn(
+        `fix crud: cannot create repo for "${db.name}" — "${repoName}" already exists`,
+      );
+      return [];
+    }
+
+    return [
+      {
+        type: "add" as const,
+        search: syntax.containerPattern(db.name),
+        content: syntax.containerDecl(
+          repoName,
+          deriveRepoLabel(db.name),
+          ownerTags[0] ?? "repo",
+        ),
+      },
+      {
+        type: "add" as const,
+        search: syntax.containerPattern(repoName),
+        content: syntax.relationDecl(repoName, db.name, rel.technology),
+      },
+      {
+        type: "replace" as const,
+        search: syntax.relationPattern(accessor.name, db.name),
+        content: syntax.relationDecl(accessor.name, repoName, rel.technology),
+      },
+    ];
+  });
+
+  if (edits.length === 0) return undefined;
+
+  return {
+    rule: "crud",
+    description: `Add repo intermediary for ${accessor.name} → ${dbRels.map((r) => r.to.name).join(", ")}`,
+    edits,
+  };
+};
+
+const fixRepoWithNonDbDeps = (
+  repo: Container,
+  syntax: SourceSyntax,
+  dbType: string,
+): FixResult | undefined => {
+  const nonDbRels = repo.relations.filter((r) => r.to.type !== dbType);
+  if (nonDbRels.length === 0) return undefined;
+
+  return {
+    rule: "crud",
+    description: `Remove non-database dependencies from repo ${repo.name}`,
+    edits: nonDbRels.map((rel) => ({
+      type: "remove" as const,
+      search: syntax.relationPattern(repo.name, rel.to.name),
+    })),
+  };
+};
+
+export const fixCrud = (
+  model: ArchitectureModel,
+  violations: Violation[],
+  syntax: SourceSyntax,
+  options?: CrudOptions,
+): FixResult[] => {
+  const dbType = options?.dbType ?? CONTAINER_DB_TYPE;
+  const ownerTags = options?.repoTags ?? ["repo", "relay"];
+  const repoSuffix = options?.repoSuffix ?? "_repo";
+  const results: FixResult[] = [];
+
+  for (const violation of violations) {
+    const container = model.allContainers.find(
+      (c) => c.name === violation.container,
+    );
+    if (!container) continue;
+
+    const isRepo = ownerTags.some((t) => container.tags?.includes(t));
+
+    if (isRepo) {
+      const fix = fixRepoWithNonDbDeps(container, syntax, dbType);
+      if (fix) results.push(fix);
+    } else {
+      const fix = fixNonRepoAccessesDb(
+        container,
+        model,
+        syntax,
+        dbType,
+        ownerTags,
+        repoSuffix,
+      );
+      if (fix) results.push(fix);
+    }
+  }
+
+  return results;
+};
