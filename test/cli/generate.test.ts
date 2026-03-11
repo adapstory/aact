@@ -1,3 +1,5 @@
+import type { MockedFunction } from "vitest";
+
 import type { ArchitectureModel } from "../../src/model";
 import type { Container } from "../../src/model/container";
 
@@ -32,7 +34,9 @@ import { loadModel } from "../../src/cli/loadModel";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockWriteFile = vi.mocked(fs.writeFile);
-const mockMkdir = vi.mocked(fs.mkdir);
+const mockMkdir = vi.mocked(fs.mkdir) as unknown as MockedFunction<
+  () => Promise<void>
+>;
 const mockLoadModel = vi.mocked(loadModel);
 
 const makeContainer = (

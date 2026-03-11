@@ -155,14 +155,14 @@ const formatFixes = (fixes: FixResult[]): void => {
         case "replace": {
           console.log(pc.red(prefixContent(edit.search, "    - ", "      ")));
           console.log(
-            pc.green(prefixContent(edit.content, "    + ", "      ")),
+            pc.green(prefixContent(edit.content ?? "", "    + ", "      ")),
           );
           break;
         }
         case "add": {
           console.log(pc.dim(`    (after "${edit.search}")`));
           console.log(
-            pc.green(prefixContent(edit.content, "    + ", "      ")),
+            pc.green(prefixContent(edit.content ?? "", "    + ", "      ")),
           );
           break;
         }
@@ -237,7 +237,7 @@ const handleFixMode = async (
   }
 
   const syntax = getSyntax(config);
-  if (!syntax) exitWithViolations();
+  if (!syntax) return exitWithViolations();
 
   const fixes = generateFixes(model, results, config.rules, syntax);
   if (fixes.length === 0) {

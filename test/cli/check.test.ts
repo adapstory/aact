@@ -125,13 +125,6 @@ const setupConfig = (overrides?: {
 };
 
 const cyclicModel = (): ArchitectureModel => {
-  const svcA: Container = {
-    name: "svc_a",
-    label: "Service A",
-    type: "Container",
-    description: "",
-    relations: [],
-  };
   const svcB: Container = {
     name: "svc_b",
     label: "Service B",
@@ -139,8 +132,14 @@ const cyclicModel = (): ArchitectureModel => {
     description: "",
     relations: [],
   };
-  svcA.relations = [{ to: svcB }];
-  svcB.relations = [{ to: svcA }];
+  const svcA: Container = {
+    name: "svc_a",
+    label: "Service A",
+    type: "Container",
+    description: "",
+    relations: [{ to: svcB }],
+  };
+  Object.assign(svcB, { relations: [{ to: svcA }] });
   return {
     boundaries: [
       {

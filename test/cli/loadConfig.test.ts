@@ -16,7 +16,9 @@ describe("loadAndValidateConfig", () => {
   it("throws when no config file found", async () => {
     mockLoadConfig.mockResolvedValue({
       config: undefined,
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    } as unknown as ReturnType<typeof loadConfig> extends Promise<infer T>
+      ? T
+      : never);
 
     await expect(loadAndValidateConfig()).rejects.toThrow(
       "No source configured",
