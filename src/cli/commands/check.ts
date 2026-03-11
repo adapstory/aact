@@ -6,6 +6,7 @@ import consola from "consola";
 
 import type { AactConfig } from "../../config";
 import { plantumlSyntax } from "../../loaders/plantuml/syntax";
+import { structurizrDslSyntax } from "../../loaders/structurizr/syntax";
 import type { ArchitectureModel } from "../../model";
 import type { FixResult, SourceSyntax } from "../../rules/fix";
 import { applyEdits } from "../../rules/fix";
@@ -35,11 +36,20 @@ const runRules = (
   return results;
 };
 
-const getSyntax = (sourceType: string): SourceSyntax => {
-  if (sourceType === "plantuml") {
+const getSyntax = (config: AactConfig): SourceSyntax | null => {
+  if (config.source.type === "plantuml") {
     return plantumlSyntax;
   }
-  throw new Error(`Write-back not supported for ${sourceType}`);
+  if (config.source.type === "structurizr") {
+    if (!config.source.writePath) {
+      consola.warn(
+        "To use --fix with structurizr, add source.writePath pointing to your workspace.dsl",
+      );
+      return null;
+    }
+    return structurizrDslSyntax;
+  }
+  return null;
 };
 
 const generateFixes = (
@@ -171,14 +181,15 @@ export const check = defineCommand({
         return;
       }
 
-      const syntax = getSyntax(config.source.type);
+      const syntax = getSyntax(config);
+      if (!syntax) {
+        throw new Error("Architecture rule violations found");
+      }
+
       const fixes = generateFixes(model, results, config.rules, syntax);
       if (fixes.length === 0) {
         consola.info("No auto-fixes available for these violations");
-        if (hasViolations) {
-          throw new Error("Architecture rule violations found");
-        }
-        return;
+        throw new Error("Architecture rule violations found");
       }
 
       formatFixes(fixes);
@@ -187,36 +198,49 @@ export const check = defineCommand({
         return;
       }
 
-      const sourcePath = path.resolve(config.source.path);
-      let source = await readFile(sourcePath, "utf8");
+      const writePath = path.resolve(
+        config.source.writePath ?? config.source.path,
+      );
+      let source = await readFile(writePath, "utf8");
 
       for (const fix of fixes) {
         source = applyEdits(source, fix.edits);
       }
 
-      await writeFile(sourcePath, source, "utf8");
+      await writeFile(writePath, source, "utf8");
 
-      const reModel = await loadModel(config);
-      const reResults = runRules(reModel, config.rules);
-      const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
+      const isDslFix =
+        config.source.writePath &&
+        config.source.writePath !== config.source.path;
 
-      consola.success(
-        `Applied ${fixes.length} fix(es), wrote ${sourcePath}` +
-          (remaining > 0 ? ` (${remaining} violation(s) remain)` : ""),
-      );
+      if (isDslFix) {
+        consola.success(`Applied ${fixes.length} fix(es), wrote ${writePath}`);
+        consola.warn(
+          "DSL updated — regenerate workspace.json from workspace.dsl before re-checking",
+        );
+      } else {
+        const reModel = await loadModel(config);
+        const reResults = runRules(reModel, config.rules);
+        const remaining = reResults.reduce(
+          (n, r) => n + r.violations.length,
+          0,
+        );
+        consola.success(
+          `Applied ${fixes.length} fix(es), wrote ${writePath}` +
+            (remaining > 0 ? ` (${remaining} violation(s) remain)` : ""),
+        );
+      }
       return;
     }
 
     if (hasViolations) {
-      try {
-        const syntax = getSyntax(config.source.type);
+      const syntax = getSyntax(config);
+      if (syntax) {
         const fixes = generateFixes(model, results, config.rules, syntax);
         if (fixes.length > 0) {
           consola.info("Suggested fixes (run with --fix to apply):");
           formatFixes(fixes);
         }
-      } catch {
-        // write-back not supported for this source type — skip suggestions
       }
       throw new Error("Architecture rule violations found");
     }

@@ -152,7 +152,9 @@ const addRelations = (
 
     const relation: Relation = {
       to: targetContainer,
-      technology: rel.technology,
+      technology:
+        rel.technology ??
+        (rel.description?.includes(" ") ? undefined : rel.description),
       tags,
     };
 
@@ -170,7 +172,7 @@ export const mapContainersFromStructurizr = (
   };
 
   for (const system of workspace.model.softwareSystems ?? []) {
-    if (system.location === "External") {
+    if (system.location === "External" || system.tags?.includes("External")) {
       processExternalSystem(system, registry);
     } else {
       processInternalSystem(system, registry);

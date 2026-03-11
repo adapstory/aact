@@ -7,6 +7,7 @@ export const AactConfigSchema = v.strictObject({
   source: v.strictObject({
     type: v.picklist(["plantuml", "structurizr"]),
     path: v.string(),
+    writePath: v.optional(v.string()),
   }),
   rules: v.optional(
     v.strictObject({
@@ -26,6 +27,7 @@ export const AactConfigSchema = v.strictObject({
       }),
       dbPerService: ruleOption({
         dbType: v.optional(v.string()),
+        ownerTags: v.optional(v.array(v.string())),
       }),
       cohesion: ruleOption({
         externalType: v.optional(v.string()),
