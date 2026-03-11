@@ -11,6 +11,8 @@ import type { ArchitectureModel } from "../../model";
 import type { FixResult, SourceSyntax } from "../../rules/fix";
 import { applyEdits } from "../../rules/fix";
 import { ruleRegistry } from "../../rules/registry";
+
+const ruleMap = new Map(ruleRegistry.map((r) => [r.name, r]));
 import type { Violation } from "../../rules/types";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
@@ -62,7 +64,7 @@ const generateFixes = (
 
   for (const result of results) {
     if (result.violations.length === 0) continue;
-    const ruleDef = ruleRegistry.find((r) => r.name === result.name);
+    const ruleDef = ruleMap.get(result.name);
     if (!ruleDef?.fix) continue;
     const configValue = rules?.[ruleDef.name as keyof typeof rules];
     const options = typeof configValue === "object" ? configValue : undefined;
