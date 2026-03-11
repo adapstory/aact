@@ -19,6 +19,12 @@ export interface FixResult {
   edits: SourceEdit[];
 }
 
+const applyIndent = (content: string, indent: string): string =>
+  content
+    .split("\n")
+    .map((line) => (line.trim() ? indent + line : line))
+    .join("\n");
+
 export const applyEdits = (source: string, edits: SourceEdit[]): string => {
   const lines = source.split("\n");
 
@@ -39,17 +45,19 @@ export const applyEdits = (source: string, edits: SourceEdit[]): string => {
       );
     }
 
+    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? "";
+
     switch (edit.type) {
       case "remove": {
         lines.splice(idx, 1);
         break;
       }
       case "replace": {
-        lines[idx] = edit.content ?? "";
+        lines[idx] = applyIndent(edit.content ?? "", indent);
         break;
       }
       case "add": {
-        lines.splice(idx + 1, 0, edit.content ?? "");
+        lines.splice(idx + 1, 0, applyIndent(edit.content ?? "", indent));
         break;
       }
     }
