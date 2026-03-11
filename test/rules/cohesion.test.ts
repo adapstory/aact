@@ -103,12 +103,12 @@ describe("checkCohesion", () => {
       relations: [{ to: c3 }, { to: c3 }],
     };
 
-    // inner1 has cohesion=1 (c2->c1), coupling to c3 = 0
-    // inner2 has cohesion=2 (c4->c3 x2), coupling = 0
-    // parent has all 4 containers, so coupling to inner boundaries counts
-    // inner boundary coupling: inner1=0, inner2=0
-    // parent cohesion = relations within parent but crossing inner boundaries
-    // c2->c1 is within inner1, so not crossing
+    // inner1 cohesion=1 (c2→c1), coupling=0
+    // inner2 cohesion=2 (c4→c3 x2), coupling=0
+    // parent.containers=[] (loaders put containers only in leaf boundaries)
+    // parent cohesion = inner boundary coupling sum = 0+0 = 0
+    // parent coupling = 0 (no external system relations)
+    // cohesion(0) <= coupling(0) → violation on first check
 
     const inner1 = {
       name: "inner1",
@@ -130,17 +130,13 @@ describe("checkCohesion", () => {
           name: "parent",
           label: "Parent",
           boundaries: [inner1, inner2],
-          containers: [c1, c2, c3, c4],
+          containers: [],
         },
         inner1,
         inner2,
       ],
     };
 
-    // parent cohesion = inner boundaries coupling sum = 0+0=0
-    // inner cohesion sum = 1+2=3
-    // 0 < 3 — OK, no violation on this check
-    // But cohesion(0) <= coupling(0) will trigger first check
     const violations = checkCohesion(model);
     expect(violations.some((v) => v.container === "parent")).toBe(true);
   });

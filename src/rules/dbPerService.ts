@@ -3,6 +3,7 @@ import { Violation } from "./types";
 
 export interface DbPerServiceOptions {
   dbType?: string;
+  ownerTags?: string[];
 }
 
 export const checkDbPerService = (

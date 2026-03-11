@@ -1,3 +1,5 @@
+import consola from "consola";
+
 import type { ArchitectureModel } from "../model";
 import type { AclOptions } from "./acl";
 import type { FixResult, SourceSyntax } from "./fix";
@@ -25,33 +27,39 @@ export const fixAcl = (
     if (externalRels.length === 0) continue;
 
     const aclName = `${container.name}_acl`;
+    if (model.allContainers.some((c) => c.name === aclName)) {
+      consola.warn(
+        `fix acl: skipping ${container.name} — ${aclName} already exists`,
+      );
+      continue;
+    }
+
     const fix: FixResult = {
       rule: "acl",
       description: `Add ACL layer for ${container.name}`,
       edits: [],
     };
 
-    fix.edits.push({
-      type: "add",
-      search: syntax.containerPattern(container.name),
-      content: syntax.containerDecl(aclName, `${container.label} ACL`, tag),
-    });
-
-    for (const rel of externalRels) {
-      const tech = rel.technology ?? "";
-      fix.edits.push(
-        {
-          type: "replace",
-          search: syntax.relationPattern(container.name, rel.to.name),
-          content: syntax.relationDecl(container.name, aclName, tech),
-        },
-        {
-          type: "add",
-          search: syntax.relationPattern(container.name, aclName),
-          content: syntax.relationDecl(aclName, rel.to.name, tech),
-        },
-      );
-    }
+    fix.edits.push(
+      // 1. Add ACL container after the violating container
+      {
+        type: "add",
+        search: syntax.containerPattern(container.name),
+        content: syntax.containerDecl(aclName, `${container.label} ACL`, tag),
+      },
+      // 2. Add single Rel(svc, acl) after the ACL container declaration
+      {
+        type: "add",
+        search: syntax.containerPattern(aclName),
+        content: syntax.relationDecl(container.name, aclName),
+      },
+      // 3. Replace each Rel(svc, ext) → Rel(acl, ext) preserving technology
+      ...externalRels.map((rel) => ({
+        type: "replace" as const,
+        search: syntax.relationPattern(container.name, rel.to.name),
+        content: syntax.relationDecl(aclName, rel.to.name, rel.technology),
+      })),
+    );
 
     results.push(fix);
   }

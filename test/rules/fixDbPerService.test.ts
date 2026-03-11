@@ -14,12 +14,14 @@ const makeDb = (name = "orders_db"): Container => ({
 const makeContainer = (
   name: string,
   relations: Container["relations"] = [],
+  tags?: string[],
 ): Container => ({
   name,
   label: name,
   type: "Container",
   description: "",
   relations,
+  tags,
 });
 
 const makeModel = (containers: Container[]): ArchitectureModel => ({
@@ -93,10 +95,10 @@ describe("fixDbPerService", () => {
     expect(edits[0].content).toContain("Rel(payments, orders_repo");
   });
 
-  it("redirect goes to first accessor (owner)", () => {
+  it("prefers repo-tagged container as owner", () => {
     const db = makeDb();
-    const svc1 = makeContainer("orders_repo", [{ to: db }]);
-    const svc2 = makeContainer("payments", [{ to: db }]);
+    const svc1 = makeContainer("payments", [{ to: db }]);
+    const svc2 = makeContainer("orders_repo", [{ to: db }], ["repo"]);
     const model = makeModel([svc1, svc2, db]);
 
     const results = fixDbPerService(
@@ -105,9 +107,10 @@ describe("fixDbPerService", () => {
       plantumlSyntax,
     );
     expect(results[0].edits[0].content).toContain("orders_repo");
+    expect(results[0].edits[0].search).toContain("payments");
   });
 
-  it("owner is the first accessor, not the second", () => {
+  it("falls back to first accessor when no repo tag found", () => {
     const db = makeDb();
     const svc1 = makeContainer("alpha", [{ to: db }]);
     const svc2 = makeContainer("beta", [{ to: db }]);

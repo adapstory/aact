@@ -69,22 +69,7 @@ describe("fixAcl", () => {
     expect(addEdit!.content).toContain('$tags="acl"');
   });
 
-  it("replaces Rel(svc, ext) with Rel(svc, acl)", () => {
-    const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
-    const model = makeModel([svc, extSystem]);
-
-    const results = fixAcl(
-      model,
-      [{ container: "my_service", message: "" }],
-      plantumlSyntax,
-    );
-    const replaceEdit = results[0].edits.find((e) => e.type === "replace");
-    expect(replaceEdit).toBeDefined();
-    expect(replaceEdit!.search).toContain("Rel(my_service, ext_system");
-    expect(replaceEdit!.content).toContain("Rel(my_service, my_service_acl");
-  });
-
-  it("adds Rel(acl, ext)", () => {
+  it("adds single Rel(svc, acl) after the ACL container", () => {
     const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
     const model = makeModel([svc, extSystem]);
 
@@ -96,9 +81,25 @@ describe("fixAcl", () => {
     const addRelEdit = results[0].edits.find(
       (e) =>
         e.type === "add" &&
-        e.content?.includes("Rel(my_service_acl, ext_system"),
+        e.content?.includes("Rel(my_service, my_service_acl"),
     );
     expect(addRelEdit).toBeDefined();
+    expect(addRelEdit!.search).toContain("Container(my_service_acl,");
+  });
+
+  it("replaces Rel(svc, ext) with Rel(acl, ext)", () => {
+    const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
+    const model = makeModel([svc, extSystem]);
+
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
+    const replaceEdit = results[0].edits.find((e) => e.type === "replace");
+    expect(replaceEdit).toBeDefined();
+    expect(replaceEdit!.search).toContain("Rel(my_service, ext_system");
+    expect(replaceEdit!.content).toContain("Rel(my_service_acl, ext_system");
   });
 
   it("uses custom tag from options", () => {
@@ -117,7 +118,7 @@ describe("fixAcl", () => {
     expect(addEdit!.content).toContain('$tags="gateway"');
   });
 
-  it("generates edits for each external dependency", () => {
+  it("generates one replace per external dependency, one add for Rel(svc,acl)", () => {
     const ext2: Container = {
       name: "ext_payments",
       label: "External Payments",
@@ -137,7 +138,11 @@ describe("fixAcl", () => {
       plantumlSyntax,
     );
     const replaceEdits = results[0].edits.filter((e) => e.type === "replace");
+    const addRelEdits = results[0].edits.filter(
+      (e) => e.type === "add" && e.content?.includes("Rel("),
+    );
     expect(replaceEdits).toHaveLength(2);
+    expect(addRelEdits).toHaveLength(1); // single Rel(svc, acl), no duplicates
   });
 
   it("applies edits correctly to puml fragment", () => {
@@ -160,6 +165,19 @@ describe("fixAcl", () => {
     expect(patched).toContain("Rel(my_service, my_service_acl");
     expect(patched).toContain("Rel(my_service_acl, ext_system");
     expect(patched).not.toContain("Rel(my_service, ext_system");
+  });
+
+  it("skips with warning when acl container already exists", () => {
+    const aclContainer = makeContainer("my_service_acl", "My Service ACL");
+    const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
+    const model = makeModel([svc, aclContainer, extSystem]);
+
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results).toHaveLength(0);
   });
 
   it("description contains service name", () => {
