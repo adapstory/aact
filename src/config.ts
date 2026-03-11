@@ -13,7 +13,6 @@ export const AactConfigSchema = v.strictObject({
     v.strictObject({
       acl: ruleOption({
         tag: v.optional(v.string()),
-        aclSuffix: v.optional(v.string()),
         externalType: v.optional(v.string()),
       }),
       acyclic: v.optional(v.boolean()),

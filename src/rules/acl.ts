@@ -5,7 +5,6 @@ export type { Violation } from "./types";
 
 export interface AclOptions {
   tag?: string;
-  aclSuffix?: string;
   externalType?: string;
 }
 

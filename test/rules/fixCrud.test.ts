@@ -97,15 +97,22 @@ describe("fixCrud — non-repo accesses DB", () => {
     expect(results[0].edits[0].content).toContain("inventory_repo");
   });
 
-  it("uses repoSuffix option", () => {
-    const db = makeDb();
-    const api = makeContainer("orders_api", [{ to: db }]);
+  it("auto-detects camelCase and uses Repo suffix", () => {
+    const db = makeDb("ordersDb", "Orders DB");
+    const api = makeContainer("ordersApi", [{ to: db }]);
     const model = makeModel([api, db]);
 
-    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax, {
-      repoSuffix: "_crud",
-    });
-    expect(results[0].edits[0].content).toContain("orders_crud");
+    const results = fixCrud(model, [violation("ordersApi")], plantumlSyntax);
+    expect(results[0].edits[0].content).toContain("ordersRepo");
+  });
+
+  it("auto-detects kebab-case and uses -repo suffix", () => {
+    const db = makeDb("orders-db", "Orders DB");
+    const api = makeContainer("orders-api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders-api")], plantumlSyntax);
+    expect(results[0].edits[0].content).toContain("orders-repo");
   });
 
   it("skips and warns when derived repo name already exists", () => {

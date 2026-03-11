@@ -8,13 +8,21 @@ import {
 } from "./boundaryUtils";
 import type { CrudOptions } from "./crud";
 import type { FixResult, SourceSyntax } from "./fix";
+import {
+  detectNamingConvention,
+  joinName,
+  type NamingConvention,
+} from "./namingUtils";
 import type { Violation } from "./types";
 
-const deriveRepoName = (dbName: string, suffix: string): string => {
+const deriveRepoName = (
+  dbName: string,
+  convention: NamingConvention,
+): string => {
   const base = dbName
     .replace(/[_-]?(?:db|database)$/i, "")
     .replace(/[_-]+$/, "");
-  return `${base || dbName}${suffix}`;
+  return joinName(base || dbName, "repo", convention);
 };
 
 const deriveRepoLabel = (dbName: string): string => {
@@ -33,7 +41,7 @@ const fixNonRepoAccessesDb = (
   syntax: SourceSyntax,
   dbType: string,
   ownerTags: string[],
-  repoSuffix: string,
+  convention: NamingConvention,
 ): FixResult | undefined => {
   const dbRels = accessor.relations.filter((r) => r.to.type === dbType);
   if (dbRels.length === 0) return undefined;
@@ -90,7 +98,7 @@ const fixNonRepoAccessesDb = (
       return [];
     }
 
-    const repoName = deriveRepoName(db.name, repoSuffix);
+    const repoName = deriveRepoName(db.name, convention);
 
     if (model.allContainers.some((c) => c.name === repoName)) {
       consola.warn(
@@ -157,7 +165,7 @@ export const fixCrud = (
 ): FixResult[] => {
   const dbType = options?.dbType ?? CONTAINER_DB_TYPE;
   const ownerTags = options?.repoTags ?? ["repo", "relay"];
-  const repoSuffix = options?.repoSuffix ?? "_repo";
+  const convention = detectNamingConvention(model);
   const results: FixResult[] = [];
 
   for (const violation of violations) {
@@ -178,7 +186,7 @@ export const fixCrud = (
         syntax,
         dbType,
         ownerTags,
-        repoSuffix,
+        convention,
       );
       if (fix) results.push(fix);
     }
