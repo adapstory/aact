@@ -154,5 +154,45 @@ describe("analyzeArchitecture", () => {
       expect(p.cohesion).toBe(1);
       expect(p.coupling).toBe(0);
     });
+
+    it("attributes out-of-parent relation to parent.coupling, not child", () => {
+      // svc1 also connects to an external system outside any boundary
+      const ext: Container = {
+        name: "ext",
+        label: "Ext",
+        type: "System_Ext",
+        description: "",
+        relations: [],
+      };
+      const svc1ext: Container = {
+        name: "svc1",
+        label: "Svc1",
+        type: "Container",
+        description: "",
+        relations: [{ to: ext }],
+      };
+      const domainAext = {
+        name: "domainA",
+        label: "Domain A",
+        containers: [svc1ext],
+        boundaries: [],
+      };
+      const parentExt = {
+        name: "parent",
+        label: "Parent",
+        containers: [],
+        boundaries: [domainAext],
+      };
+      const m: ArchitectureModel = {
+        boundaries: [parentExt, domainAext],
+        allContainers: [svc1ext, ext],
+      };
+      const { report } = analyzeArchitecture(m);
+      const a = report.boundaries.find((b) => b.name === "domainA")!;
+      const p = report.boundaries.find((b) => b.name === "parent")!;
+      // svc1→ext goes outside parent scope → parent.coupling, not domainA.coupling
+      expect(a.coupling).toBe(0);
+      expect(p.coupling).toBe(1);
+    });
   });
 });
