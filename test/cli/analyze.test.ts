@@ -120,4 +120,52 @@ describe("analyze command", () => {
     expect(output).toHaveProperty("databases");
     expect(output).toHaveProperty("boundaries");
   });
+
+  it("unknown format falls back to text output", async () => {
+    setupConfig();
+    mockMapContainers.mockReturnValue(testModel());
+
+    await runAnalyze({ format: "unknown" });
+
+    const infoCalls = vi
+      .mocked(consola.info)
+      .mock.calls.map((c) => c[0] as string);
+    expect(infoCalls.some((c) => c.includes("Elements:"))).toBe(true);
+  });
+
+  it("logs coupling relations for boundaries", async () => {
+    const extSystem: Container = {
+      name: "ext",
+      label: "Ext",
+      type: "System_Ext",
+      description: "",
+      relations: [],
+    };
+    const svcWithCoupling: Container = {
+      name: "svc_coupling",
+      label: "Coupled Service",
+      type: "Container",
+      description: "",
+      relations: [{ to: extSystem, technology: "http" }],
+    };
+    setupConfig();
+    mockMapContainers.mockReturnValue({
+      boundaries: [
+        {
+          name: "project",
+          label: "Project",
+          containers: [svcWithCoupling],
+          boundaries: [],
+        },
+      ],
+      allContainers: [svcWithCoupling, extSystem],
+    });
+
+    await runAnalyze();
+
+    const logCalls = vi
+      .mocked(consola.log)
+      .mock.calls.map((c) => c[0] as string);
+    expect(logCalls.some((c) => c.includes("svc_coupling"))).toBe(true);
+  });
 });

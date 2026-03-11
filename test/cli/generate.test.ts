@@ -226,5 +226,20 @@ describe("generate command", () => {
         "Unknown format: unknown",
       );
     });
+
+    it("writes no files when model has no deployable containers", async () => {
+      setupConfig();
+      const db = makeContainer({ name: "orders_db", type: "ContainerDb" });
+      setupModel([db]);
+      mockMkdir.mockResolvedValue();
+      mockWriteFile.mockResolvedValue();
+
+      await runGenerate({ format: "kubernetes", output: "./k8s" });
+
+      expect(mockWriteFile).not.toHaveBeenCalled();
+      expect(consola.success).toHaveBeenCalledWith(
+        expect.stringContaining("0 file(s)"),
+      );
+    });
   });
 });

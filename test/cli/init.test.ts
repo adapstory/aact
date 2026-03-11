@@ -84,4 +84,11 @@ describe("init command", () => {
     expect(content).toContain("kubernetes:");
     expect(content).toContain("boundaryLabel:");
   });
+
+  it("throws when file write fails", async () => {
+    mockAccess.mockRejectedValue(new Error("ENOENT"));
+    mockWriteFile.mockRejectedValue(new Error("EACCES: permission denied"));
+
+    await expect(runInit()).rejects.toThrow();
+  });
 });
