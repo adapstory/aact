@@ -8,13 +8,17 @@ import { loadModel } from "../loadModel";
 export const analyze = defineCommand({
   meta: { description: "Analyze architecture metrics" },
   args: {
+    config: {
+      type: "string",
+      description: "Path to aact config file",
+    },
     format: {
       type: "string",
       description: "Output format: text, json",
     },
   },
   async run({ args }) {
-    const config = await loadAndValidateConfig();
+    const config = await loadAndValidateConfig(args.config);
     const model = await loadModel(config);
     const { report } = analyzeArchitecture(model);
 

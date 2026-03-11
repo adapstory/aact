@@ -52,6 +52,10 @@ const runKubernetes = async (
 export const generate = defineCommand({
   meta: { description: "Generate architecture artifacts" },
   args: {
+    config: {
+      type: "string",
+      description: "Path to aact config file",
+    },
     output: {
       type: "string",
       description: "Output path (file for plantuml, directory for kubernetes)",
@@ -62,7 +66,7 @@ export const generate = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadAndValidateConfig();
+    const config = await loadAndValidateConfig(args.config);
     const format = args.format ?? "plantuml";
 
     switch (format) {

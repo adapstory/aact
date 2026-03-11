@@ -139,6 +139,10 @@ const detectFormat = (format?: string): string => {
 export const check = defineCommand({
   meta: { description: "Check architecture rules" },
   args: {
+    config: {
+      type: "string",
+      description: "Path to aact config file",
+    },
     format: {
       type: "string",
       description: "Output format: text, json, github",
@@ -154,7 +158,7 @@ export const check = defineCommand({
   },
   // eslint-disable-next-line sonarjs/cognitive-complexity
   async run({ args }) {
-    const config = await loadAndValidateConfig();
+    const config = await loadAndValidateConfig(args.config);
     const model = await loadModel(config);
     const results = runRules(model, config.rules);
     const format = detectFormat(args.format);
