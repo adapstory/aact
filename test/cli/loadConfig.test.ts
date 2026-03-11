@@ -52,6 +52,17 @@ describe("loadAndValidateConfig", () => {
     await expect(loadAndValidateConfig()).rejects.toThrow();
   });
 
+  it("throws when acl rule contains removed aclSuffix field", async () => {
+    mockLoadConfig.mockResolvedValue({
+      config: {
+        source: { type: "plantuml", path: "test.puml" },
+        rules: { acl: { aclSuffix: "_acl" } },
+      },
+    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+
+    await expect(loadAndValidateConfig()).rejects.toThrow();
+  });
+
   it("returns valid config", async () => {
     mockLoadConfig.mockResolvedValue({
       config: { source: { type: "plantuml", path: "test.puml" } },

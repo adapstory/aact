@@ -209,6 +209,108 @@ describe("fixCrud — non-repo accesses DB", () => {
   });
 });
 
+describe("fixCrud — cross-boundary", () => {
+  const makeCrossBoundaryModel = (): {
+    model: ArchitectureModel;
+    accessor: Container;
+    db: Container;
+    repo: Container;
+    publicApi: Container;
+  } => {
+    const db = makeDb();
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const publicApi = makeContainer("orders_public_api");
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [publicApi, repo, db],
+          boundaries: [],
+        },
+        {
+          name: "fulfillment",
+          label: "fulfillment",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [publicApi, repo, db, accessor],
+    };
+    return { model, accessor, db, repo, publicApi };
+  };
+
+  it("redirects cross-boundary accessor through public API of target boundary", () => {
+    const { model, accessor } = makeCrossBoundaryModel();
+
+    const results = fixCrud(model, [violation(accessor.name)], plantumlSyntax);
+    expect(results).toHaveLength(1);
+    expect(results[0].edits[0].type).toBe("replace");
+    expect(results[0].edits[0].content).toContain("orders_public_api");
+    expect(results[0].edits[0].content).not.toContain("orders_repo");
+  });
+
+  it("warns and skips when cross-boundary has no public API", () => {
+    const db = makeDb();
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [repo, db],
+          boundaries: [],
+        },
+        {
+          name: "fulfillment",
+          label: "fulfillment",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [repo, db, accessor],
+    };
+
+    const results = fixCrud(
+      model,
+      [violation("fulfillment_api")],
+      plantumlSyntax,
+    );
+    expect(results).toHaveLength(0);
+  });
+
+  it("warns and skips when no repo exists cross-boundary", () => {
+    const db = makeDb();
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [db],
+          boundaries: [],
+        },
+        {
+          name: "fulfillment",
+          label: "fulfillment",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [db, accessor],
+    };
+
+    const results = fixCrud(
+      model,
+      [violation("fulfillment_api")],
+      plantumlSyntax,
+    );
+    expect(results).toHaveLength(0);
+  });
+});
+
 describe("fixCrud — repo has non-database dependencies", () => {
   it("removes non-db relation from repo", () => {
     const db = makeDb();

@@ -192,6 +192,50 @@ describe("fixAcl", () => {
     expect(results[0].description).toContain("my_service");
   });
 
+  it("auto-detects camelCase and names ACL with Acl suffix", () => {
+    const ext: Container = {
+      name: "extPayments",
+      label: "External Payments",
+      type: "System_Ext",
+      description: "",
+      relations: [],
+    };
+    const svc = makeContainer("myService", "My Service", [{ to: ext }]);
+    const model = makeModel([svc, ext]);
+
+    const results = fixAcl(
+      model,
+      [{ container: "myService", message: "" }],
+      plantumlSyntax,
+    );
+    const addEdit = results[0].edits.find(
+      (e) => e.type === "add" && e.content?.includes("Container("),
+    );
+    expect(addEdit!.content).toContain("myServiceAcl");
+  });
+
+  it("auto-detects kebab-case and names ACL with -acl suffix", () => {
+    const ext: Container = {
+      name: "ext-payments",
+      label: "External Payments",
+      type: "System_Ext",
+      description: "",
+      relations: [],
+    };
+    const svc = makeContainer("my-service", "My Service", [{ to: ext }]);
+    const model = makeModel([svc, ext]);
+
+    const results = fixAcl(
+      model,
+      [{ container: "my-service", message: "" }],
+      plantumlSyntax,
+    );
+    const addEdit = results[0].edits.find(
+      (e) => e.type === "add" && e.content?.includes("Container("),
+    );
+    expect(addEdit!.content).toContain("my-service-acl");
+  });
+
   it("ACL name follows {svc_name}_acl convention", () => {
     const svc = makeContainer("order_processor", "Order Processor", [
       { to: extSystem },

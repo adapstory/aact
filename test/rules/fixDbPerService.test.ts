@@ -231,3 +231,106 @@ describe("fixDbPerService", () => {
     expect(results[0].edits[0].content).toContain('$tags="async"');
   });
 });
+
+describe("fixDbPerService — cross-boundary", () => {
+  const makeCrossBoundaryModel = () => {
+    const db = makeDb();
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const publicApi = makeContainer("orders_public_api");
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [publicApi, repo, db],
+          boundaries: [],
+        },
+        {
+          name: "fulfillment",
+          label: "fulfillment",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [publicApi, repo, db, accessor],
+    };
+    return { model, db, repo, publicApi, accessor };
+  };
+
+  it("redirects cross-boundary accessor through public API of db boundary", () => {
+    const { model, db } = makeCrossBoundaryModel();
+
+    const results = fixDbPerService(
+      model,
+      [{ container: db.name, message: "" }],
+      plantumlSyntax,
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0].edits[0].type).toBe("replace");
+    expect(results[0].edits[0].content).toContain("orders_public_api");
+    expect(results[0].edits[0].content).not.toContain("orders_repo");
+  });
+
+  it("skips cross-boundary accessor when db boundary has no public API", () => {
+    const db = makeDb();
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [repo, db],
+          boundaries: [],
+        },
+        {
+          name: "fulfillment",
+          label: "fulfillment",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [repo, db, accessor],
+    };
+
+    const results = fixDbPerService(
+      model,
+      [{ container: db.name, message: "" }],
+      plantumlSyntax,
+    );
+    expect(results).toHaveLength(0);
+  });
+
+  it("still redirects same-boundary accessor through repo when mixed boundaries", () => {
+    const { model, db, repo, accessor } = makeCrossBoundaryModel();
+    const internalAccessor = makeContainer("orders_worker", [{ to: db }]);
+    const modelWithInternal: ArchitectureModel = {
+      ...model,
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [...model.boundaries[0].containers, internalAccessor],
+          boundaries: [],
+        },
+        model.boundaries[1],
+      ],
+      allContainers: [...model.allContainers, internalAccessor],
+    };
+
+    const results = fixDbPerService(
+      modelWithInternal,
+      [{ container: db.name, message: "" }],
+      plantumlSyntax,
+    );
+    const edits = results[0].edits;
+    const internalEdit = edits.find((e) => e.search.includes("orders_worker"));
+    const crossEdit = edits.find((e) => e.search.includes(accessor.name));
+
+    // same-boundary worker → repo
+    expect(internalEdit?.content).toContain(repo.name);
+    // cross-boundary fulfillment_api → public API
+    expect(crossEdit?.content).toContain("orders_public_api");
+  });
+});
