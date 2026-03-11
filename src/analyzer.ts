@@ -1,4 +1,11 @@
-import { ArchitectureModel, Boundary, Container, Relation } from "./model";
+import {
+  ArchitectureModel,
+  Boundary,
+  Container,
+  CONTAINER_DB_TYPE,
+  EXTERNAL_SYSTEM_TYPE,
+  Relation,
+} from "./model";
 
 export interface CouplingRelation {
   from: string;
@@ -36,7 +43,13 @@ interface RelationWithSource {
   relation: Relation;
 }
 
-const apiTechnologies = ["http", "grpc", "tcp"];
+export interface AnalyzeOptions {
+  apiTechnologies?: string[];
+  externalType?: string;
+  dbType?: string;
+}
+
+const DEFAULT_API_TECHNOLOGIES = ["http", "grpc", "tcp"];
 
 const allRelations = (model: ArchitectureModel): RelationWithSource[] =>
   model.allContainers.flatMap((container) =>
@@ -79,14 +92,20 @@ const classifyRelation = (
   }
 };
 
-const analyzeModel = (model: ArchitectureModel): AnalysisReport => {
+const analyzeModel = (
+  model: ArchitectureModel,
+  options?: AnalyzeOptions,
+): AnalysisReport => {
+  const apiTechnologies = options?.apiTechnologies ?? DEFAULT_API_TECHNOLOGIES;
+  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
+  const dbType = options?.dbType ?? CONTAINER_DB_TYPE;
   const relations = allRelations(model);
 
   const asyncApiCalls = relations.filter((it) =>
     it.relation.tags?.includes("async"),
   );
   const syncApiCalls = relations.filter((it) => {
-    const isExternalApi = it.relation.to.type === "System_Ext";
+    const isExternalApi = it.relation.to.type === externalType;
     const isApiTechnology = apiTechnologies.some((apiTechn) =>
       (it.relation.technology ?? "").toLowerCase().includes(apiTechn),
     );
@@ -132,15 +151,16 @@ const analyzeModel = (model: ArchitectureModel): AnalysisReport => {
     elementsCount: model.allContainers.length,
     syncApiCalls: syncApiCalls.length,
     asyncApiCalls: asyncApiCalls.length,
-    databases: analyzeDatabases(model),
+    databases: analyzeDatabases(model, dbType),
     boundaries: [...boundaryResults.values()],
   };
 };
 
-const analyzeDatabases = (model: ArchitectureModel): DatabasesInfo => {
-  const dbContainers = model.allContainers.filter(
-    (it) => it.type === "ContainerDb",
-  );
+const analyzeDatabases = (
+  model: ArchitectureModel,
+  dbType: string,
+): DatabasesInfo => {
+  const dbContainers = model.allContainers.filter((it) => it.type === dbType);
 
   const dbRelations = model.allContainers.flatMap((container) =>
     container.relations.filter((r) =>
@@ -156,9 +176,10 @@ const analyzeDatabases = (model: ArchitectureModel): DatabasesInfo => {
 
 export const analyzeArchitecture = (
   model: ArchitectureModel,
+  options?: AnalyzeOptions,
 ): AnalyzedArchitecture => {
   return {
     model,
-    report: analyzeModel(model),
+    report: analyzeModel(model, options),
   };
 };

@@ -2,6 +2,7 @@ import consola from "consola";
 
 import type { Container } from "../model";
 import type { ArchitectureModel } from "../model";
+import { CONTAINER_DB_TYPE } from "../model";
 import type { DbPerServiceOptions } from "./dbPerService";
 import type { FixResult, SourceSyntax } from "./fix";
 import type { Violation } from "./types";
@@ -37,7 +38,7 @@ export const fixDbPerService = (
   syntax: SourceSyntax,
   options?: DbPerServiceOptions,
 ): FixResult[] => {
-  const dbType = options?.dbType ?? "ContainerDb";
+  const dbType = options?.dbType ?? CONTAINER_DB_TYPE;
   const ownerTags = options?.ownerTags ?? ["repo", "relay"];
   const results: FixResult[] = [];
 

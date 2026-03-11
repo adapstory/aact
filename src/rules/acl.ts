@@ -1,10 +1,11 @@
-import { Container } from "../model";
+import { Container, EXTERNAL_SYSTEM_TYPE } from "../model";
 import { Violation } from "./types";
 
 export type { Violation } from "./types";
 
 export interface AclOptions {
   tag?: string;
+  aclSuffix?: string;
   externalType?: string;
 }
 
@@ -13,7 +14,7 @@ export const checkAcl = (
   options?: AclOptions,
 ): Violation[] => {
   const tag = options?.tag ?? "acl";
-  const externalType = options?.externalType ?? "System_Ext";
+  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
   const violations: Violation[] = [];
 
   for (const container of containers) {

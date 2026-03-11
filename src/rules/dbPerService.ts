@@ -1,4 +1,4 @@
-import { Container } from "../model";
+import { Container, CONTAINER_DB_TYPE } from "../model";
 import { Violation } from "./types";
 
 export interface DbPerServiceOptions {
@@ -10,7 +10,7 @@ export const checkDbPerService = (
   containers: Container[],
   options?: DbPerServiceOptions,
 ): Violation[] => {
-  const dbType = options?.dbType ?? "ContainerDb";
+  const dbType = options?.dbType ?? CONTAINER_DB_TYPE;
   const violations: Violation[] = [];
 
   const dbAccessMap = new Map<string, string[]>();

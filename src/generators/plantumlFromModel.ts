@@ -1,4 +1,16 @@
+import {
+  PLANTUML_CONTAINER,
+  PLANTUML_CONTAINER_DB,
+  PLANTUML_PERSON,
+  PLANTUML_SYSTEM_EXT,
+} from "../loaders/plantuml/c4Types";
 import type { ArchitectureModel } from "../model";
+import {
+  CONTAINER_DB_TYPE,
+  CONTAINER_TYPE,
+  EXTERNAL_SYSTEM_TYPE,
+  PERSON_TYPE,
+} from "../model";
 import type { Boundary } from "../model/boundary";
 import type { Container } from "../model/container";
 
@@ -7,14 +19,15 @@ export interface PlantumlFromModelOptions {
 }
 
 const containerTypeMap: Record<string, string> = {
-  Container: "Container",
-  ContainerDb: "ContainerDb",
-  System_Ext: "System_Ext",
-  Person: "Person",
+  [CONTAINER_TYPE]: PLANTUML_CONTAINER,
+  [CONTAINER_DB_TYPE]: PLANTUML_CONTAINER_DB,
+  [EXTERNAL_SYSTEM_TYPE]: PLANTUML_SYSTEM_EXT,
+  [PERSON_TYPE]: PLANTUML_PERSON,
 };
 
 const renderContainer = (container: Container): string => {
-  const type = containerTypeMap[container.type ?? "Container"] ?? "Container";
+  const type =
+    containerTypeMap[container.type ?? CONTAINER_TYPE] ?? PLANTUML_CONTAINER;
   const tags =
     container.tags && container.tags.length > 0
       ? `, $tags="${container.tags.join("+")}"`

@@ -1,6 +1,11 @@
 import YAML from "yaml";
 
 import type { ArchitectureModel } from "../model";
+import {
+  CONTAINER_DB_TYPE,
+  CONTAINER_TYPE,
+  EXTERNAL_SYSTEM_TYPE,
+} from "../model";
 import type { Container } from "../model/container";
 import type { Relation } from "../model/relation";
 
@@ -28,7 +33,7 @@ const buildEnvVar = (
   const targetKebab = toKebab(relation.to.name);
   const targetUpper = toEnvKey(targetKebab);
 
-  if (targetType === "ContainerDb") {
+  if (targetType === CONTAINER_DB_TYPE) {
     const value = options.dbConnectionTemplate.replaceAll(
       "{name}",
       sourceKebab,
@@ -41,12 +46,12 @@ const buildEnvVar = (
     return { key: `KAFKA_${targetUpper}_TOPIC`, value };
   }
 
-  if (targetType === "System_Ext") {
+  if (targetType === EXTERNAL_SYSTEM_TYPE) {
     const value = relation.technology ?? `https://${targetKebab}`;
     return { key: `${targetUpper}_BASE_URL`, value };
   }
 
-  if (targetType === "Container") {
+  if (targetType === CONTAINER_TYPE) {
     const value =
       relation.technology ?? `http://${targetKebab}:${options.defaultPort}`;
     return { key: `${targetUpper}_BASE_URL`, value };
@@ -67,7 +72,8 @@ export const generateKubernetes = (
   const resolvedOptions = { defaultPort, dbConnectionTemplate };
 
   const containers = model.allContainers.filter(
-    (c: Container) => c.type !== "ContainerDb" && c.type !== "System_Ext",
+    (c: Container) =>
+      c.type !== CONTAINER_DB_TYPE && c.type !== EXTERNAL_SYSTEM_TYPE,
   );
 
   return containers.map((container: Container) => {

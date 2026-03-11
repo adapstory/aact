@@ -1,7 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { ArchitectureModel, Boundary, Container, Relation } from "../../model";
+import {
+  ArchitectureModel,
+  Boundary,
+  BOUNDARY_TYPE,
+  Container,
+  CONTAINER_DB_TYPE,
+  CONTAINER_TYPE,
+  EXTERNAL_SYSTEM_TYPE,
+  PERSON_TYPE,
+  Relation,
+} from "../../model";
 import {
   StructurizrRelationship,
   StructurizrSoftwareSystem,
@@ -90,7 +100,7 @@ const processExternalSystem = (
   const container: Container = {
     name: system.id,
     label: system.name,
-    type: "System_Ext",
+    type: EXTERNAL_SYSTEM_TYPE,
     tags: system.tags
       ?.split(",")
       .map((t) => t.trim())
@@ -113,8 +123,8 @@ const processInternalSystem = (
       name: cont.id,
       label: cont.name,
       type: isDatabase(cont.technology, cont.name)
-        ? "ContainerDb"
-        : "Container",
+        ? CONTAINER_DB_TYPE
+        : CONTAINER_TYPE,
       tags: enrichTags(cont.tags, cont.name),
       description: cont.description ?? "",
       relations: [],
@@ -127,7 +137,7 @@ const processInternalSystem = (
   registry.boundaries.push({
     name: system.id,
     label: system.name,
-    type: "Boundary",
+    type: BOUNDARY_TYPE,
     boundaries: [],
     containers: systemContainers,
   });
@@ -183,7 +193,7 @@ export const mapContainersFromStructurizr = (
     const container: Container = {
       name: person.id,
       label: person.name,
-      type: "Person",
+      type: PERSON_TYPE,
       tags: person.tags
         ?.split(",")
         .map((t) => t.trim())

@@ -8,18 +8,33 @@ import {
   UMLElement,
 } from "plantuml-parser";
 
+import {
+  PLANTUML_BOUNDARY,
+  PLANTUML_COMPONENT,
+  PLANTUML_CONTAINER,
+  PLANTUML_CONTAINER_BOUNDARY,
+  PLANTUML_CONTAINER_DB,
+  PLANTUML_PERSON,
+  PLANTUML_SYSTEM,
+  PLANTUML_SYSTEM_BOUNDARY,
+  PLANTUML_SYSTEM_EXT,
+} from "../c4Types";
+
 export const filterElements = (elements: UMLElement[]): UMLElement[] => {
   const result: UMLElement[] = [];
 
   for (const element of elements) {
     if (element instanceof Comment) continue;
     if (
-      (element as Stdlib_C4_Container_Component).type_.name === "Container" ||
-      (element as Stdlib_C4_Container_Component).type_.name === "ContainerDb" ||
-      (element as Stdlib_C4_Container_Component).type_.name === "Component" ||
-      (element as Stdlib_C4_Context).type_.name === "System_Ext" ||
-      (element as Stdlib_C4_Context).type_.name === "System" ||
-      (element as Stdlib_C4_Context).type_.name === "Person" ||
+      (element as Stdlib_C4_Container_Component).type_.name ===
+        PLANTUML_CONTAINER ||
+      (element as Stdlib_C4_Container_Component).type_.name ===
+        PLANTUML_CONTAINER_DB ||
+      (element as Stdlib_C4_Container_Component).type_.name ===
+        PLANTUML_COMPONENT ||
+      (element as Stdlib_C4_Context).type_.name === PLANTUML_SYSTEM_EXT ||
+      (element as Stdlib_C4_Context).type_.name === PLANTUML_SYSTEM ||
+      (element as Stdlib_C4_Context).type_.name === PLANTUML_PERSON ||
       element instanceof Stdlib_C4_Dynamic_Rel ||
       element instanceof Relationship
     ) {
@@ -28,9 +43,11 @@ export const filterElements = (elements: UMLElement[]): UMLElement[] => {
 
     const elementAsBoundary = element as Stdlib_C4_Boundary;
     if (
-      ["System_Boundary", "Container_Boundary", "Boundary"].includes(
-        elementAsBoundary.type_.name,
-      )
+      [
+        PLANTUML_SYSTEM_BOUNDARY,
+        PLANTUML_CONTAINER_BOUNDARY,
+        PLANTUML_BOUNDARY,
+      ].includes(elementAsBoundary.type_.name)
     ) {
       result.push(elementAsBoundary);
       const resultFromBoundary = filterElements(elementAsBoundary.elements);

@@ -1,24 +1,36 @@
 import { Section } from "../../model";
 import { DeployConfig } from "./index";
 
-const mapFromConfig = (deployConfig: DeployConfig): DeployConfig => {
-  const envWhitelist: (string | RegExp)[] = [
-    "BASE_URL",
-    "PROTOCOL",
-    "_TOPIC",
-    "__BaseAddress",
-    "__BaseAddress",
-    "__Endpoint",
-    "__SmtpServer",
-    "QueueName",
-  ];
-  const envNamePartsToCleanup: (string | RegExp)[] = [
-    "_BASE_URL",
-    "_API",
-    "_CLIENT",
-    "_PROTOCOL",
-    /_KAFKA_(?:[A-Z]+_)+TOPIC/,
-  ];
+export interface KubernetesMapOptions {
+  envWhitelist?: (string | RegExp)[];
+  envNamePartsToCleanup?: (string | RegExp)[];
+}
+
+const DEFAULT_ENV_WHITELIST: (string | RegExp)[] = [
+  "BASE_URL",
+  "PROTOCOL",
+  "_TOPIC",
+  "__BaseAddress",
+  "__Endpoint",
+  "__SmtpServer",
+  "QueueName",
+];
+
+const DEFAULT_ENV_CLEANUP: (string | RegExp)[] = [
+  "_BASE_URL",
+  "_API",
+  "_CLIENT",
+  "_PROTOCOL",
+  /_KAFKA_(?:[A-Z]+_)+TOPIC/,
+];
+
+const mapFromConfig = (
+  deployConfig: DeployConfig,
+  options?: KubernetesMapOptions,
+): DeployConfig => {
+  const envWhitelist = options?.envWhitelist ?? DEFAULT_ENV_WHITELIST;
+  const envNamePartsToCleanup =
+    options?.envNamePartsToCleanup ?? DEFAULT_ENV_CLEANUP;
 
   const synonymes = new Map<string, string[]>([]);
 
@@ -61,8 +73,9 @@ const mapFromConfig = (deployConfig: DeployConfig): DeployConfig => {
 
 export const mapFromConfigs = (
   deployConfigs: DeployConfig[],
+  options?: KubernetesMapOptions,
 ): DeployConfig[] => {
   return deployConfigs
-    .map(mapFromConfig)
+    .map((c) => mapFromConfig(c, options))
     .sort((a, b) => a.name.localeCompare(b.name));
 };

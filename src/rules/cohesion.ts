@@ -1,4 +1,9 @@
-import { ArchitectureModel, Boundary } from "../model";
+import {
+  ArchitectureModel,
+  Boundary,
+  CONTAINER_TYPE,
+  EXTERNAL_SYSTEM_TYPE,
+} from "../model";
 import { Violation } from "./types";
 
 export interface CohesionOptions {
@@ -21,8 +26,8 @@ const getBoundaryCohesion = (boundary: Boundary): number => {
 
 const getBoundaryCoupling = (
   boundary: Boundary,
-  externalType = "System_Ext",
-  internalType = "Container",
+  externalType = EXTERNAL_SYSTEM_TYPE,
+  internalType = CONTAINER_TYPE,
 ): number => {
   let result = 0;
 
@@ -49,8 +54,8 @@ export const checkCohesion = (
   model: ArchitectureModel,
   options?: CohesionOptions,
 ): Violation[] => {
-  const externalType = options?.externalType ?? "System_Ext";
-  const internalType = options?.internalType ?? "Container";
+  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
+  const internalType = options?.internalType ?? CONTAINER_TYPE;
   const violations: Violation[] = [];
 
   for (const boundary of model.boundaries) {

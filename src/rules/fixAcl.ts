@@ -1,6 +1,7 @@
 import consola from "consola";
 
 import type { ArchitectureModel } from "../model";
+import { EXTERNAL_SYSTEM_TYPE } from "../model";
 import type { AclOptions } from "./acl";
 import type { FixResult, SourceSyntax } from "./fix";
 import type { Violation } from "./types";
@@ -12,7 +13,8 @@ export const fixAcl = (
   options?: AclOptions,
 ): FixResult[] => {
   const tag = options?.tag ?? "acl";
-  const externalType = options?.externalType ?? "System_Ext";
+  const aclSuffix = options?.aclSuffix ?? "_acl";
+  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
   const results: FixResult[] = [];
 
   for (const violation of violations) {
@@ -26,7 +28,7 @@ export const fixAcl = (
     );
     if (externalRels.length === 0) continue;
 
-    const aclName = `${container.name}_acl`;
+    const aclName = `${container.name}${aclSuffix}`;
     if (model.allContainers.some((c) => c.name === aclName)) {
       consola.warn(
         `fix acl: skipping ${container.name} — ${aclName} already exists`,

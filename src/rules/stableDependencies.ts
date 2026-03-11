@@ -1,4 +1,4 @@
-import { Container } from "../model";
+import { Container, EXTERNAL_SYSTEM_TYPE } from "../model";
 import { Violation } from "./types";
 
 export interface StableDependenciesOptions {
@@ -32,7 +32,7 @@ export const checkStableDependencies = (
   containers: Container[],
   options?: StableDependenciesOptions,
 ): Violation[] => {
-  const externalType = options?.externalType ?? "System_Ext";
+  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
   const violations: Violation[] = [];
 
   const internal = containers.filter((c) => c.type !== externalType);

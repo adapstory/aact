@@ -1,4 +1,4 @@
-import { Container } from "../model";
+import { Container, EXTERNAL_SYSTEM_TYPE } from "../model";
 import { Violation } from "./types";
 
 export interface ApiGatewayOptions {
@@ -12,7 +12,7 @@ export const checkApiGateway = (
   options?: ApiGatewayOptions,
 ): Violation[] => {
   const aclTag = options?.aclTag ?? "acl";
-  const externalType = options?.externalType ?? "System_Ext";
+  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
   const gatewayPattern = options?.gatewayPattern ?? /gateway/i;
   const violations: Violation[] = [];
 
