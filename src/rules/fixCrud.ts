@@ -15,20 +15,33 @@ import {
 } from "./namingUtils";
 import type { Violation } from "./types";
 
+const stripDbWord = (name: string): string => {
+  const lower = name.toLowerCase();
+  for (const suffix of [
+    "_database",
+    "-database",
+    "database",
+    "_db",
+    "-db",
+    "db",
+  ]) {
+    if (lower.endsWith(suffix)) {
+      return name.slice(0, -suffix.length);
+    }
+  }
+  return name;
+};
+
 const deriveRepoName = (
   dbName: string,
   convention: NamingConvention,
 ): string => {
-  const base = dbName
-    .replace(/[_-]?(?:db|database)$/i, "")
-    .replace(/[_-]+$/, "");
+  const base = stripDbWord(dbName);
   return joinName(base || dbName, "repo", convention);
 };
 
 const deriveRepoLabel = (dbName: string): string => {
-  const base = dbName
-    .replace(/[_-]?(?:db|database)$/i, "")
-    .replace(/[_-]+$/, "");
+  const base = stripDbWord(dbName);
   const word = base || dbName;
   return (
     word.charAt(0).toUpperCase() + word.slice(1).replaceAll("_", " ") + " Repo"

@@ -45,7 +45,7 @@ export const applyEdits = (source: string, edits: SourceEdit[]): string => {
       );
     }
 
-    const indent = lines[idx].match(/^(\s*)/)?.[1] ?? "";
+    const indent = /^(\s*)/.exec(lines[idx])?.[1] ?? "";
 
     switch (edit.type) {
       case "remove": {

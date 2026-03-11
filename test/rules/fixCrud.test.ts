@@ -97,6 +97,24 @@ describe("fixCrud — non-repo accesses DB", () => {
     expect(results[0].edits[0].content).toContain("inventory_repo");
   });
 
+  it("strips _database suffix (snake)", () => {
+    const db = makeDb("orders_database");
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results[0].edits[0].content).toContain("orders_repo");
+  });
+
+  it("strips Database suffix (camelCase)", () => {
+    const db = makeDb("ordersDatabase", "Orders DB");
+    const api = makeContainer("ordersApi", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("ordersApi")], plantumlSyntax);
+    expect(results[0].edits[0].content).toContain("ordersRepo");
+  });
+
   it("auto-detects camelCase and uses Repo suffix", () => {
     const db = makeDb("ordersDb", "Orders DB");
     const api = makeContainer("ordersApi", [{ to: db }]);
@@ -113,6 +131,15 @@ describe("fixCrud — non-repo accesses DB", () => {
 
     const results = fixCrud(model, [violation("orders-api")], plantumlSyntax);
     expect(results[0].edits[0].content).toContain("orders-repo");
+  });
+
+  it("derives human-readable label for new repo", () => {
+    const db = makeDb("orders_db");
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results[0].edits[0].content).toContain("Orders Repo");
   });
 
   it("skips and warns when derived repo name already exists", () => {
