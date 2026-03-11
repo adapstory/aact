@@ -2,6 +2,10 @@ import consola from "consola";
 
 import type { ArchitectureModel, Container } from "../model";
 import { CONTAINER_DB_TYPE } from "../model";
+import {
+  buildContainerBoundaryMap,
+  resolveRedirectTarget,
+} from "./boundaryUtils";
 import type { CrudOptions } from "./crud";
 import type { FixResult, SourceSyntax } from "./fix";
 import type { Violation } from "./types";
@@ -34,6 +38,8 @@ const fixNonRepoAccessesDb = (
   const dbRels = accessor.relations.filter((r) => r.to.type === dbType);
   if (dbRels.length === 0) return undefined;
 
+  const containerBoundaryMap = buildContainerBoundaryMap(model);
+
   const edits = dbRels.flatMap((rel) => {
     const db = rel.to;
 
@@ -45,17 +51,43 @@ const fixNonRepoAccessesDb = (
     );
 
     if (existingRepo) {
+      const redirectTarget = resolveRedirectTarget(
+        accessor,
+        db,
+        existingRepo,
+        dbType,
+        ownerTags,
+        model,
+        containerBoundaryMap,
+        "crud",
+      );
+      if (!redirectTarget) return [];
+
       return [
         {
           type: "replace" as const,
           search: syntax.relationPattern(accessor.name, db.name),
           content: syntax.relationDecl(
             accessor.name,
-            existingRepo.name,
+            redirectTarget.name,
             rel.technology,
           ),
         },
       ];
+    }
+
+    // No existing repo — only create one within the same boundary
+    const accessorBoundary = containerBoundaryMap.get(accessor.name);
+    const dbBoundary = containerBoundaryMap.get(db.name);
+    if (
+      accessorBoundary !== undefined &&
+      dbBoundary !== undefined &&
+      accessorBoundary !== dbBoundary
+    ) {
+      consola.warn(
+        `fix crud: "${accessor.name}" accesses "${db.name}" cross-boundary with no existing repo — fix manually`,
+      );
+      return [];
     }
 
     const repoName = deriveRepoName(db.name, repoSuffix);
