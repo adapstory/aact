@@ -12,11 +12,10 @@ export interface CohesionOptions {
 }
 
 const getBoundaryCohesion = (boundary: Boundary): number => {
+  const names = new Set(boundary.containers.map((c) => c.name));
   let result = 0;
   for (const container of boundary.containers) {
-    result += container.relations.filter((r) =>
-      boundary.containers.some((c) => c.name === r.to.name),
-    ).length;
+    result += container.relations.filter((r) => names.has(r.to.name)).length;
   }
   for (const innerBoundary of boundary.boundaries) {
     result += getBoundaryCoupling(innerBoundary);
@@ -29,13 +28,12 @@ const getBoundaryCoupling = (
   externalType = EXTERNAL_SYSTEM_TYPE,
   internalType = CONTAINER_TYPE,
 ): number => {
+  const names = new Set(boundary.containers.map((c) => c.name));
   let result = 0;
 
   for (const container of boundary.containers) {
     result += container.relations.filter(
-      (r) =>
-        r.to.type === internalType &&
-        !boundary.containers.some((c) => c.name === r.to.name),
+      (r) => r.to.type === internalType && !names.has(r.to.name),
     ).length;
   }
 

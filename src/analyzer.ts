@@ -56,28 +56,23 @@ const allRelations = (model: ArchitectureModel): RelationWithSource[] =>
     container.relations.map((relation) => ({ from: container, relation })),
   );
 
-const boundaryContainsName = (boundary: Boundary, name: string): boolean =>
-  boundary.containers.some((c) => c.name === name);
-
 const classifyRelation = (
-  boundary: Boundary,
+  names: Set<string>,
+  childNames: Set<string> | undefined,
   parentBoundary: Boundary | undefined,
   from: Container,
   relation: Relation,
   result: BoundaryAnalysis,
   parentResult: BoundaryAnalysis | undefined,
 ): void => {
-  if (!boundaryContainsName(boundary, from.name)) return;
+  if (!names.has(from.name)) return;
 
-  if (boundaryContainsName(boundary, relation.to.name)) {
+  if (names.has(relation.to.name)) {
     result.cohesion++;
     return;
   }
 
-  const isInParentSibling =
-    parentBoundary?.boundaries.some((b) =>
-      b.containers.some((c) => c.name === relation.to.name),
-    ) ?? false;
+  const isInParentSibling = childNames?.has(relation.to.name) ?? false;
 
   if (!parentBoundary || isInParentSibling) {
     result.coupling++;
@@ -92,6 +87,55 @@ const classifyRelation = (
   }
 };
 
+interface BoundaryLookups {
+  nameSet: Set<string>;
+  childNames: Set<string> | undefined;
+  parentBoundary: Boundary | undefined;
+}
+
+const buildBoundaryLookups = (
+  boundaries: Boundary[],
+): Map<string, BoundaryLookups> => {
+  const nameSets = new Map(
+    boundaries.map((b) => [b.name, new Set(b.containers.map((c) => c.name))]),
+  );
+
+  const parentMap = new Map<string, Boundary>();
+  for (const b of boundaries) {
+    for (const child of b.boundaries) parentMap.set(child.name, b);
+  }
+
+  const result = new Map<string, BoundaryLookups>();
+  for (const b of boundaries) {
+    const parentBoundary = parentMap.get(b.name);
+    let childNames: Set<string> | undefined;
+    if (parentBoundary) {
+      childNames = new Set<string>();
+      for (const sibling of parentBoundary.boundaries) {
+        for (const c of sibling.containers) childNames.add(c.name);
+      }
+    }
+    result.set(b.name, {
+      nameSet: nameSets.get(b.name)!,
+      childNames,
+      parentBoundary,
+    });
+  }
+  return result;
+};
+
+const isSyncApiCall = (
+  it: RelationWithSource,
+  externalType: string,
+  apiTechnologies: string[],
+): boolean => {
+  if (it.relation.tags?.includes("async")) return false;
+  if (it.relation.to.type === externalType) return true;
+  return apiTechnologies.some((t) =>
+    (it.relation.technology ?? "").toLowerCase().includes(t),
+  );
+};
+
 const analyzeModel = (
   model: ArchitectureModel,
   options?: AnalyzeOptions,
@@ -104,15 +148,11 @@ const analyzeModel = (
   const asyncApiCalls = relations.filter((it) =>
     it.relation.tags?.includes("async"),
   );
-  const syncApiCalls = relations.filter((it) => {
-    const isExternalApi = it.relation.to.type === externalType;
-    const isApiTechnology = apiTechnologies.some((apiTechn) =>
-      (it.relation.technology ?? "").toLowerCase().includes(apiTechn),
-    );
-    return (
-      !it.relation.tags?.includes("async") && (isExternalApi || isApiTechnology)
-    );
-  });
+  const syncApiCalls = relations.filter((it) =>
+    isSyncApiCall(it, externalType, apiTechnologies),
+  );
+
+  const lookups = buildBoundaryLookups(model.boundaries);
 
   const boundaryResults = new Map<string, BoundaryAnalysis>();
   for (const boundary of model.boundaries) {
@@ -126,10 +166,7 @@ const analyzeModel = (
   }
 
   for (const boundary of model.boundaries) {
-    const parentBoundary = model.boundaries.find((b) =>
-      b.boundaries.some((child) => child.name === boundary.name),
-    );
-
+    const { nameSet, childNames, parentBoundary } = lookups.get(boundary.name)!;
     const result = boundaryResults.get(boundary.name)!;
     const parentResult = parentBoundary
       ? boundaryResults.get(parentBoundary.name)
@@ -137,7 +174,8 @@ const analyzeModel = (
 
     for (const { from, relation } of relations) {
       classifyRelation(
-        boundary,
+        nameSet,
+        childNames,
         parentBoundary,
         from,
         relation,
@@ -160,17 +198,20 @@ const analyzeDatabases = (
   model: ArchitectureModel,
   dbType: string,
 ): DatabasesInfo => {
-  const dbContainers = model.allContainers.filter((it) => it.type === dbType);
-
-  const dbRelations = model.allContainers.flatMap((container) =>
-    container.relations.filter((r) =>
-      dbContainers.some((db) => db.name === r.to.name),
-    ),
+  const dbNames = new Set(
+    model.allContainers.filter((it) => it.type === dbType).map((it) => it.name),
   );
 
+  let consumes = 0;
+  for (const container of model.allContainers) {
+    for (const r of container.relations) {
+      if (dbNames.has(r.to.name)) consumes++;
+    }
+  }
+
   return {
-    count: dbContainers.length,
-    consumes: dbRelations.length,
+    count: dbNames.size,
+    consumes,
   };
 };
 

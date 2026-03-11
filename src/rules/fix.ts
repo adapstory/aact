@@ -20,23 +20,24 @@ export interface FixResult {
 }
 
 export const applyEdits = (source: string, edits: SourceEdit[]): string => {
-  let lines = source.split("\n");
+  const lines = source.split("\n");
 
   for (const edit of edits) {
-    const matches = lines.filter((line) => line.includes(edit.search));
+    const idx = lines.findIndex((line) => line.includes(edit.search));
 
-    if (matches.length === 0) {
+    if (idx === -1) {
       consola.warn(`fix: pattern not found in source — "${edit.search}"`);
       continue;
     }
 
-    if (matches.length > 1) {
+    const matchCount = lines.filter((line) =>
+      line.includes(edit.search),
+    ).length;
+    if (matchCount > 1) {
       consola.warn(
-        `fix: ambiguous pattern "${edit.search}" matches ${matches.length} lines, using first`,
+        `fix: ambiguous pattern "${edit.search}" matches ${matchCount} lines, using first`,
       );
     }
-
-    const idx = lines.findIndex((line) => line.includes(edit.search));
 
     switch (edit.type) {
       case "remove": {
@@ -48,11 +49,7 @@ export const applyEdits = (source: string, edits: SourceEdit[]): string => {
         break;
       }
       case "add": {
-        lines = [
-          ...lines.slice(0, idx + 1),
-          edit.content ?? "",
-          ...lines.slice(idx + 1),
-        ];
+        lines.splice(idx + 1, 0, edit.content ?? "");
         break;
       }
     }
