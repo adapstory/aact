@@ -42,9 +42,11 @@ const runKubernetes = async (
 
   await fs.mkdir(targetDir, { recursive: true });
 
-  for (const output of outputs) {
-    await fs.writeFile(path.join(targetDir, output.fileName), output.content);
-  }
+  await Promise.all(
+    outputs.map((output) =>
+      fs.writeFile(path.join(targetDir, output.fileName), output.content),
+    ),
+  );
 
   consola.success(`Generated ${outputs.length} file(s) in ${targetDir}`);
 };
