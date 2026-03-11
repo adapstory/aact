@@ -27,6 +27,7 @@ vi.mock("consola", () => ({
     error: vi.fn(),
     log: vi.fn(),
     info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -36,9 +37,11 @@ import { loadConfig } from "c12";
 import consola from "consola";
 
 import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
+import { loadStructurizrElements } from "../../src/loaders/structurizr/loadStructurizrElements";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockMapContainers = vi.mocked(mapContainersFromPlantumlElements);
+const mockLoadStructurizr = vi.mocked(loadStructurizrElements);
 const mockReadFile = vi.mocked(readFile);
 const mockWriteFile = vi.mocked(writeFile);
 
@@ -109,13 +112,46 @@ const violatingModel = (): ArchitectureModel => ({
   ],
 });
 
-const setupConfig = (overrides?: { rules?: Record<string, unknown> }): void => {
+const setupConfig = (overrides?: {
+  rules?: Record<string, unknown>;
+  source?: Record<string, unknown>;
+}): void => {
   mockLoadConfig.mockResolvedValue({
     config: {
       source: { type: "plantuml", path: "test.puml" },
       ...overrides,
     },
   } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+};
+
+const cyclicModel = (): ArchitectureModel => {
+  const svcA: Container = {
+    name: "svc_a",
+    label: "Service A",
+    type: "Container",
+    description: "",
+    relations: [],
+  };
+  const svcB: Container = {
+    name: "svc_b",
+    label: "Service B",
+    type: "Container",
+    description: "",
+    relations: [],
+  };
+  svcA.relations = [{ to: svcB }];
+  svcB.relations = [{ to: svcA }];
+  return {
+    boundaries: [
+      {
+        name: "project",
+        label: "Project",
+        containers: [svcA, svcB],
+        boundaries: [],
+      },
+    ],
+    allContainers: [svcA, svcB],
+  };
 };
 
 const runCheck = async (args: Record<string, unknown> = {}): Promise<void> => {
@@ -256,6 +292,84 @@ describe("check command", () => {
       expect(consola.success).toHaveBeenCalledWith(
         expect.stringContaining("fix(es)"),
       );
+    });
+
+    it("reports remaining violations count after fix", async () => {
+      setupConfig();
+      // re-check still returns violations
+      mockMapContainers.mockReturnValueOnce(violatingModel());
+      mockMapContainers.mockReturnValueOnce(violatingModel());
+
+      mockReadFile.mockResolvedValue(
+        [
+          'Container(my_service, "My Service")',
+          'System_Ext(ext_system, "External System")',
+          'Rel(my_service, ext_system, "")',
+        ].join("\n"),
+      );
+      mockWriteFile.mockResolvedValue();
+
+      await runCheck({ fix: true });
+
+      expect(consola.success).toHaveBeenCalledWith(
+        expect.stringContaining("violation(s) remain"),
+      );
+    });
+
+    it("throws when violations have no auto-fix available", async () => {
+      setupConfig({ rules: { acl: false } });
+      mockMapContainers.mockReturnValue(cyclicModel());
+
+      await expect(runCheck({ fix: true })).rejects.toThrow(
+        "Architecture rule violations found",
+      );
+      expect(consola.info).toHaveBeenCalledWith(
+        expect.stringContaining("No auto-fixes available"),
+      );
+    });
+
+    describe("structurizr source", () => {
+      it("warns and throws when writePath not configured", async () => {
+        setupConfig({
+          source: { type: "structurizr", path: "workspace.json" },
+        });
+        mockLoadStructurizr.mockResolvedValue(violatingModel());
+
+        await expect(runCheck({ fix: true })).rejects.toThrow(
+          "Architecture rule violations found",
+        );
+        expect(consola.warn).toHaveBeenCalledWith(
+          expect.stringContaining("writePath"),
+        );
+      });
+
+      it("writes to writePath and warns to regenerate", async () => {
+        setupConfig({
+          source: {
+            type: "structurizr",
+            path: "workspace.json",
+            writePath: "workspace.dsl",
+          },
+        });
+        mockLoadStructurizr.mockResolvedValue(violatingModel());
+
+        const dslSource = [
+          'my_service = container "My Service"',
+          'ext_system = softwareSystem "External System"',
+          'my_service -> ext_system ""',
+        ].join("\n");
+
+        mockReadFile.mockResolvedValue(dslSource);
+        mockWriteFile.mockResolvedValue();
+
+        await runCheck({ fix: true });
+
+        const writtenPath = mockWriteFile.mock.calls[0][0] as string;
+        expect(writtenPath).toContain("workspace.dsl");
+        expect(consola.warn).toHaveBeenCalledWith(
+          expect.stringContaining("regenerate"),
+        );
+      });
     });
   });
 });
