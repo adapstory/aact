@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { defineCommand } from "citty";
 import consola from "consola";
+import pc from "picocolors";
 
 import type { AactConfig } from "../../config";
 import { plantumlSyntax } from "../../loaders/plantuml/syntax";
@@ -13,6 +14,9 @@ import { applyEdits } from "../../rules/fix";
 import { ruleRegistry } from "../../rules/registry";
 
 const ruleMap = new Map(ruleRegistry.map((r) => [r.name, r]));
+
+// eslint-disable-next-line n/no-process-exit
+const exitWithViolations = (): never => process.exit(1);
 import type { Violation } from "../../rules/types";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
@@ -75,17 +79,41 @@ const generateFixes = (
 };
 
 const formatText = (results: RuleResult[]): void => {
-  for (const result of results) {
-    if (result.violations.length === 0) {
-      consola.success(`${result.name} — passed`);
-    } else {
-      consola.error(
-        `${result.name} — ${result.violations.length} violation(s)`,
-      );
-      for (const v of result.violations) {
-        consola.log(`  ${v.container}: ${v.message}`);
-      }
+  const failed = results.filter((r) => r.violations.length > 0);
+  const passed = results.filter((r) => r.violations.length === 0);
+
+  for (const result of failed) {
+    const count = result.violations.length;
+    const label = count === 1 ? "violation" : "violations";
+    const countLabel = pc.red(`${count} ${label}`);
+    console.log(`${pc.bold(pc.red(result.name))}  ${countLabel}`);
+
+    const maxLen = Math.max(
+      ...result.violations.map((v) => v.container.length),
+    );
+    for (const v of result.violations) {
+      console.log(`  ${pc.bold(v.container.padEnd(maxLen))}  ${v.message}`);
     }
+    console.log();
+  }
+
+  if (passed.length > 0) {
+    console.log(
+      `${pc.dim("Passed")}  ${passed.map((r) => pc.green(r.name)).join(pc.dim(" · "))}`,
+    );
+    console.log();
+  }
+
+  const total = failed.reduce((n, r) => n + r.violations.length, 0);
+  if (total === 0) {
+    console.log(pc.green("No violations found."));
+  } else {
+    const rulesLabel = failed.length === 1 ? "rule" : "rules";
+    console.log(
+      pc.red(
+        `Found ${total} ${total === 1 ? "violation" : "violations"} in ${failed.length} ${rulesLabel}`,
+      ) + pc.dim("  —  run with --fix to apply suggested fixes"),
+    );
   }
 };
 
@@ -108,27 +136,39 @@ const formatGithub = (results: RuleResult[]): void => {
   }
 };
 
+const prefixContent = (content: string, first: string, rest: string): string =>
+  content
+    .split("\n")
+    .map((line, i) => (i === 0 ? first + line : rest + line))
+    .join("\n");
+
 const formatFixes = (fixes: FixResult[]): void => {
   for (const fix of fixes) {
-    consola.info(`[${fix.rule}] ${fix.description}`);
+    const ruleTag = pc.bold(`[${fix.rule}]`);
+    console.log(`  ${ruleTag}  ${fix.description}`);
     for (const edit of fix.edits) {
       switch (edit.type) {
         case "remove": {
-          consola.log(`  - ${edit.search}`);
+          console.log(pc.red(prefixContent(edit.search, "    - ", "      ")));
           break;
         }
         case "replace": {
-          consola.log(`  - ${edit.search}`);
-          consola.log(`  + ${edit.content}`);
+          console.log(pc.red(prefixContent(edit.search, "    - ", "      ")));
+          console.log(
+            pc.green(prefixContent(edit.content, "    + ", "      ")),
+          );
           break;
         }
         case "add": {
-          consola.log(`  (after "${edit.search}")`);
-          consola.log(`  + ${edit.content}`);
+          console.log(pc.dim(`    (after "${edit.search}")`));
+          console.log(
+            pc.green(prefixContent(edit.content, "    + ", "      ")),
+          );
           break;
         }
       }
     }
+    console.log();
   }
 };
 
@@ -197,12 +237,12 @@ const handleFixMode = async (
   }
 
   const syntax = getSyntax(config);
-  if (!syntax) throw new Error("Architecture rule violations found");
+  if (!syntax) exitWithViolations();
 
   const fixes = generateFixes(model, results, config.rules, syntax);
   if (fixes.length === 0) {
     consola.info("No auto-fixes available for these violations");
-    throw new Error("Architecture rule violations found");
+    exitWithViolations();
   }
 
   formatFixes(fixes);
@@ -221,7 +261,8 @@ const suggestFixes = (
   if (!syntax) return;
   const fixes = generateFixes(model, results, config.rules, syntax);
   if (fixes.length > 0) {
-    consola.info("Suggested fixes (run with --fix to apply):");
+    console.log(pc.bold("Suggested fixes:"));
+    console.log();
     formatFixes(fixes);
   }
 };
@@ -262,7 +303,7 @@ export const check = defineCommand({
 
     if (hasViolations) {
       suggestFixes(model, results, config);
-      throw new Error("Architecture rule violations found");
+      exitWithViolations();
     }
   },
 });

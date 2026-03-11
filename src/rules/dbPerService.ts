@@ -29,7 +29,7 @@ export const checkDbPerService = (
     if (accessors.length > 1) {
       violations.push({
         container: db,
-        message: `accessed by multiple services: ${accessors.join(", ")}`,
+        message: `shared between ${accessors.join(", ")} — each database should have a single owner`,
       });
     }
   }

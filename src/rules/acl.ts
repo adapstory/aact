@@ -23,9 +23,11 @@ export const checkAcl = (
     );
 
     if (!container.tags?.includes(tag) && externalRelations.length > 0) {
+      const names = externalRelations.map((r) => r.to.name).join(", ");
+      const label = externalRelations.length === 1 ? "system" : "systems";
       violations.push({
         container: container.name,
-        message: `depends on external systems: ${externalRelations.map((r) => r.to.name).join(", ")}`,
+        message: `calls external ${label} ${names} without an ACL layer`,
       });
     }
   }

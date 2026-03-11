@@ -26,7 +26,7 @@ export const checkApiGateway = (
       if (!techs.some((t) => gatewayPattern.test(t))) {
         violations.push({
           container: container.name,
-          message: `external relation to ${rel.to.name} does not go through API Gateway`,
+          message: `calls external "${rel.to.name}" without going through an API Gateway`,
         });
       }
     }

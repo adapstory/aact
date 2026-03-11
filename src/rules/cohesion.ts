@@ -63,7 +63,7 @@ export const checkCohesion = (
     if (cohesion <= coupling) {
       violations.push({
         container: boundary.name,
-        message: `cohesion (${cohesion}) is not greater than coupling (${coupling})`,
+        message: `coupling (${coupling}) ≥ cohesion (${cohesion}) — more cross-boundary dependencies than internal connections`,
       });
     }
 
@@ -75,7 +75,7 @@ export const checkCohesion = (
       if (cohesion >= innerCohesionSum) {
         violations.push({
           container: boundary.name,
-          message: `cohesion (${cohesion}) is not less than sum of inner boundary cohesions (${innerCohesionSum})`,
+          message: `parent cohesion (${cohesion}) ≥ sum of inner cohesions (${innerCohesionSum}) — parent boundary should be less cohesive than its sub-boundaries`,
         });
       }
     }

@@ -80,6 +80,7 @@
     "c12": "4.0.0-beta.2",
     "citty": "^0.2.0",
     "consola": "^3.4.2",
+    "picocolors": "^1.1.1",
     "plantuml-parser": "0.4.0",
     "valibot": "^1.2.0",
     "yaml": "2.8.2"

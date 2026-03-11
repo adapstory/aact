@@ -54,7 +54,7 @@ export const checkStableDependencies = (
       if (iSource < iTarget) {
         violations.push({
           container: c.name,
-          message: `depends on less stable ${rel.to.name} (I=${iSource.toFixed(2)} → I=${iTarget.toFixed(2)})`,
+          message: `stable module (I=${iSource.toFixed(2)}) depends on less stable "${rel.to.name}" (I=${iTarget.toFixed(2)}) — dependencies should point toward stability`,
         });
       }
     }

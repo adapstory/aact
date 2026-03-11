@@ -11,11 +11,17 @@ export interface StructurizrModel {
   softwareSystems?: StructurizrSoftwareSystem[];
 }
 
+export interface StructurizrProperties {
+  "structurizr.dsl.identifier"?: string;
+  [key: string]: string | undefined;
+}
+
 export interface StructurizrPerson {
   id: string;
   name: string;
   description?: string;
   tags?: string;
+  properties?: StructurizrProperties;
   relationships?: StructurizrRelationship[];
 }
 
@@ -25,6 +31,7 @@ export interface StructurizrSoftwareSystem {
   description?: string;
   location?: "External" | "Internal" | "Unspecified";
   tags?: string;
+  properties?: StructurizrProperties;
   containers?: StructurizrContainer[];
   relationships?: StructurizrRelationship[];
 }
@@ -35,6 +42,7 @@ export interface StructurizrContainer {
   description?: string;
   technology?: string;
   tags?: string;
+  properties?: StructurizrProperties;
   components?: StructurizrComponent[];
   relationships?: StructurizrRelationship[];
 }
@@ -45,6 +53,7 @@ export interface StructurizrComponent {
   description?: string;
   technology?: string;
   tags?: string;
+  properties?: StructurizrProperties;
   relationships?: StructurizrRelationship[];
 }
 

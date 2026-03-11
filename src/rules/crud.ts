@@ -21,7 +21,7 @@ export const checkCrud = (
     if (!isRepo && dbRelations.length > 0) {
       violations.push({
         container: container.name,
-        message: `accesses database without repo/relay tag: ${dbRelations.map((r) => r.to.name).join(", ")}`,
+        message: `directly accesses database ${dbRelations.map((r) => r.to.name).join(", ")} — add a repo or relay`,
       });
     }
 
@@ -34,7 +34,7 @@ export const checkCrud = (
         message: `repo has non-database dependencies: ${container.relations
           .filter((r) => r.to.type !== dbType)
           .map((r) => r.to.name)
-          .join(", ")}`,
+          .join(", ")} — repos should only access databases`,
       });
     }
   }

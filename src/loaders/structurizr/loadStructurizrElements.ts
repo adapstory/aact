@@ -18,10 +18,14 @@ import {
   STRUCTURIZR_TAG_ASYNC,
 } from "./dslTypes";
 import {
+  StructurizrProperties,
   StructurizrRelationship,
   StructurizrSoftwareSystem,
   StructurizrWorkspace,
 } from "./types";
+
+const dslId = (id: string, properties?: StructurizrProperties): string =>
+  properties?.["structurizr.dsl.identifier"] ?? id;
 
 const DATABASE_TECHNOLOGIES = [
   "postgresql",
@@ -103,7 +107,7 @@ const processExternalSystem = (
   registry: ElementRegistry,
 ): void => {
   const container: Container = {
-    name: system.id,
+    name: dslId(system.id, system.properties),
     label: system.name,
     type: EXTERNAL_SYSTEM_TYPE,
     tags: system.tags
@@ -125,7 +129,7 @@ const processInternalSystem = (
 
   for (const cont of system.containers ?? []) {
     const container: Container = {
-      name: cont.id,
+      name: dslId(cont.id, cont.properties),
       label: cont.name,
       type: isDatabase(cont.technology, cont.name)
         ? CONTAINER_DB_TYPE
@@ -140,7 +144,7 @@ const processInternalSystem = (
   }
 
   registry.boundaries.push({
-    name: system.id,
+    name: dslId(system.id, system.properties),
     label: system.name,
     type: BOUNDARY_TYPE,
     boundaries: [],
@@ -199,7 +203,7 @@ export const mapContainersFromStructurizr = (
 
   for (const person of workspace.model.people ?? []) {
     const container: Container = {
-      name: person.id,
+      name: dslId(person.id, person.properties),
       label: person.name,
       type: PERSON_TYPE,
       tags: person.tags
