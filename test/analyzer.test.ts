@@ -80,4 +80,79 @@ describe("analyzeArchitecture", () => {
     expect(b.name).toBe("project");
     expect(b.cohesion).toBeGreaterThan(0);
   });
+
+  describe("nested boundaries", () => {
+    // parent → [domainA (svc1→svc2), domainB (svc3)]
+    // svc1→svc2: cohesion for domainA, cohesion for parent
+    // svc1→svc3: coupling for domainA (sibling), cohesion for parent
+    const svc2: Container = {
+      name: "svc2",
+      label: "Svc2",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const svc3: Container = {
+      name: "svc3",
+      label: "Svc3",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const svc1: Container = {
+      name: "svc1",
+      label: "Svc1",
+      type: "Container",
+      description: "",
+      relations: [{ to: svc2 }, { to: svc3 }],
+    };
+
+    const domainA = {
+      name: "domainA",
+      label: "Domain A",
+      containers: [svc1, svc2],
+      boundaries: [],
+    };
+    const domainB = {
+      name: "domainB",
+      label: "Domain B",
+      containers: [svc3],
+      boundaries: [],
+    };
+    const parent = {
+      name: "parent",
+      label: "Parent",
+      containers: [],
+      boundaries: [domainA, domainB],
+    };
+
+    const nestedModel: ArchitectureModel = {
+      boundaries: [parent, domainA, domainB],
+      allContainers: [svc1, svc2, svc3],
+    };
+
+    it("counts cohesion within sub-boundary", () => {
+      const { report } = analyzeArchitecture(nestedModel);
+      const a = report.boundaries.find((b) => b.name === "domainA")!;
+      // svc1→svc2 is internal to domainA
+      expect(a.cohesion).toBe(1);
+    });
+
+    it("counts coupling to sibling sub-boundary", () => {
+      const { report } = analyzeArchitecture(nestedModel);
+      const a = report.boundaries.find((b) => b.name === "domainA")!;
+      // svc1→svc3 crosses to sibling domainB
+      expect(a.coupling).toBe(1);
+      expect(a.couplingRelations).toEqual([{ from: "svc1", to: "svc3" }]);
+    });
+
+    it("counts parent cohesion for cross-sibling relations", () => {
+      const { report } = analyzeArchitecture(nestedModel);
+      const p = report.boundaries.find((b) => b.name === "parent")!;
+      // svc1→svc3 crosses sibling boundary → parent.cohesion++
+      // svc1→svc2 is internal to domainA → only domainA.cohesion, not parent's
+      expect(p.cohesion).toBe(1);
+      expect(p.coupling).toBe(0);
+    });
+  });
 });
