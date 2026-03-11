@@ -136,6 +136,94 @@ const detectFormat = (format?: string): string => {
   return "text";
 };
 
+const formatResults = (results: RuleResult[], format: string): void => {
+  switch (format) {
+    case "json": {
+      formatJson(results);
+      break;
+    }
+    case "github": {
+      formatGithub(results);
+      break;
+    }
+    default: {
+      formatText(results);
+    }
+  }
+};
+
+const writeFixes = async (
+  config: AactConfig,
+  fixes: FixResult[],
+): Promise<void> => {
+  const writePath = path.resolve(config.source.writePath ?? config.source.path);
+  let source = await readFile(writePath, "utf8");
+  for (const fix of fixes) {
+    source = applyEdits(source, fix.edits);
+  }
+  await writeFile(writePath, source, "utf8");
+
+  const isDslFix =
+    config.source.writePath && config.source.writePath !== config.source.path;
+
+  if (isDslFix) {
+    consola.success(`Applied ${fixes.length} fix(es), wrote ${writePath}`);
+    consola.warn(
+      "DSL updated — regenerate workspace.json from workspace.dsl before re-checking",
+    );
+  } else {
+    const reModel = await loadModel(config);
+    const reResults = runRules(reModel, config.rules);
+    const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
+    consola.success(
+      `Applied ${fixes.length} fix(es), wrote ${writePath}` +
+        (remaining > 0 ? ` (${remaining} violation(s) remain)` : ""),
+    );
+  }
+};
+
+const handleFixMode = async (
+  model: ArchitectureModel,
+  results: RuleResult[],
+  config: AactConfig,
+  dryRun: boolean,
+): Promise<void> => {
+  const hasViolations = results.some((r) => r.violations.length > 0);
+  if (!hasViolations) {
+    consola.success("No violations to fix");
+    return;
+  }
+
+  const syntax = getSyntax(config);
+  if (!syntax) throw new Error("Architecture rule violations found");
+
+  const fixes = generateFixes(model, results, config.rules, syntax);
+  if (fixes.length === 0) {
+    consola.info("No auto-fixes available for these violations");
+    throw new Error("Architecture rule violations found");
+  }
+
+  formatFixes(fixes);
+
+  if (!dryRun) {
+    await writeFixes(config, fixes);
+  }
+};
+
+const suggestFixes = (
+  model: ArchitectureModel,
+  results: RuleResult[],
+  config: AactConfig,
+): void => {
+  const syntax = getSyntax(config);
+  if (!syntax) return;
+  const fixes = generateFixes(model, results, config.rules, syntax);
+  if (fixes.length > 0) {
+    consola.info("Suggested fixes (run with --fix to apply):");
+    formatFixes(fixes);
+  }
+};
+
 export const check = defineCommand({
   meta: { description: "Check architecture rules" },
   args: {
@@ -156,96 +244,22 @@ export const check = defineCommand({
       description: "Show fixes without applying them",
     },
   },
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   async run({ args }) {
     const config = await loadAndValidateConfig(args.config);
     const model = await loadModel(config);
     const results = runRules(model, config.rules);
-    const format = detectFormat(args.format);
 
-    switch (format) {
-      case "json": {
-        formatJson(results);
-        break;
-      }
-      case "github": {
-        formatGithub(results);
-        break;
-      }
-      default: {
-        formatText(results);
-      }
-    }
+    formatResults(results, detectFormat(args.format));
 
     const hasViolations = results.some((r) => r.violations.length > 0);
 
     if (args.fix || args["dry-run"]) {
-      if (!hasViolations) {
-        consola.success("No violations to fix");
-        return;
-      }
-
-      const syntax = getSyntax(config);
-      if (!syntax) {
-        throw new Error("Architecture rule violations found");
-      }
-
-      const fixes = generateFixes(model, results, config.rules, syntax);
-      if (fixes.length === 0) {
-        consola.info("No auto-fixes available for these violations");
-        throw new Error("Architecture rule violations found");
-      }
-
-      formatFixes(fixes);
-
-      if (args["dry-run"]) {
-        return;
-      }
-
-      const writePath = path.resolve(
-        config.source.writePath ?? config.source.path,
-      );
-      let source = await readFile(writePath, "utf8");
-
-      for (const fix of fixes) {
-        source = applyEdits(source, fix.edits);
-      }
-
-      await writeFile(writePath, source, "utf8");
-
-      const isDslFix =
-        config.source.writePath &&
-        config.source.writePath !== config.source.path;
-
-      if (isDslFix) {
-        consola.success(`Applied ${fixes.length} fix(es), wrote ${writePath}`);
-        consola.warn(
-          "DSL updated — regenerate workspace.json from workspace.dsl before re-checking",
-        );
-      } else {
-        const reModel = await loadModel(config);
-        const reResults = runRules(reModel, config.rules);
-        const remaining = reResults.reduce(
-          (n, r) => n + r.violations.length,
-          0,
-        );
-        consola.success(
-          `Applied ${fixes.length} fix(es), wrote ${writePath}` +
-            (remaining > 0 ? ` (${remaining} violation(s) remain)` : ""),
-        );
-      }
+      await handleFixMode(model, results, config, args["dry-run"] ?? false);
       return;
     }
 
     if (hasViolations) {
-      const syntax = getSyntax(config);
-      if (syntax) {
-        const fixes = generateFixes(model, results, config.rules, syntax);
-        if (fixes.length > 0) {
-          consola.info("Suggested fixes (run with --fix to apply):");
-          formatFixes(fixes);
-        }
-      }
+      suggestFixes(model, results, config);
       throw new Error("Architecture rule violations found");
     }
   },

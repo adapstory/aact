@@ -7,14 +7,15 @@ import consola from "consola";
 import type { AactConfig } from "../../config";
 import { generateKubernetes } from "../../generators/kubernetes";
 import { generatePlantumlFromModel } from "../../generators/plantumlFromModel";
+import type { ArchitectureModel } from "../../model";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
 const runPlantuml = async (
+  model: ArchitectureModel,
   config: AactConfig,
   outputPath?: string,
 ): Promise<void> => {
-  const model = await loadModel(config);
   const puml = generatePlantumlFromModel(model, {
     boundaryLabel: config.generate?.boundaryLabel,
   });
@@ -28,10 +29,10 @@ const runPlantuml = async (
 };
 
 const runKubernetes = async (
+  model: ArchitectureModel,
   config: AactConfig,
   outputDir?: string,
 ): Promise<void> => {
-  const model = await loadModel(config);
   const outputs = generateKubernetes(model);
 
   const targetDir =
@@ -42,8 +43,7 @@ const runKubernetes = async (
   await fs.mkdir(targetDir, { recursive: true });
 
   for (const output of outputs) {
-    const filePath = path.join(targetDir, output.fileName);
-    await fs.writeFile(filePath, output.content);
+    await fs.writeFile(path.join(targetDir, output.fileName), output.content);
   }
 
   consola.success(`Generated ${outputs.length} file(s) in ${targetDir}`);
@@ -67,15 +67,16 @@ export const generate = defineCommand({
   },
   async run({ args }) {
     const config = await loadAndValidateConfig(args.config);
+    const model = await loadModel(config);
     const format = args.format ?? "plantuml";
 
     switch (format) {
       case "plantuml": {
-        await runPlantuml(config, args.output);
+        await runPlantuml(model, config, args.output);
         break;
       }
       case "kubernetes": {
-        await runKubernetes(config, args.output);
+        await runKubernetes(model, config, args.output);
         break;
       }
       default: {
