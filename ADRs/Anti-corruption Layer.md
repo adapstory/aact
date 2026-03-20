@@ -30,5 +30,5 @@ Container(goods_adapter, “Goods ACL", "NestJS", $tags="adapter")
 
 ### Примеры тестов
 
-- [unit-тест правила ACL](test/rules/acl.test.ts)
-- [пример на banking-plantuml](examples/banking-plantuml/rules.test.ts) — `ACL — only acl-tagged containers depend on externals`
+- [unit-тест правила ACL](../test/rules/acl.test.ts)
+- [пример на banking-plantuml](../examples/banking-plantuml/rules.test.ts) — `ACL — only acl-tagged containers depend on externals`

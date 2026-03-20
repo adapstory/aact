@@ -48,4 +48,4 @@
 
 ### Примеры тестов
 
-- [unit-тест правила Common Reuse](test/rules/commonReuse.test.ts)
+- [unit-тест правила Common Reuse](../test/rules/commonReuse.test.ts)
