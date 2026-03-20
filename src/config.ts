@@ -36,6 +36,7 @@ export const AactConfigSchema = v.strictObject({
       stableDependencies: ruleOption({
         externalType: v.optional(v.string()),
       }),
+      commonReuse: v.optional(v.boolean()),
     }),
   ),
   generate: v.optional(

@@ -6,6 +6,7 @@ import type { ApiGatewayOptions } from "./apiGateway";
 import { checkApiGateway } from "./apiGateway";
 import type { CohesionOptions } from "./cohesion";
 import { checkCohesion } from "./cohesion";
+import { checkCommonReuse } from "./commonReuse";
 import type { CrudOptions } from "./crud";
 import { checkCrud } from "./crud";
 import type { DbPerServiceOptions } from "./dbPerService";
@@ -70,5 +71,9 @@ export const ruleRegistry: readonly RuleDefinition[] = [
   defineRule<StableDependenciesOptions>({
     name: "stableDependencies",
     check: (m, o) => checkStableDependencies(m.allContainers, o),
+  }),
+  defineRule({
+    name: "commonReuse",
+    check: (m) => checkCommonReuse(m),
   }),
 ];

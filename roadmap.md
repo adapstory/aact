@@ -30,7 +30,7 @@
 ✅ API Gateway<br/>
 ✅ Stable Dependencies<br/>
 ✅ Cohesion > Coupling<br/>
-⌛ Common Reuse Principle<br/>
+✅ Common Reuse Principle<br/>
 ⌛ Оркестратор распределённых транзакций
 
 ### Автогенерация

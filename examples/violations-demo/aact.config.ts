@@ -13,5 +13,6 @@ export default defineConfig({
     crud: true,
     dbPerService: true,
     stableDependencies: true,
+    commonReuse: true,
   },
 });
