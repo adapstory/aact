@@ -203,3 +203,4 @@ package-lock.json
 **/bin/*
 **/obj/*
 **/nppBackup/*
+.claude/
