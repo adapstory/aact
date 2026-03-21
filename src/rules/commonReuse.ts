@@ -1,16 +1,25 @@
 import type { ArchitectureModel, Boundary } from "../model";
 import type { Violation } from "./types";
 
-export const checkCommonReuse = (model: ArchitectureModel): Violation[] => {
-  // Container → boundary lookup
-  const boundaryOf = new Map<string, Boundary>();
+const buildBoundaryLookup = (
+  model: ArchitectureModel,
+): Map<string, Boundary> => {
+  const map = new Map<string, Boundary>();
   for (const boundary of model.boundaries) {
     for (const c of boundary.containers) {
-      boundaryOf.set(c.name, boundary);
+      map.set(c.name, boundary);
     }
   }
+  return map;
+};
 
-  // Single pass: collect public containers and per-pair usage
+const collectPublicAndUsage = (
+  model: ArchitectureModel,
+  boundaryOf: Map<string, Boundary>,
+): {
+  publicOf: Map<Boundary, Set<string>>;
+  used: Map<string, Set<string>>;
+} => {
   const publicOf = new Map<Boundary, Set<string>>();
   const used = new Map<string, Set<string>>();
 
@@ -39,7 +48,12 @@ export const checkCommonReuse = (model: ArchitectureModel): Violation[] => {
     }
   }
 
-  // Report: consumer uses some but not all public containers of provider
+  return { publicOf, used };
+};
+
+export const checkCommonReuse = (model: ArchitectureModel): Violation[] => {
+  const boundaryOf = buildBoundaryLookup(model);
+  const { publicOf, used } = collectPublicAndUsage(model, boundaryOf);
   const violations: Violation[] = [];
 
   for (const [provider, pubNames] of publicOf) {
