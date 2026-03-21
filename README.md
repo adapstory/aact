@@ -2,6 +2,7 @@
 
 # Architecture As Code Tools (aact)
 
+[![npm version](https://img.shields.io/npm/v/aact)](https://www.npmjs.com/package/aact)
 [![test workflow](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml)
 
 CLI и библиотека для валидации, анализа и генерации архитектуры микросервисных систем, описанной "as Code" (PlantUML C4, Structurizr).
