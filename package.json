@@ -11,13 +11,20 @@
     "c4-model",
     "architecture-testing",
     "microservices",
-    "validation"
+    "validation",
+    "linter",
+    "cli",
+    "auto-fix",
+    "kubernetes",
+    "coupling",
+    "cohesion"
   ],
   "bin": {
     "aact": "dist/cli/index.mjs"
   },
   "exports": {
     ".": {
+      "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     }
   },
@@ -30,6 +37,7 @@
     "url": "git+https://github.com/Byndyusoft/aact.git"
   },
   "packageManager": "pnpm@9.15.4",
+  "sideEffects": false,
   "files": [
     "dist"
   ],
