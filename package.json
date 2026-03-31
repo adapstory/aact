@@ -1,6 +1,6 @@
 {
   "name": "aact",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "type": "module",
   "description": "Architecture analysis and compliance tool",
   "keywords": [
@@ -25,7 +25,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
     }
   },
   "homepage": "https://github.com/Byndyusoft/aact#readme",
