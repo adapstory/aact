@@ -3,7 +3,7 @@
 # Architecture As Code Tools (aact)
 
 [![npm version](https://img.shields.io/npm/v/aact)](https://www.npmjs.com/package/aact)
-[![test workflow](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/razonrus/ArchAsCode_Tests/actions/workflows/test.yaml)
+[![test workflow](https://github.com/Byndyusoft/aact/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/Byndyusoft/aact/actions/workflows/test.yaml)
 
 CLI и библиотека для валидации, анализа и генерации архитектуры микросервисных систем, описанной "as Code" (PlantUML C4, Structurizr).
 
@@ -28,6 +28,12 @@ npx aact init
 # Проверка правил архитектуры
 npx aact check
 
+# Авто-починка нарушений в исходнике (PlantUML / Structurizr DSL)
+npx aact check --fix
+
+# Предпросмотр правок без записи на диск
+npx aact check --dry-run
+
 # Анализ метрик
 npx aact analyze
 
@@ -35,6 +41,8 @@ npx aact analyze
 npx aact generate --format plantuml
 npx aact generate --format kubernetes
 ```
+
+> Для `structurizr` укажите `source.writePath` в `aact.config.ts` — путь к `workspace.dsl`, в который применяются правки.
 
 ### Конфигурация
 
