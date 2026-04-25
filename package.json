@@ -47,9 +47,8 @@
   "scripts": {
     "build": "unbuild",
     "test": "vitest run",
-    "lint": "npm run lint:eslint && npm run lint:markdown && npm run lint:prettier",
+    "lint": "npm run lint:eslint && npm run lint:prettier",
     "lint:eslint": "eslint .",
-    "lint:markdown": "markdownlint --ignore-path ./.markdownlintignore \"./**/*.md\"",
     "lint:prettier": "prettier --ignore-path ./.gitignore --check \"./**/*.{ts,js,json,yaml,yml,md}\"",
     "prepare": "husky"
   },
@@ -74,7 +73,6 @@
     "globals": "^17.3.0",
     "husky": "9.1.7",
     "lint-staged": "16.2.7",
-    "markdownlint-cli": "0.31.1",
     "prettier": "3.8.1",
     "prettier-plugin-packagejson": "3.0.0",
     "typescript": "5.9.3",
