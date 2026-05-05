@@ -58,6 +58,11 @@ const getSyntax = (config: AactConfig): SourceSyntax | null => {
   return null;
 };
 
+// Fixes from all enabled rules are collected in registry order and applied
+// to the source as a single batch (see `writeFixes` below). The model is
+// not re-checked between rules, so two rules whose edits land on
+// overlapping lines may produce inconsistent output — `applyEdits` warns
+// on ambiguous patterns but does not abort. No priority/conflict model.
 const generateFixes = (
   model: ArchitectureModel,
   results: RuleResult[],

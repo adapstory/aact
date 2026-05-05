@@ -67,6 +67,11 @@ const isDatabase = (technology?: string, name?: string): boolean => {
   return false;
 };
 
+// Heuristic: infer `repo` / `acl` tags from container name substrings so
+// rules that key off these tags work without explicit tagging in the
+// source workspace. Caveat: a container named for unrelated reasons (e.g.
+// `crud_processor`) will receive a phantom `repo` tag. To opt out, tag
+// the container explicitly in Structurizr — explicit tags are preserved.
 const enrichTags = (existingTags?: string, name?: string): string[] => {
   const tags: string[] =
     existingTags

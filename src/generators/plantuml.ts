@@ -9,6 +9,9 @@ interface RelRecord {
   to: string;
 }
 
+// Generates PlantUML from Kubernetes `DeployConfig[]` directly. Distinct
+// entry point from `generatePlantumlFromModel`, which works over an
+// `ArchitectureModel` and is what the `aact generate` CLI uses.
 /* eslint-disable sonarjs/cognitive-complexity */
 export const generatePlantuml = (
   configs: DeployConfig[],

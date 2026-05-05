@@ -1,5 +1,11 @@
 import consola from "consola";
 
+// Text-based fix contract: edits match a single line by substring,
+// indentation is inherited from the matched line, ambiguous matches are
+// warned but not blocked (first hit wins). Multi-line block edits — e.g.
+// removing a Structurizr container with nested tags/properties — are not
+// supported and need a different primitive (AST-based serializer).
+
 export interface SourceSyntax {
   containerPattern(name: string): string;
   containerDecl(name: string, label: string, tags?: string): string;

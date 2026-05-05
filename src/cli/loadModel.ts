@@ -6,6 +6,10 @@ import { mapContainersFromPlantumlElements } from "../loaders/plantuml/mapContai
 import { loadStructurizrElements } from "../loaders/structurizr/loadStructurizrElements";
 import type { ArchitectureModel } from "../model";
 
+// Loader extension point: adding a new source format requires a case here
+// plus a discriminant in `AactConfig["source"]["type"]`. Asymmetric to
+// `ruleRegistry`, which is data-driven — consider promoting loaders to a
+// registry if a third format lands.
 export const loadModel = async (
   config: AactConfig,
 ): Promise<ArchitectureModel> => {
