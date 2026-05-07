@@ -5,7 +5,6 @@ import {
   CONTAINER_DB_TYPE,
   CONTAINER_TYPE,
   EXTERNAL_SYSTEM_TYPE,
-  PERSON_TYPE,
 } from "../model";
 import type { Container } from "../model/container";
 import type { Relation } from "../model/relation";
@@ -72,11 +71,12 @@ export const generateKubernetes = (
 
   const resolvedOptions = { defaultPort, dbConnectionTemplate };
 
+  // Whitelist: only Container-typed elements become deployment YAML.
+  // Anything else from the C4 model (System, Component, Person, DB,
+  // ExternalSystem) is not a deployable unit. Treat untyped elements as
+  // Container so loaders that omit the field keep working.
   const containers = model.allContainers.filter(
-    (c: Container) =>
-      c.type !== CONTAINER_DB_TYPE &&
-      c.type !== EXTERNAL_SYSTEM_TYPE &&
-      c.type !== PERSON_TYPE,
+    (c: Container) => (c.type ?? CONTAINER_TYPE) === CONTAINER_TYPE,
   );
 
   return containers.map((container: Container) => {

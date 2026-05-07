@@ -140,4 +140,52 @@ describe("checkCohesion", () => {
     const violations = checkCohesion(model);
     expect(violations.some((v) => v.container === "parent")).toBe(true);
   });
+
+  it("propagates internalType through nested boundary cohesion calculation", () => {
+    // Two microservices using a custom type. m1 in inner boundary calls m2,
+    // which lives in outer's own containers (cross-boundary same-parent).
+    // Outer cohesion should include m1→m2 via inner-boundary coupling. With
+    // the bug (recursive call ignored options), inner-boundary coupling is
+    // computed against default internalType "Container" and counts 0,
+    // collapsing outer cohesion to 0 and triggering an extra spurious
+    // `coupling ≥ cohesion` violation.
+    const m2: Container = {
+      name: "m2",
+      label: "M2",
+      type: "Microservice",
+      description: "",
+      relations: [],
+    };
+    const m1: Container = {
+      name: "m1",
+      label: "M1",
+      type: "Microservice",
+      description: "",
+      relations: [{ to: m2 }],
+    };
+    const model: ArchitectureModel = {
+      allContainers: [m1, m2],
+      boundaries: [
+        {
+          name: "outer",
+          label: "Outer",
+          containers: [m2],
+          boundaries: [
+            {
+              name: "inner",
+              label: "Inner",
+              containers: [m1],
+              boundaries: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const violations = checkCohesion(model, { internalType: "Microservice" });
+    // With fix: only the parent-vs-inner-cohesion check fires (1 violation).
+    // Without fix: also fires `coupling ≥ cohesion` because outer cohesion = 0.
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).not.toContain("coupling (");
+  });
 });

@@ -1,15 +1,19 @@
 import {
+  PLANTUML_COMPONENT,
   PLANTUML_CONTAINER,
   PLANTUML_CONTAINER_DB,
   PLANTUML_PERSON,
+  PLANTUML_SYSTEM,
   PLANTUML_SYSTEM_EXT,
 } from "../loaders/plantuml/c4Types";
 import type { ArchitectureModel } from "../model";
 import {
+  COMPONENT_TYPE,
   CONTAINER_DB_TYPE,
   CONTAINER_TYPE,
   EXTERNAL_SYSTEM_TYPE,
   PERSON_TYPE,
+  SYSTEM_TYPE,
 } from "../model";
 import type { Boundary } from "../model/boundary";
 import type { Container } from "../model/container";
@@ -23,6 +27,8 @@ const containerTypeMap: Record<string, string> = {
   [CONTAINER_DB_TYPE]: PLANTUML_CONTAINER_DB,
   [EXTERNAL_SYSTEM_TYPE]: PLANTUML_SYSTEM_EXT,
   [PERSON_TYPE]: PLANTUML_PERSON,
+  [SYSTEM_TYPE]: PLANTUML_SYSTEM,
+  [COMPONENT_TYPE]: PLANTUML_COMPONENT,
 };
 
 const renderContainer = (container: Container): string => {

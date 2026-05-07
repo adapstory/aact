@@ -310,6 +310,21 @@ describe("generateKubernetes", () => {
     expect(result[0].fileName).toBe("orders.yml");
   });
 
+  it("excludes System and Component elements (whitelist for Container only)", () => {
+    const system = makeContainer({ name: "billing_system", type: "System" });
+    const component = makeContainer({
+      name: "auth_module",
+      type: "Component",
+    });
+    const orders = makeContainer({ name: "orders" });
+    const model = makeModel([system, component, orders]);
+
+    const result = generateKubernetes(model);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].fileName).toBe("orders.yml");
+  });
+
   it("round-trip: generateKubernetes output can be parsed back", () => {
     const db = makeContainer({ name: "orders_db", type: "ContainerDb" });
     const payments = makeContainer({ name: "payments" });

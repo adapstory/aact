@@ -11,22 +11,26 @@ export interface CohesionOptions {
   internalType?: string;
 }
 
-const getBoundaryCohesion = (boundary: Boundary): number => {
+const getBoundaryCohesion = (
+  boundary: Boundary,
+  externalType: string,
+  internalType: string,
+): number => {
   const names = new Set(boundary.containers.map((c) => c.name));
   let result = 0;
   for (const container of boundary.containers) {
     result += container.relations.filter((r) => names.has(r.to.name)).length;
   }
   for (const innerBoundary of boundary.boundaries) {
-    result += getBoundaryCoupling(innerBoundary);
+    result += getBoundaryCoupling(innerBoundary, externalType, internalType);
   }
   return result;
 };
 
 const getBoundaryCoupling = (
   boundary: Boundary,
-  externalType = EXTERNAL_SYSTEM_TYPE,
-  internalType = CONTAINER_TYPE,
+  externalType: string,
+  internalType: string,
 ): number => {
   const names = new Set(boundary.containers.map((c) => c.name));
   let result = 0;
@@ -57,7 +61,7 @@ export const checkCohesion = (
   const violations: Violation[] = [];
 
   for (const boundary of model.boundaries) {
-    const cohesion = getBoundaryCohesion(boundary);
+    const cohesion = getBoundaryCohesion(boundary, externalType, internalType);
     const coupling = getBoundaryCoupling(boundary, externalType, internalType);
 
     if (cohesion <= coupling) {
@@ -69,7 +73,8 @@ export const checkCohesion = (
 
     if (boundary.boundaries.length > 0) {
       const innerCohesionSum = boundary.boundaries.reduce(
-        (sum, current) => sum + getBoundaryCohesion(current),
+        (sum, current) =>
+          sum + getBoundaryCohesion(current, externalType, internalType),
         0,
       );
       if (cohesion >= innerCohesionSum) {

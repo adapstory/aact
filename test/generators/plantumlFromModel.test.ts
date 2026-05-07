@@ -67,6 +67,40 @@ describe("generatePlantumlFromModel", () => {
     expect(result).toContain('System_Ext(ext_api, "External API"');
   });
 
+  it("renders System type as System, not falling back to Container", () => {
+    const system = makeContainer({
+      name: "core",
+      label: "Core",
+      type: "System",
+    });
+    const model: ArchitectureModel = {
+      boundaries: [],
+      allContainers: [system],
+    };
+
+    const result = generatePlantumlFromModel(model);
+
+    expect(result).toContain('System(core, "Core"');
+    expect(result).not.toMatch(/Container\(core,/);
+  });
+
+  it("renders Component type as Component, not falling back to Container", () => {
+    const component = makeContainer({
+      name: "auth_module",
+      label: "Auth Module",
+      type: "Component",
+    });
+    const model: ArchitectureModel = {
+      boundaries: [],
+      allContainers: [component],
+    };
+
+    const result = generatePlantumlFromModel(model);
+
+    expect(result).toContain('Component(auth_module, "Auth Module"');
+    expect(result).not.toMatch(/Container\(auth_module,/);
+  });
+
   it("renders Person type", () => {
     const person = makeContainer({
       name: "user",
