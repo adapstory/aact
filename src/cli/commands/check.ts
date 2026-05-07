@@ -250,7 +250,12 @@ const handleFixMode = async (
     exitWithViolations();
   }
 
+  console.log(
+    pc.bold(dryRun ? "Suggested fixes (dry run):" : "Applying fixes:"),
+  );
+  console.log();
   formatFixes(fixes);
+  console.log();
 
   if (!dryRun) {
     await writeFixes(config, fixes);
