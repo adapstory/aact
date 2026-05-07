@@ -299,6 +299,17 @@ describe("generateKubernetes", () => {
     expect(parsed.environment).toBeUndefined();
   });
 
+  it("excludes Person elements from generated YAML", () => {
+    const person = makeContainer({ name: "customer", type: "Person" });
+    const orders = makeContainer({ name: "orders" });
+    const model = makeModel([person, orders]);
+
+    const result = generateKubernetes(model);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].fileName).toBe("orders.yml");
+  });
+
   it("round-trip: generateKubernetes output can be parsed back", () => {
     const db = makeContainer({ name: "orders_db", type: "ContainerDb" });
     const payments = makeContainer({ name: "payments" });

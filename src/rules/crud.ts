@@ -25,10 +25,7 @@ export const checkCrud = (
       });
     }
 
-    if (
-      container.tags?.includes("repo") &&
-      container.relations.some((r) => r.to.type !== dbType)
-    ) {
+    if (isRepo && container.relations.some((r) => r.to.type !== dbType)) {
       violations.push({
         container: container.name,
         message: `repo has non-database dependencies: ${container.relations

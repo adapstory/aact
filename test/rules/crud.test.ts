@@ -86,6 +86,26 @@ describe("checkCrud", () => {
     expect(checkCrud(containers)).toHaveLength(0);
   });
 
+  it("respects custom repoTags when checking repo outbound dependencies", () => {
+    const containers: Container[] = [
+      {
+        name: "orders_relay",
+        label: "Orders Relay",
+        type: "Container",
+        tags: ["relay"],
+        description: "",
+        relations: [{ to: db }, { to: otherService }],
+      },
+      db,
+      otherService,
+    ];
+
+    const violations = checkCrud(containers, { repoTags: ["relay"] });
+    expect(violations).toHaveLength(1);
+    expect(violations[0].container).toBe("orders_relay");
+    expect(violations[0].message).toContain("non-database dependencies");
+  });
+
   it("returns no violations when container has no db relations", () => {
     const containers: Container[] = [
       {
