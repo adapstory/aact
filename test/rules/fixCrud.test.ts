@@ -295,6 +295,37 @@ describe("fixCrud — non-repo accesses DB", () => {
     expect(msg).toContain("fix manually");
   });
 
+  it('falls back to "repo" when ownerTags is an empty array (covers ownerTags[0] ?? branch)', () => {
+    // Stryker mutated `ownerTags[0] ?? "repo"` such that an explicitly
+    // empty repoTags option would emit the literal "Stryker was here!"
+    // or "" as the tag. Pin: with repoTags=[] the new repo is tagged
+    // "repo" (the documented fallback).
+    const db = makeDb();
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax, {
+      repoTags: [],
+    });
+    expect(results[0].edits[0].content).toContain('$tags="repo"');
+  });
+
+  it('uses the default repoTags=["repo","relay"] when no options passed', () => {
+    // Stryker mutated `options?.repoTags ?? ["repo", "relay"]` to `""`.
+    // A relay-tagged container with a db relation should be recognised
+    // as a repo under the default config — no violation, no fix.
+    const db = makeDb();
+    const relay = makeContainer("orders_relay", [{ to: db }], ["relay"]);
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, relay, db]);
+
+    // fixCrud should redirect orders_api through orders_relay (existing
+    // relay-tagged repo) — this only works if default ownerTags includes
+    // "relay".
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results[0].edits[0].content).toContain("orders_relay");
+  });
+
   it("propagates custom repoTags as the tag of the created repo (covers ownerTags[0])", () => {
     // Stryker mutated `ownerTags[0] ?? "repo"` such that the literal "repo"
     // could be emitted regardless of the configured tags. Pin: a custom
@@ -335,6 +366,18 @@ describe("fixCrud — non-repo accesses DB", () => {
     const model = makeModel([db]);
     expect(fixCrud(model, [violation("ghost")], plantumlSyntax)).toHaveLength(
       0,
+    );
+  });
+
+  it("description pins exact `Add repo intermediary for X -> Y` format", () => {
+    // Stryker mutated the description template literal to "". Pin format.
+    const db = makeDb("orders_db");
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results[0].description).toBe(
+      "Add repo intermediary for orders_api → orders_db",
     );
   });
 
@@ -515,6 +558,31 @@ describe("fixCrud — cross-boundary", () => {
     expect(results[0].edits[0].content).not.toContain("orders_repo");
   });
 
+  it("does NOT treat same-boundary access as cross-boundary (covers &&-vs-||)", () => {
+    // Stryker mutated `accessorBoundary !== undefined && dbBoundary !== undefined && accessorBoundary !== dbBoundary`
+    // to `||`. With OR, any accessor with a defined boundary would be
+    // considered cross-boundary even when boundary === db's boundary —
+    // the fix would then bail with "no existing repo" instead of creating
+    // one. Pin: same-boundary access creates a repo (3 edits, not 0).
+    const db = makeDb();
+    const accessor = makeContainer("orders_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [accessor, db],
+          boundaries: [],
+        },
+      ],
+      allContainers: [accessor, db],
+    };
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results).toHaveLength(1);
+    expect(results[0].edits).toHaveLength(3); // creates repo, not bails
+  });
+
   it("warns and skips when cross-boundary has no public API", () => {
     const db = makeDb();
     const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
@@ -536,6 +604,7 @@ describe("fixCrud — cross-boundary", () => {
       ],
       allContainers: [repo, db, accessor],
     };
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
 
     const results = fixCrud(
       model,
@@ -543,6 +612,12 @@ describe("fixCrud — cross-boundary", () => {
       plantumlSyntax,
     );
     expect(results).toHaveLength(0);
+    // resolveRedirectTarget warns with the ruleName passed in by fixCrud.
+    // Stryker mutated the literal "crud" to "" — that flips the warn text
+    // from `fix crud: ...` to `fix : ...`. Pin the rule name.
+    expect(warn).toHaveBeenCalled();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("fix crud:");
   });
 
   it("warns and skips when no repo exists cross-boundary", () => {
