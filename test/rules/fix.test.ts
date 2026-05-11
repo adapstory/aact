@@ -64,6 +64,20 @@ describe("applyEdits", () => {
     expect(lines[2]).toBe('Rel(svc_a, svc_c, "")');
   });
 
+  it("applies indent extracted from the matched line to inserted content", () => {
+    // applyIndent must prepend the source line's leading whitespace to
+    // every non-blank line of inserted content. Stryker mutated the
+    // `.map((line) => indent + line)` callback to just `line` (skip
+    // indentation). Pin: a tab-indented anchor produces tab-indented
+    // inserted content.
+    const tabIndented = "\tContainer(svc_a)";
+    const result = applyEdits(tabIndented, [
+      { type: "add", search: "Container(svc_a", content: "Container(svc_b)" },
+    ]);
+    expect(result.split("\n")[1]).toBe("\tContainer(svc_b)");
+    expect(result.split("\n")[1].startsWith("\t")).toBe(true);
+  });
+
   it("preserves empty lines verbatim when adding multi-line content", () => {
     // applyIndent must NOT prepend indent to blank lines — keeps formatting
     // sane when added blocks contain blank-line separators.
