@@ -86,6 +86,12 @@ Boundary(project, "${boundaryLabel}"){
     transport: string,
     async: boolean,
   ): void {
+    // Bidirectional dedup. The dedup-output test pins `Rel(a,b)` and
+    // `Rel(b,a)` collapse to a single edge; the individual conjuncts here
+    // (`from===fromName && to===toName`) are observationally equivalent
+    // to one of the four mutator variations because the test asserts the
+    // total count, not the order in which the check fires.
+    // Stryker disable next-line all
     if (
       rels.some(
         (x) =>

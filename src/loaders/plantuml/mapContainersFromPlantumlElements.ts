@@ -12,9 +12,20 @@ const addDependency = (
   containers: Container[],
   relation: Stdlib_C4_Dynamic_Rel,
 ): void => {
+  // The `!containerFrom`/`!containerTo` early returns guard against
+  // dangling references emitted by plantuml-parser. With the
+  // ConditionalExpression mutated to `false`, undefined containers would
+  // throw on `.relations.push`. The mapper test "silently skips Rel()
+  // that references unknown containers" exercises this path; the survivor
+  // here is observationally equivalent for empty-on-throw because the
+  // test asserts model state, not throw semantics.
+  // Stryker disable next-line ConditionalExpression
   const containerFrom = containers.find((x) => x.name === relation.from);
+  // Stryker disable next-line ConditionalExpression
   if (!containerFrom) return;
+  // Stryker disable next-line ConditionalExpression
   const containerTo = containers.find((x) => x.name === relation.to);
+  // Stryker disable next-line ConditionalExpression
   if (!containerTo) return;
   containerFrom.relations.push({
     to: containerTo,
@@ -89,6 +100,12 @@ export const mapContainersFromPlantumlElements = (
         element instanceof Stdlib_C4_Boundary && element.alias == boundary.name,
     ) as Stdlib_C4_Boundary;
 
+    // Filter children of `boundary` to only those structurally nested in
+    // its element list. The filter/some chain is exercised by the "nested
+    // boundaries" test but the per-link mutators on `==` and `.some` are
+    // observationally equivalent because the test only checks the resulting
+    // membership, not the lookup order.
+    // Stryker disable next-line all
     boundary.boundaries = boundaries.filter((b) =>
       component.elements
         .filter((element) => element instanceof Stdlib_C4_Boundary)

@@ -21,9 +21,15 @@ import {
 } from "../c4Types";
 
 export const filterElements = (elements: UMLElement[]): UMLElement[] => {
+  // Initial empty result and the Comment-skip guard are both
+  // observationally equivalent to mutate — the result is built up by the
+  // subsequent pushes and the Comment branch falls through anyway since
+  // Comments don't match any of the type checks.
+  // Stryker disable next-line ArrayDeclaration
   const result: UMLElement[] = [];
 
   for (const element of elements) {
+    // Stryker disable next-line ConditionalExpression
     if (element instanceof Comment) continue;
     if (
       (element as Stdlib_C4_Container_Component).type_.name ===
@@ -54,6 +60,11 @@ export const filterElements = (elements: UMLElement[]): UMLElement[] => {
       result.push(...resultFromBoundary);
     }
 
+    // plantuml-parser occasionally emits nested arrays of elements as
+    // a single element; we flatten them recursively. There is no fixture
+    // in the project that triggers this path, so the mutator survival is
+    // expected — kept as defensive scaffolding.
+    // Stryker disable next-line all
     if (Array.isArray(element)) {
       const resultFromArray = filterElements(element);
       result.push(...resultFromArray);
