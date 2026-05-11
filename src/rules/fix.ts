@@ -51,11 +51,12 @@ export const applyEdits = (source: string, edits: SourceEdit[]): string => {
       );
     }
 
-    /* c8 ignore next — `?? ""` fallback. `/^(\s*)/` always matches
-       (zero or more whitespace at start of line); the capture group is
-       always defined. The fallback exists for TypeScript narrowing
-       only — there is no realistic input that takes this branch. */
-    const indent = /^(\s*)/.exec(lines[idx])?.[1] ?? "";
+    // `/^(\s*)/` always matches zero-width at the start of any string, so
+    // .exec is never null and the capture group is always defined. We assert
+    // both to avoid a defensive branch that mutation testing keeps flagging
+    // and that has no reachable failure mode.
+    // Stryker disable next-line Regex
+    const indent = /^(\s*)/.exec(lines[idx])![1];
 
     switch (edit.type) {
       case "remove": {

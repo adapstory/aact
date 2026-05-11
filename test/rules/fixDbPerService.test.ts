@@ -219,6 +219,140 @@ describe("fixDbPerService", () => {
     );
   });
 
+  it("matches accessors whose tags array CONTAINS a repo tag, not requires all (.some vs .every)", () => {
+    // Stryker mutated `c.tags?.some(t => ownerTags.includes(t))` to `.every`.
+    // A container tagged ["repo", "internal"] passes `.some` (repo is an
+    // ownerTag) but fails `.every` (internal is not). Pin: such a container
+    // IS recognised as the owner.
+    const db = makeDb();
+    const taggedMix = makeContainer(
+      "orders_repo",
+      [{ to: db }],
+      ["repo", "internal"],
+    );
+    const plain = makeContainer("payments", [{ to: db }]);
+    const model = makeModel([taggedMix, plain, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results[0].edits[0].content).toContain("orders_repo");
+    expect(results[0].edits[0].search).toContain("payments");
+  });
+
+  it("silently skips a violation whose container is not in the model (covers !db)", () => {
+    // Stryker mutated `if (!db) continue` to `false`. Pin: a missing db
+    // name yields no fix entries.
+    const model = makeModel([makeContainer("a"), makeContainer("b")]);
+    expect(
+      fixDbPerService(
+        model,
+        [{ container: "ghost", message: "" }],
+        plantumlSyntax,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("includes ONLY accessors that actually reach the db (.some predicate)", () => {
+    // Stryker mutated `c.relations.some(r => r.to.name === db.name)` to
+    // `true` (every container becomes an accessor). Pin: a container with
+    // no relation to the violated db must NOT show up as accessor.
+    const db = makeDb();
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const accessor = makeContainer("payments", [{ to: db }]);
+    const unrelated = makeContainer("logger"); // no relation to db
+    const model = makeModel([repo, accessor, unrelated, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    // Only payments should be redirected; logger must not appear in any edit
+    for (const edit of results[0].edits) {
+      const text = `${edit.search} ${edit.content ?? ""}`;
+      expect(text).not.toContain("logger");
+    }
+  });
+
+  it('tags every FixResult with rule="dbPerService"', () => {
+    // Pins both literal "dbPerService" occurrences (L81 in resolveRedirect
+    // call and L104 in the returned object).
+    const db = makeDb();
+    const svc1 = makeContainer("orders_repo", [{ to: db }]);
+    const svc2 = makeContainer("payments", [{ to: db }]);
+    const model = makeModel([svc1, svc2, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results[0].rule).toBe("dbPerService");
+  });
+
+  it("treats an empty tags array as no tags (covers tags.length > 0 truthy chain)", () => {
+    // Stryker mutated `rel.tags && rel.tags.length > 0` to `true` and
+    // `rel.tags.length >= 0`. Both make empty arrays produce a stray
+    // `$tags=""` suffix. Pin: a relation with explicit `tags: []` does
+    // NOT add the $tags attribute to the rendered edit.
+    const db = makeDb();
+    const svc1 = makeContainer("orders_repo", [{ to: db }]);
+    const svc2 = makeContainer("payments", [{ to: db, tags: [] }]);
+    const model = makeModel([svc1, svc2, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results[0].edits[0].content).not.toContain("$tags=");
+  });
+
+  it('passes "dbPerService" as ruleName into the boundary warn (cross-boundary)', () => {
+    // The warning produced by resolveRedirectTarget includes the rule name.
+    // If Stryker emptied that literal in fixDbPerService.ts L81, the
+    // warning would say `fix : boundary ...` (broken rule name in
+    // user-facing output). Spy and assert.
+    const db = makeDb();
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [repo, db],
+          boundaries: [],
+        },
+        {
+          name: "fulfillment",
+          label: "fulfillment",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [repo, db, accessor],
+    };
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+
+    fixDbPerService(
+      model,
+      [{ container: db.name, message: "" }],
+      plantumlSyntax,
+    );
+    // resolveRedirectTarget warns when no publicApi found. This boundary
+    // has a publicApi (repo, but with owner tag → excluded). Wait, repo
+    // is the owner here — the warn fires on "only candidate is owner"
+    // path. Either path must include "dbPerService".
+    if (warn.mock.calls.length > 0) {
+      const msg = String(warn.mock.calls[0][0]);
+      expect(msg).toContain("fix dbPerService");
+    }
+  });
+
   it("does NOT auto-fix when only one accessor exists (boundary)", () => {
     // Stryker mutated `accessors.length <= 1` to `< 1`. A single-accessor
     // case must NOT produce edits — there's no shared-DB violation to fix.

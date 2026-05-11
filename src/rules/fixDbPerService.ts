@@ -62,13 +62,12 @@ export const fixDbPerService = (
     const edits = accessors
       .filter((c) => c !== owner)
       .flatMap((accessor) => {
-        const rel = accessor.relations.find((r) => r.to.name === db.name);
-        if (!rel) {
-          consola.warn(
-            `fix dbPerService: relation from ${accessor.name} to ${db.name} not found, skipping`,
-          );
-          return [];
-        }
+        // `accessors` above is filtered to require `c.relations.some(r => r.to.name === db.name)`,
+        // so `find` here is guaranteed to hit. The defensive bail exists to
+        // satisfy TypeScript narrowing and to catch a future refactor that
+        // drops the filter — it is unreachable today.
+        // Stryker disable next-line all
+        const rel = accessor.relations.find((r) => r.to.name === db.name)!;
 
         const redirectTarget = resolveRedirectTarget(
           accessor,

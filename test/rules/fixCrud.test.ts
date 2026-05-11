@@ -184,6 +184,160 @@ describe("fixCrud — non-repo accesses DB", () => {
     expect(results[0].description).toMatch(/repo/i);
   });
 
+  it("ignores non-db outbound relations when computing dbRels (covers .filter MethodExpression)", () => {
+    // Stryker mutated `accessor.relations.filter(r => r.to.type === dbType)`
+    // to just `accessor.relations`. Without the filter every outbound edge
+    // counts as a db hit and the fix emits nonsense edits referencing
+    // non-db targets. Pin: a non-repo with one db and one non-db relation
+    // produces edits that only mention the db.
+    const db = makeDb();
+    const other = makeContainer("notifications");
+    const api = makeContainer("orders_api", [{ to: db }, { to: other }]);
+    const model = makeModel([api, db, other]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results).toHaveLength(1);
+    // Should generate exactly 3 edits (one db), not 6 (would be two if
+    // every relation were treated as db)
+    expect(results[0].edits).toHaveLength(3);
+    for (const edit of results[0].edits) {
+      const text = `${edit.search} ${edit.content ?? ""}`;
+      expect(text).not.toContain("notifications");
+    }
+  });
+
+  it("does not consider accessor itself when scanning for an existing repo (covers c !== accessor)", () => {
+    // Stryker mutated `c !== accessor && ...` so that `accessor` (which has
+    // the db relation) could be picked as its own repo. Pin: with a non-repo
+    // accessor, the existing-repo lookup misses, and the fix falls through
+    // to repo creation (3 edits) rather than self-redirect (1 replace).
+    const db = makeDb();
+    // Accessor is self-loop-eligible: it has db relation AND no repo tag.
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results[0].edits).toHaveLength(3);
+    expect(results[0].edits[0].type).toBe("add"); // create repo
+    expect(results[0].edits[2].type).toBe("replace");
+    expect(results[0].edits[2].content).not.toContain(
+      "Rel(orders_api, orders_api",
+    );
+  });
+
+  it("requires the candidate repo to actually reach the same db (covers .some)", () => {
+    // Stryker mutated `c.relations.some(r => r.to.name === db.name)` to
+    // `.every`. A tagged container with relations to unrelated targets
+    // would falsely qualify as the existing repo. Pin: a repo-tagged
+    // container that does NOT reach orders_db must not be picked.
+    const db = makeDb();
+    const unrelatedDb = makeDb("other_db");
+    const unrelatedRepo = makeContainer(
+      "other_repo",
+      [{ to: unrelatedDb }],
+      ["repo"],
+    );
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, unrelatedRepo, db, unrelatedDb]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    // Should fall through to creating orders_repo, not redirect to other_repo
+    expect(results[0].edits).toHaveLength(3);
+    for (const edit of results[0].edits) {
+      const text = `${edit.search} ${edit.content ?? ""}`;
+      expect(text).not.toContain("other_repo");
+    }
+    expect(results[0].edits[0].content).toContain("orders_repo");
+  });
+
+  it("treats an untagged candidate as not-a-repo (covers c.tags?.includes)", () => {
+    // Stryker mutated `c.tags?.includes(t)` to `c.tags.includes(t)`. With
+    // the unsafe access, a container without `tags` would throw. Pin:
+    // candidates with no tags array are skipped cleanly.
+    const db = makeDb();
+    const candidate = makeContainer("orders_helper", [{ to: db }]); // no tags
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, candidate, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    // Should fall through to creating orders_repo, not pick orders_helper
+    expect(results[0].edits[0].content).toContain("orders_repo");
+    expect(results[0].edits[0].content).not.toContain("orders_helper");
+  });
+
+  it("emits the cross-boundary no-repo warning with rule, accessor and db names", () => {
+    // Stryker mutated the warn template to an empty string. Pin the
+    // message format precisely so the diagnostic stays useful.
+    const db = makeDb();
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const model: ArchitectureModel = {
+      boundaries: [
+        { name: "orders", label: "orders", containers: [db], boundaries: [] },
+        {
+          name: "fulfillment",
+          label: "fulfillment",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [db, accessor],
+    };
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+
+    fixCrud(model, [violation("fulfillment_api")], plantumlSyntax);
+    expect(warn).toHaveBeenCalled();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("fix crud");
+    expect(msg).toContain("fulfillment_api");
+    expect(msg).toContain("orders_db");
+    expect(msg).toContain("cross-boundary");
+    expect(msg).toContain("no existing repo");
+    expect(msg).toContain("fix manually");
+  });
+
+  it("propagates custom repoTags as the tag of the created repo (covers ownerTags[0])", () => {
+    // Stryker mutated `ownerTags[0] ?? "repo"` such that the literal "repo"
+    // could be emitted regardless of the configured tags. Pin: a custom
+    // repoTags=["relay"] config produces $tags="relay" on the new repo
+    // container, not "repo".
+    const db = makeDb();
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax, {
+      repoTags: ["relay"],
+    });
+    expect(results[0].edits[0].content).toContain('$tags="relay"');
+    expect(results[0].edits[0].content).not.toContain('$tags="repo"');
+  });
+
+  it('tags repo-with-non-db-deps fixes with rule="crud" and a descriptive message', () => {
+    // Pins L164 (rule) and L165 (description) for the second fix path.
+    const db = makeDb();
+    const other = makeContainer("audit_svc");
+    const repo = makeContainer(
+      "orders_repo",
+      [{ to: db }, { to: other }],
+      ["repo"],
+    );
+    const model = makeModel([repo, db, other]);
+
+    const results = fixCrud(model, [violation("orders_repo")], plantumlSyntax);
+    expect(results[0].rule).toBe("crud");
+    expect(results[0].description).toBe(
+      "Remove non-database dependencies from repo orders_repo",
+    );
+  });
+
+  it("silently skips a violation that names a non-existent container", () => {
+    // Pins L188 `if (!container) continue`.
+    const db = makeDb();
+    const model = makeModel([db]);
+    expect(fixCrud(model, [violation("ghost")], plantumlSyntax)).toHaveLength(
+      0,
+    );
+  });
+
   it("derives the new-repo label by capitalising and replacing underscores", () => {
     const db = makeDb("payment_processor_db");
     const api = makeContainer("payment_processor_api", [{ to: db }]);

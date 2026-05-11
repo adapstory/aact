@@ -199,6 +199,31 @@ describe("fixAcl", () => {
     expect(msg).toContain("already exists");
   });
 
+  it("picks the container by exact name when several exist (covers === predicate)", () => {
+    // Stryker mutated `c.name === violation.container` to `true`. With true,
+    // the first container in allContainers would be picked regardless of
+    // the violation name — leading to ACLs around the wrong service.
+    const ext = extSystem;
+    const wrongSvc = makeContainer("alpha", "Alpha", [{ to: ext }]);
+    const rightSvc = makeContainer("beta", "Beta", [{ to: ext }]);
+    const model = makeModel([wrongSvc, rightSvc, ext]);
+
+    const results = fixAcl(
+      model,
+      [{ container: "beta", message: "" }],
+      plantumlSyntax,
+    );
+    // ACL must be generated FOR beta, not alpha
+    expect(results).toHaveLength(1);
+    expect(results[0].description).toContain("beta");
+    expect(results[0].description).not.toContain("alpha");
+    const containerEdit = results[0].edits.find(
+      (e) => e.type === "add" && e.content?.includes("Container("),
+    );
+    expect(containerEdit!.content).toContain("beta_acl");
+    expect(containerEdit!.content).not.toContain("alpha_acl");
+  });
+
   it("silently skips a violation that names a non-existent container", () => {
     // Stryker mutated `if (!container) continue` to `false` (don't skip).
     // Pin: an unknown name yields no fix entry and no edits, no throw.
