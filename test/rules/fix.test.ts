@@ -105,6 +105,25 @@ describe("applyEdits", () => {
     expect(result.split("\n")).toEqual(["Container(svc)", "End"]);
   });
 
+  it("replaces a line with the empty string when edit.content is omitted", () => {
+    // Stryker mutated the `?? ""` fallback in
+    // `applyIndent(edit.content ?? "", indent)` to "Stryker was here!".
+    // A type=replace edit without `content` field exercises the fallback.
+    // Pin: the matched line becomes empty (not the Stryker sentinel).
+    const result = applyEdits("Container(a)\nContainer(b)", [
+      { type: "replace", search: "Container(a)" },
+    ]);
+    expect(result.split("\n")).toEqual(["", "Container(b)"]);
+  });
+
+  it("inserts an empty line when add-edit has no content", () => {
+    // Same fallback as replace, on the add branch.
+    const result = applyEdits("Container(a)\nContainer(b)", [
+      { type: "add", search: "Container(a)" },
+    ]);
+    expect(result.split("\n")).toEqual(["Container(a)", "", "Container(b)"]);
+  });
+
   it("returns source unchanged when search not found", () => {
     const result = applyEdits(source, [
       { type: "remove", search: "NonExistentLine" },

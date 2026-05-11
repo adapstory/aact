@@ -37,14 +37,19 @@ export default {
   // gives an honest score.
   coverageAnalysis: "all",
 
-  // Focus on the surfaces where we have shipped this class of bugs.
-  // Expand to "src/**/*.ts" once the focused score is comfortable.
+  // Mutation scope covers the user-facing data path: load source → build
+  // internal model → fix or render. A regression in any of these breaks
+  // user files (fix) or downstream tooling (generators) or the entire
+  // analysis (loaders).
   mutate: [
     "src/rules/**/*.ts",
     "src/generators/**/*.ts",
+    "src/loaders/**/*.ts",
     "!src/**/*.test.ts",
     "!src/**/index.ts",
     "!src/**/types.ts",
+    "!src/loaders/structurizr/dslTypes.ts",
+    "!src/loaders/plantuml/c4Types.ts",
   ],
 
   reporters: ["progress", "clear-text", "html", "json"],
