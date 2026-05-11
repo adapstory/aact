@@ -226,6 +226,45 @@ describe("fixDbPerService", () => {
     );
   });
 
+  it("preserves rel.technology when present (covers ?? operator non-fallback)", () => {
+    // Stryker mutated `rel.technology ?? ""` to `rel.technology && ""`.
+    // With &&, a defined technology becomes "" (truthy short-circuits to
+    // ""). Pin: a defined technology survives into the rendered Rel.
+    const db = makeDb();
+    const svc1 = makeContainer("orders_repo", [{ to: db }]);
+    const svc2 = makeContainer("payments", [
+      { to: db, technology: "PostgreSQL" },
+    ]);
+    const model = makeModel([svc1, svc2, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results[0].edits[0].content).toContain('"PostgreSQL"');
+  });
+
+  it("joins non-empty tags with + when rendering a redirected relation", () => {
+    // Stryker mutated `rel.tags && rel.tags.length > 0 ? rel.tags.join(\"+\") : undefined`
+    // — various: ConditionalExpression true (always join), >= 0 (empty
+    // produces ""), StringLiteral on "+". Pin: a non-empty tags array
+    // renders `$tags="a+b"` in the redirected edit.
+    const db = makeDb();
+    const svc1 = makeContainer("orders_repo", [{ to: db }]);
+    const svc2 = makeContainer("payments", [
+      { to: db, tags: ["async", "audit"] },
+    ]);
+    const model = makeModel([svc1, svc2, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results[0].edits[0].content).toContain('$tags="async+audit"');
+  });
+
   it("does NOT throw when a violation names a db with zero accessors (defensive)", () => {
     // Stryker mutated `if (accessors.length <= 1) continue` to `false`.
     // With that mutation, the empty-accessors path tries `accessors[0]`
@@ -245,24 +284,32 @@ describe("fixDbPerService", () => {
   it("matches accessors whose tags array CONTAINS a repo tag, not requires all (.some vs .every)", () => {
     // Stryker mutated `c.tags?.some(t => ownerTags.includes(t))` to `.every`.
     // A container tagged ["repo", "internal"] passes `.some` (repo is an
-    // ownerTag) but fails `.every` (internal is not). Pin: such a container
-    // IS recognised as the owner.
+    // ownerTag) but fails `.every` (internal is not). Pin: when this
+    // mixed-tag container appears AFTER a plain accessor, the .some
+    // version picks the mixed-tag container as owner; .every would fall
+    // back to the first accessor (plain), producing observably different
+    // edits.
     const db = makeDb();
+    const plain = makeContainer("payments", [{ to: db }]);
     const taggedMix = makeContainer(
       "orders_repo",
       [{ to: db }],
       ["repo", "internal"],
     );
-    const plain = makeContainer("payments", [{ to: db }]);
-    const model = makeModel([taggedMix, plain, db]);
+    // Order matters: plain before taggedMix in model.
+    const model = makeModel([plain, taggedMix, db]);
 
     const results = fixDbPerService(
       model,
       [{ container: "orders_db", message: "" }],
       plantumlSyntax,
     );
-    expect(results[0].edits[0].content).toContain("orders_repo");
-    expect(results[0].edits[0].search).toContain("payments");
+    // With .some: owner=orders_repo (mixed-tag wins). Redirect payments
+    //   → orders_repo. Content references orders_repo.
+    // With .every: tagged=[], owner=plain (=payments). Redirect taggedMix
+    //   → payments. Content references payments, search references orders_repo.
+    expect(results[0].edits[0].search).toContain("Rel(payments, orders_db");
+    expect(results[0].edits[0].content).toContain("Rel(payments, orders_repo");
   });
 
   it("silently skips a violation whose container is not in the model (covers !db)", () => {
