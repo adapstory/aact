@@ -1,4 +1,5 @@
 import { fc, test } from "@fast-check/vitest";
+import consola from "consola";
 
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
 import { structurizrDslSyntax } from "../../src/loaders/structurizr/syntax";
@@ -158,9 +159,43 @@ describe("fixCrud — non-repo accesses DB", () => {
     const existingRepo = makeContainer("orders_repo");
     const api = makeContainer("orders_api", [{ to: db }]);
     const model = makeModel([api, db, existingRepo]);
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
 
     const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
     expect(results).toHaveLength(0);
+    expect(warn).toHaveBeenCalled();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("fix crud");
+    expect(msg).toContain("cannot create repo for");
+    expect(msg).toContain("orders_db");
+    expect(msg).toContain("orders_repo");
+    expect(msg).toContain("already exists");
+  });
+
+  it('tags every FixResult with rule="crud" and a human-readable description', () => {
+    const db = makeDb();
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results[0].rule).toBe("crud");
+    expect(results[0].description).toContain("orders_api");
+    expect(results[0].description).toContain("orders_db");
+    expect(results[0].description).toMatch(/repo/i);
+  });
+
+  it("derives the new-repo label by capitalising and replacing underscores", () => {
+    const db = makeDb("payment_processor_db");
+    const api = makeContainer("payment_processor_api", [{ to: db }]);
+    const model = makeModel([api, db]);
+
+    const results = fixCrud(
+      model,
+      [violation("payment_processor_api")],
+      plantumlSyntax,
+    );
+    // Stryker mutated the label expression to "" — pin format precisely.
+    expect(results[0].edits[0].content).toContain('"Payment processor Repo"');
   });
 
   it("handles multiple DB relations from same accessor", () => {

@@ -1,4 +1,5 @@
 import { fc, test } from "@fast-check/vitest";
+import consola from "consola";
 
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
 import {
@@ -182,6 +183,7 @@ describe("fixAcl", () => {
     const aclContainer = makeContainer("my_service_acl", "My Service ACL");
     const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
     const model = makeModel([svc, aclContainer, extSystem]);
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
 
     const results = fixAcl(
       model,
@@ -189,6 +191,48 @@ describe("fixAcl", () => {
       plantumlSyntax,
     );
     expect(results).toHaveLength(0);
+    expect(warn).toHaveBeenCalledOnce();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("fix acl");
+    expect(msg).toContain("skipping my_service");
+    expect(msg).toContain("my_service_acl");
+    expect(msg).toContain("already exists");
+  });
+
+  it("silently skips a violation that names a non-existent container", () => {
+    // Stryker mutated `if (!container) continue` to `false` (don't skip).
+    // Pin: an unknown name yields no fix entry and no edits, no throw.
+    const model = makeModel([extSystem]);
+    expect(
+      fixAcl(model, [{ container: "ghost", message: "" }], plantumlSyntax),
+    ).toHaveLength(0);
+  });
+
+  it("returns no fix when container has no external relations", () => {
+    // Pin: `if (externalRels.length === 0) continue;` — even if the rule
+    // somehow emits a violation for a container without externals, the fix
+    // must bail rather than synthesise edits referencing nothing.
+    const db = makeContainer("orders_db", "Orders DB");
+    db.type = "ContainerDb";
+    const svc = makeContainer("my_service", "My Service", [{ to: db }]);
+    const model = makeModel([svc, db]);
+    expect(
+      fixAcl(model, [{ container: "my_service", message: "" }], plantumlSyntax),
+    ).toHaveLength(0);
+  });
+
+  it("emits exactly three edits for a single-external service (no extras)", () => {
+    // Stryker mutated `edits: []` to `["Stryker was here"]`. A precise
+    // length assertion guards the initial-array shape.
+    const svc = makeContainer("my_service", "My Service", [{ to: extSystem }]);
+    const model = makeModel([svc, extSystem]);
+
+    const results = fixAcl(
+      model,
+      [{ container: "my_service", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results[0].edits).toHaveLength(3); // add container, add Rel, replace Rel
   });
 
   it("description contains service name", () => {

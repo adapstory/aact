@@ -1,4 +1,5 @@
 import { fc, test } from "@fast-check/vitest";
+import consola from "consola";
 
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
 import {
@@ -119,6 +120,118 @@ describe("fixDbPerService", () => {
     );
     expect(results[0].edits[0].content).toContain("orders_repo");
     expect(results[0].edits[0].search).toContain("payments");
+  });
+
+  it("emits the multi-tagged warning with both names and the chosen owner", () => {
+    const db = makeDb();
+    const repo1 = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const repo2 = makeContainer("payments_repo", [{ to: db }], ["repo"]);
+    const model = makeModel([repo1, repo2, db]);
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+
+    fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+
+    expect(warn).toHaveBeenCalled();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("Cannot determine owner of orders_db");
+    expect(msg).toContain("multiple tagged accessors");
+    expect(msg).toContain("orders_repo");
+    expect(msg).toContain("payments_repo");
+    expect(msg).toContain("using orders_repo");
+  });
+
+  it("emits the no-tagged warning when falling back to first accessor", () => {
+    const db = makeDb();
+    const svc1 = makeContainer("alpha", [{ to: db }]);
+    const svc2 = makeContainer("beta", [{ to: db }]);
+    const model = makeModel([svc1, svc2, db]);
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+
+    fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+
+    expect(warn).toHaveBeenCalled();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("Cannot determine owner of orders_db");
+    expect(msg).toContain("no repo/relay tagged accessor found");
+    expect(msg).toContain("using alpha");
+  });
+
+  it("does NOT warn about multiple owners when only one is tagged (boundary)", () => {
+    // Stryker mutated `tagged.length > 1` to `>= 1`. Pin: a single tagged
+    // accessor must NOT emit the multi-tagged warning.
+    const db = makeDb();
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const other = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([repo, other, db]);
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+
+    fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("requires both name AND type match to pick the violated db (covers logical &&)", () => {
+    // Stryker mutated `c.name === violation.container && c.type === dbType`
+    // to `||`. With ||, a Container (not DB) with the same name would
+    // qualify, producing nonsense fixes. Pin both conditions.
+    const lookalike = makeContainer("orders_db"); // same name, type=Container
+    const realDb = makeDb("orders_db");
+    const svc1 = makeContainer("a", [{ to: realDb }]);
+    const svc2 = makeContainer("b", [{ to: realDb }]);
+    const model = makeModel([lookalike, realDb, svc1, svc2]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    // exactly one fix targeted at the real ContainerDb
+    expect(results).toHaveLength(1);
+    expect(results[0].edits[0].search).toContain("orders_db");
+  });
+
+  it("uses an empty tech part when rel.technology is undefined (covers ?? branch)", () => {
+    const db = makeDb();
+    const svc1 = makeContainer("orders_repo", [{ to: db }]);
+    const svc2 = makeContainer("payments", [{ to: db /* no technology */ }]);
+    const model = makeModel([svc1, svc2, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    // ?? "" branch produces `Rel(payments, orders_repo, "")` — explicit empty
+    expect(results[0].edits[0].content).toContain(
+      'Rel(payments, orders_repo, ""',
+    );
+  });
+
+  it("does NOT auto-fix when only one accessor exists (boundary)", () => {
+    // Stryker mutated `accessors.length <= 1` to `< 1`. A single-accessor
+    // case must NOT produce edits — there's no shared-DB violation to fix.
+    const db = makeDb();
+    const svc = makeContainer("orders_repo", [{ to: db }]);
+    const model = makeModel([svc, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    expect(results).toHaveLength(0);
   });
 
   it("warns and uses the first when multiple tagged owners are present", () => {
