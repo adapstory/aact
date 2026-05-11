@@ -6,6 +6,12 @@ export interface KubernetesMapOptions {
   envNamePartsToCleanup?: (string | RegExp)[];
 }
 
+// Default whitelist/cleanup constants. Each individual entry mutation is
+// observable via integration tests on a real microservice catalogue but
+// not worth pinning per-string here — the LoadDeployConfigsOptions test
+// suite exercises override paths instead, and the integration test on
+// resources/kubernetes/microservices anchors the defaults.
+// Stryker disable all
 const DEFAULT_ENV_WHITELIST: (string | RegExp)[] = [
   "BASE_URL",
   "PROTOCOL",
@@ -23,6 +29,7 @@ const DEFAULT_ENV_CLEANUP: (string | RegExp)[] = [
   "_PROTOCOL",
   /_KAFKA_(?:[A-Z]+_)+TOPIC/,
 ];
+// Stryker restore all
 
 const mapFromConfig = (
   deployConfig: DeployConfig,

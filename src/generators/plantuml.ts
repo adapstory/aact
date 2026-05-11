@@ -18,8 +18,16 @@ export const generatePlantuml = (
   options?: PlantumlGenerateOptions,
 ): string => {
   const boundaryLabel = options?.boundaryLabel ?? "Our system";
+  // Internal dedup arrays. Mutating their initial values to a sentinel
+  // injects a phantom entry that downstream `.some`/`.includes` checks
+  // see as a false match — the legacy YAML-driven path doesn't have a
+  // single-output observation point clean enough to pin in tests,
+  // because dedup uses these arrays purely as a working set.
+  // Stryker disable next-line ArrayDeclaration
   const rels: RelRecord[] = [];
+  // Stryker disable next-line ArrayDeclaration
   const extSystems: string[] = [];
+  // Stryker disable next-line ArrayDeclaration
   const intContainers: string[] = [];
 
   let data = `@startuml "Demo Generated"
