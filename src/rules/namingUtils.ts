@@ -6,6 +6,10 @@ export const detectNamingConvention = (
   model: ArchitectureModel,
 ): NamingConvention => {
   const names = model.allContainers.map((c) => c.name);
+  // Empty-input early return — equivalent to falling through (all three
+  // counts are 0 → final fallback returns "snake" anyway). Kept for
+  // intent clarity.
+  // Stryker disable next-line ConditionalExpression
   if (names.length === 0) return "snake";
 
   const withUnderscore = names.filter((n) => n.includes("_")).length;

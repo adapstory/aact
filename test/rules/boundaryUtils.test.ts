@@ -100,6 +100,57 @@ describe("findPublicApiCandidate", () => {
       findPublicApiCandidate(bcOrders, "ContainerDb", ["repo"], model, map),
     ).toBe(gateway);
   });
+
+  it("excludes in-boundary relations from in-degree count (covers L40)", () => {
+    // Stryker mutated `if (boundaryMap.get(container.name) === targetBoundary) continue`
+    // to `false`. Without skipping same-boundary sources, internal traffic
+    // inflates in-degree and the wrong public API gets picked.
+    const apiA = makeContainer("a_api");
+    const apiB = makeContainer("b_api");
+    const db = makeDb("orders_db");
+    const internalCaller1 = makeContainer("i1", [{ to: apiB }]);
+    const internalCaller2 = makeContainer("i2", [{ to: apiB }]);
+    const bcOrders = makeBoundary("orders", [
+      apiA,
+      apiB,
+      db,
+      internalCaller1,
+      internalCaller2,
+    ]);
+
+    const ext = makeContainer("ext_caller", [{ to: apiA }]);
+    const bcExt = makeBoundary("ext", [ext]);
+    const model = makeModel([bcOrders, bcExt]);
+    const map = buildContainerBoundaryMap(model);
+
+    // External in-degree: apiA=1, apiB=0. apiA wins (internal traffic on
+    // apiB is excluded).
+    expect(
+      findPublicApiCandidate(bcOrders, "ContainerDb", ["repo"], model, map),
+    ).toBe(apiA);
+  });
+
+  it("picks highest-in-degree candidate via the sort comparator", () => {
+    // Stryker mutated `inDegree.get(b.name) ?? 0` to `inDegree.get(b.name) && 0`,
+    // which corrupts the comparator. Pin: a candidate with strictly more
+    // external incoming edges wins.
+    const winner = makeContainer("winner_api");
+    const loser = makeContainer("loser_api");
+    const db = makeDb("orders_db");
+    const bcOrders = makeBoundary("orders", [winner, loser, db]);
+
+    const ext1 = makeContainer("ext1", [{ to: winner }]);
+    const ext2 = makeContainer("ext2", [{ to: winner }]);
+    const ext3 = makeContainer("ext3", [{ to: winner }]);
+    const ext4 = makeContainer("ext4", [{ to: loser }]);
+    const bcExt = makeBoundary("ext", [ext1, ext2, ext3, ext4]);
+    const model = makeModel([bcOrders, bcExt]);
+    const map = buildContainerBoundaryMap(model);
+
+    expect(
+      findPublicApiCandidate(bcOrders, "ContainerDb", ["repo"], model, map),
+    ).toBe(winner);
+  });
 });
 
 describe("resolveRedirectTarget", () => {

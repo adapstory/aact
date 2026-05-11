@@ -45,6 +45,33 @@ describe("detectNamingConvention", () => {
       "snake",
     );
   });
+
+  it("returns snake when hyphen ties with underscore (covers strict > vs >=)", () => {
+    // Stryker mutated `withHyphen > withUnderscore` to `>=`. With >=,
+    // a tied score (1=1) would return "kebab"; without, it falls through
+    // to the camel check and finally snake.
+    expect(detectNamingConvention(makeModel(["a-b", "c_d"]))).toBe("snake");
+  });
+
+  it("returns camel when camelCase dominates and hyphen is rare (covers && vs ||)", () => {
+    // Stryker mutated `withHyphen > withUnderscore && withHyphen > withCamel`
+    // to `||`. With ||, presence of a single hyphenated name (greater than
+    // 0 underscores) would trigger "kebab" even though camel dominates.
+    // Pin: 3 camel names + 1 hyphenated name + 0 underscores → camel.
+    expect(
+      detectNamingConvention(
+        makeModel(["orderApi", "orderDb", "userSvc", "a-b"]),
+      ),
+    ).toBe("camel");
+  });
+
+  it("returns snake when no naming style dominates (covers ConditionalExpression true)", () => {
+    // Stryker mutated `if (...) return \"kebab\"` to `if (true)`. With true,
+    // any non-empty input returns kebab. Pin: snake_case only → snake.
+    expect(detectNamingConvention(makeModel(["orders_api", "user_svc"]))).toBe(
+      "snake",
+    );
+  });
 });
 
 describe("joinName", () => {

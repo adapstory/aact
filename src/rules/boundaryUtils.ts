@@ -30,10 +30,19 @@ export const findPublicApiCandidate = (
     (c) => c.type !== dbType && !ownerTags.some((t) => c.tags?.includes(t)),
   );
 
+  // Both early returns are observationally equivalent: with 0 candidates
+  // the toSorted/[0] result is undefined, and with 1 candidate the only
+  // candidate wins regardless of in-degree calculation. Kept for clarity.
+  // Stryker disable next-line ConditionalExpression
   if (candidates.length === 0) return undefined;
+  // Stryker disable next-line ConditionalExpression
   if (candidates.length === 1) return candidates[0];
 
   const candidateNames = new Set(candidates.map((c) => c.name));
+  // Initialising the map with explicit 0s vs leaving it empty is
+  // observationally equivalent — the comparator uses `?? 0` to default
+  // missing keys to zero before subtraction.
+  // Stryker disable next-line ArrayDeclaration
   const inDegree = new Map<string, number>(candidates.map((c) => [c.name, 0]));
 
   for (const container of model.allContainers) {
