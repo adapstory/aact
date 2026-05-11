@@ -204,3 +204,7 @@ package-lock.json
 **/obj/*
 **/nppBackup/*
 .claude/
+
+# Stryker mutation reports
+reports/
+.stryker-tmp/

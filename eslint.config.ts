@@ -9,7 +9,15 @@ import tseslint, { type ConfigArray } from "typescript-eslint";
 // eslint-disable-next-line sonarjs/deprecation -- tseslint.config() is the recommended API
 export default tseslint.config(
   {
-    ignores: ["dist/", "node_modules/", "resources/"],
+    ignores: [
+      "dist/",
+      "node_modules/",
+      "resources/",
+      "coverage/",
+      "reports/",
+      ".stryker-tmp/",
+      "stryker.config.mjs",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -87,6 +95,15 @@ export default tseslint.config(
       "no-console": "off",
       "sonarjs/no-duplicate-string": "off",
       "sonarjs/cognitive-complexity": "off",
+    },
+  },
+  {
+    // Property-based tests using `test.prop(...)` from @fast-check/vitest
+    // — sonarjs/no-empty-test-file only recognises bare `it/test/describe`
+    // and incorrectly flags these files as empty.
+    files: ["test/property/**/*.test.ts"],
+    rules: {
+      "sonarjs/no-empty-test-file": "off",
     },
   },
 );
