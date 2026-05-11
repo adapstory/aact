@@ -176,6 +176,99 @@ describe("checkCohesion", () => {
     expect(violations.some((v) => v.container === "parent")).toBe(true);
   });
 
+  it("counts inner-boundary→external relations into parent coupling", () => {
+    // Pin L44-L47: parent coupling sums external-typed rels of every inner
+    // boundary container. Stryker mutated the loop body to `{}` and the
+    // filter predicate to false/true. Pin: an external rel on an inner
+    // container raises parent coupling, flipping the cohesion vs coupling
+    // check.
+    const ext: Container = {
+      name: "ext",
+      label: "Ext",
+      type: "System_Ext",
+      description: "",
+      relations: [],
+    };
+    const inner: Container = {
+      name: "inner_svc",
+      label: "Inner Svc",
+      type: "Container",
+      description: "",
+      relations: [{ to: ext }, { to: ext }, { to: ext }],
+    };
+    const innerBoundary = {
+      name: "inner",
+      label: "Inner",
+      containers: [inner],
+      boundaries: [],
+    };
+    const model: ArchitectureModel = {
+      allContainers: [inner, ext],
+      boundaries: [
+        {
+          name: "parent",
+          label: "Parent",
+          containers: [],
+          boundaries: [innerBoundary],
+        },
+        innerBoundary,
+      ],
+    };
+    const violations = checkCohesion(model);
+    // Parent has cohesion=0, coupling=3 (3 external rels in inner) → violation.
+    const v = violations.find((x) => x.container === "parent");
+    expect(v?.message).toContain("coupling (3)");
+  });
+
+  it("requires strict cohesion >= innerCohesionSum to fire parent-vs-inner (covers >=)", () => {
+    // Stryker mutated `cohesion >= innerCohesionSum` to `true`. Pin: a
+    // model where parent cohesion < inner cohesion does NOT fire that
+    // violation (only the coupling-vs-cohesion one may fire).
+    const c1: Container = {
+      name: "c1",
+      label: "C1",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const c2: Container = {
+      name: "c2",
+      label: "C2",
+      type: "Container",
+      description: "",
+      relations: [{ to: c1 }, { to: c1 }, { to: c1 }],
+    };
+    const innerBoundary = {
+      name: "inner",
+      label: "Inner",
+      containers: [c1, c2],
+      boundaries: [],
+    };
+    const model: ArchitectureModel = {
+      allContainers: [c1, c2],
+      boundaries: [
+        {
+          name: "parent",
+          label: "Parent",
+          containers: [],
+          boundaries: [innerBoundary],
+        },
+        innerBoundary,
+      ],
+    };
+
+    // inner.cohesion = 3 (c2→c1 thrice, both internal to inner)
+    // parent.cohesion = inner.coupling = 0 (no external rels)
+    // innerCohesionSum = 3
+    // parent.cohesion (0) >= innerCohesionSum (3)? NO → no parent-vs-inner violation
+    const violations = checkCohesion(model);
+    const parentVsInner = violations.find(
+      (v) =>
+        v.container === "parent" && v.message.startsWith("parent cohesion"),
+    );
+    expect(parentVsInner).toBeUndefined();
+  });
+
   it("emits the parent-vs-inner-cohesions message when applicable", () => {
     // Model: parent has 1 inner boundary with no relations. inner.cohesion=0,
     // sum=0. parent.cohesion=0 (no containers, sole sub-boundary contributes

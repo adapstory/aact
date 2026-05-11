@@ -523,6 +523,112 @@ describe("mapContainersFromStructurizr (unit)", () => {
     ).not.toThrow();
   });
 
+  it("handles a system with undefined containers (covers `containers ?? []` fallback)", () => {
+    // Stryker mutated `?? []` fallback to `?? [sentinel]` on the loop
+    // arrays. With the sentinel, iteration runs over garbage and may push
+    // stray "undefined"-named containers into the model.
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [{ id: "sys1", name: "Sys" }],
+        people: [],
+      },
+    } as never);
+    // Only the system itself was produced — no inner containers from
+    // sys1's undefined `containers` field.
+    expect(result.boundaries[0].containers).toEqual([]);
+  });
+
+  it("handles workspace with no `people` field (covers people ?? [])", () => {
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [],
+      },
+    } as never);
+    expect(result.allContainers).toHaveLength(0);
+  });
+
+  it("handles workspace with no `softwareSystems` field (covers softwareSystems ?? [])", () => {
+    const result = mapContainersFromStructurizr({
+      model: { people: [] },
+    } as never);
+    expect(result.allContainers).toHaveLength(0);
+    expect(result.boundaries).toHaveLength(0);
+  });
+
+  it("does NOT add async tag when interactionStyle is not Asynchronous (covers ConditionalExpression)", () => {
+    // Stryker mutated `if (rel.interactionStyle === \"Asynchronous\")` to `true`.
+    // Pin: a Synchronous-styled relation has no `async` tag.
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  { destinationId: "b", interactionStyle: "Synchronous" },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    } as never);
+    const a = result.allContainers.find((c) => c.name === "a");
+    expect(a?.relations[0].tags ?? []).not.toContain("async");
+  });
+
+  it("filters out empty tags from a person's tag string (covers .filter(Boolean))", () => {
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [],
+        people: [
+          {
+            id: "p1",
+            name: "User",
+            tags: "vip,,admin,", // empty parts on both ends and middle
+            relationships: [],
+          },
+        ],
+      },
+    } as never);
+    const user = result.allContainers.find((c) => c.name === "p1");
+    expect(user?.tags).toEqual(["vip", "admin"]);
+  });
+
+  it("trims whitespace from relation tags split (covers .map(t => t.trim()))", () => {
+    // Stryker mutated the `.map(t => t.trim())` callback to `t` (no trim).
+    // Pin: spaces around tags don't survive into the model.
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  { destinationId: "b", tags: "  audit , urgent  " },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    } as never);
+    const a = result.allContainers.find((c) => c.name === "a");
+    expect(a?.relations[0].tags).toEqual(["audit", "urgent"]);
+  });
+
   it("iterates over people relationships in the addRelations pass", () => {
     // L235 BlockStatement: the people-relationship loop. With `{}` body,
     // people's relations aren't registered. Pin: a person → container
