@@ -72,6 +72,9 @@ export default tseslint.config(
       // node plugin
       "n/no-unsupported-features/node-builtins": "off",
       "n/no-missing-import": "off",
+      // Tool config files (*.config.ts, changelog.config.ts, etc.) import
+      // from devDeps — that's expected, not "extraneous".
+      "n/no-extraneous-import": "off",
 
       // sonarjs relaxations
       "sonarjs/cognitive-complexity": "warn",

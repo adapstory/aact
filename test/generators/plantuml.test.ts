@@ -55,7 +55,7 @@ describe("generatePlantuml", () => {
     const configs: DeployConfig[] = [
       {
         name: "orders",
-        // eslint-disable-next-line sonarjs/no-clear-text-protocols
+
         sections: [{ name: "payments", prod_value: "http://payments" }],
       },
       { name: "payments", sections: [] },
@@ -123,7 +123,7 @@ describe("generatePlantuml", () => {
         environment: { PG_CONNECTION_STRING: { prod: "pg://..." } },
         sections: [
           { name: "kafka_events_topic", prod_value: "events-v1" },
-          // eslint-disable-next-line sonarjs/no-clear-text-protocols
+
           { name: "payments", prod_value: "http://payments" },
         ],
       },
@@ -245,12 +245,12 @@ describe("generatePlantuml", () => {
     const configs: DeployConfig[] = [
       {
         name: "a",
-        // eslint-disable-next-line sonarjs/no-clear-text-protocols
+
         sections: [{ name: "b", prod_value: "http://b" }],
       },
       {
         name: "b",
-        // eslint-disable-next-line sonarjs/no-clear-text-protocols
+
         sections: [{ name: "a", prod_value: "http://a" }],
       },
     ];

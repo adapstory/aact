@@ -52,6 +52,8 @@
     "test:e2e": "vitest run --project e2e",
     "test:coverage": "vitest run --coverage",
     "test:mutation": "stryker run",
+    "changelog": "changelogen",
+    "release": "changelogen --release --push",
     "lint": "npm run lint:eslint && npm run lint:prettier",
     "lint:eslint": "eslint .",
     "lint:prettier": "prettier --ignore-path ./.gitignore --check \"./**/*.{ts,js,json,yaml,yml,md}\"",

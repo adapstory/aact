@@ -121,7 +121,7 @@ const setupConfig = (overrides?: {
       source: { type: "plantuml", path: "test.puml" },
       ...overrides,
     },
-  } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+  });
 };
 
 const cyclicModel = (): ArchitectureModel => {
@@ -171,7 +171,7 @@ describe("check command", () => {
   it("throws when config source is missing", async () => {
     mockLoadConfig.mockResolvedValue({
       config: {},
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    });
 
     await expect(runCheck()).rejects.toThrow();
   });

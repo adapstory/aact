@@ -28,7 +28,7 @@ describe("loadAndValidateConfig", () => {
   it("throws on invalid source.type", async () => {
     mockLoadConfig.mockResolvedValue({
       config: { source: { type: "invalid", path: "test.puml" } },
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    });
 
     await expect(loadAndValidateConfig()).rejects.toThrow();
   });
@@ -36,7 +36,7 @@ describe("loadAndValidateConfig", () => {
   it("throws when source.path is missing", async () => {
     mockLoadConfig.mockResolvedValue({
       config: { source: { type: "plantuml" } },
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    });
 
     await expect(loadAndValidateConfig()).rejects.toThrow();
   });
@@ -47,7 +47,7 @@ describe("loadAndValidateConfig", () => {
         source: { type: "plantuml", path: "test.puml" },
         unknownField: true,
       },
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    });
 
     await expect(loadAndValidateConfig()).rejects.toThrow();
   });
@@ -58,7 +58,7 @@ describe("loadAndValidateConfig", () => {
         source: { type: "plantuml", path: "test.puml" },
         rules: { acl: { aclSuffix: "_acl" } },
       },
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    });
 
     await expect(loadAndValidateConfig()).rejects.toThrow();
   });
@@ -66,7 +66,7 @@ describe("loadAndValidateConfig", () => {
   it("returns valid config", async () => {
     mockLoadConfig.mockResolvedValue({
       config: { source: { type: "plantuml", path: "test.puml" } },
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    });
 
     const result = await loadAndValidateConfig();
     expect(result.source.type).toBe("plantuml");

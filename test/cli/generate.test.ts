@@ -58,7 +58,7 @@ const setupConfig = (overrides?: {
       source: overrides?.source ?? { type: "plantuml", path: "test.puml" },
       generate: overrides?.generate,
     },
-  } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+  });
 };
 
 const setupModel = (
@@ -218,7 +218,7 @@ describe("generate command", () => {
     it("throws when no source configured", async () => {
       mockLoadConfig.mockResolvedValue({
         config: {},
-      } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+      });
 
       await expect(runGenerate({ format: "kubernetes" })).rejects.toThrow();
     });

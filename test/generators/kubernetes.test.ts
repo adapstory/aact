@@ -73,7 +73,6 @@ describe("generateKubernetes", () => {
     const parsed = YAML.parse(ordersOut.content);
 
     expect(parsed.environment.PAYMENTS_BASE_URL.default).toBe(
-      // eslint-disable-next-line sonarjs/no-clear-text-protocols
       "http://payments:8080",
     );
   });
@@ -82,7 +81,7 @@ describe("generateKubernetes", () => {
     const payments = makeContainer({ name: "payments" });
     const orders = makeContainer({
       name: "orders",
-      // eslint-disable-next-line sonarjs/no-clear-text-protocols
+
       relations: [{ to: payments, technology: "http://payments:3000/api" }],
     });
     const model = makeModel([orders, payments]);
@@ -92,7 +91,6 @@ describe("generateKubernetes", () => {
     const parsed = YAML.parse(ordersOut.content);
 
     expect(parsed.environment.PAYMENTS_BASE_URL.default).toBe(
-      // eslint-disable-next-line sonarjs/no-clear-text-protocols
       "http://payments:3000/api",
     );
   });
@@ -216,7 +214,6 @@ describe("generateKubernetes", () => {
     const parsed = YAML.parse(ordersOut.content);
 
     expect(parsed.environment.PAYMENTS_BASE_URL.default).toBe(
-      // eslint-disable-next-line sonarjs/no-clear-text-protocols
       "http://payments:3000",
     );
   });

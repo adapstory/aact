@@ -78,12 +78,12 @@ describe("init command", () => {
   });
 
   it("creates only architecture.puml when config already exists", async () => {
-    mockAccess.mockImplementation(((target: unknown) => {
+    mockAccess.mockImplementation((target: unknown) => {
       if (typeof target === "string" && target.endsWith("aact.config.ts")) {
         return Promise.resolve();
       }
       return Promise.reject(new Error("ENOENT"));
-    }) as unknown as typeof fs.access);
+    });
     mockWriteFile.mockResolvedValue();
 
     await runInit();

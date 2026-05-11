@@ -14,7 +14,7 @@ const isFileNotFound = (
   typeof err === "object" &&
   err !== null &&
   "code" in err &&
-  (err as { code: unknown }).code === "ENOENT";
+  err.code === "ENOENT";
 
 const exitWithError = (message: string, hint?: string): never => {
   consola.error(message);

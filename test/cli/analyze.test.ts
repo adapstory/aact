@@ -64,7 +64,7 @@ const setupConfig = (): void => {
     config: {
       source: { type: "plantuml", path: "test.puml" },
     },
-  } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+  });
 };
 
 const runAnalyze = async (args: { format?: string } = {}): Promise<void> => {
@@ -85,7 +85,7 @@ describe("analyze command", () => {
   it("throws when config source is missing", async () => {
     mockLoadConfig.mockResolvedValue({
       config: {},
-    } as ReturnType<typeof loadConfig> extends Promise<infer T> ? T : never);
+    });
 
     await expect(runAnalyze()).rejects.toThrow();
   });
