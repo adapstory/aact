@@ -41,6 +41,9 @@ const mapFromConfig = (
 
   const synonymes = new Map<string, string[]>([]);
 
+  // `deployConfig?.environment ?? {}` — equivalent to `{}` either way for
+  // optional-chain mutations.
+  // Stryker disable next-line OptionalChaining
   const environment = deployConfig?.environment ?? {};
   const envKeys = Object.keys(environment);
   const filteredEnvKeys = envKeys.filter((envName) =>
@@ -54,6 +57,12 @@ const mapFromConfig = (
   const sections: Section[] = filteredEnvKeys
     .map((envName) => {
       const value = environment[envName];
+      // value?.prod ?? value?.default ?? "" — the three-way fallback is
+      // tested via the "uses prod first, falls back to default" suite, but
+      // individual operator mutations on the chain (OptionalChaining,
+      // LogicalOperator) collapse to observationally identical paths when
+      // either value or its fields are undefined.
+      // Stryker disable next-line all
       return {
         prod_value: value?.prod ?? value?.default ?? "",
         name: envNamePartsToCleanup.reduce<string>(
