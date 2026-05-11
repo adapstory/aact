@@ -4,8 +4,6 @@
 
 [![npm version](https://img.shields.io/npm/v/aact)](https://www.npmjs.com/package/aact)
 [![test workflow](https://github.com/Byndyusoft/aact/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/Byndyusoft/aact/actions/workflows/test.yaml)
-[![coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](#)
-[![mutation score](https://img.shields.io/badge/mutation-95%25-brightgreen)](#)
 
 CLI и библиотека для валидации, анализа и генерации архитектуры микросервисных систем, описанной "as Code" (PlantUML C4, Structurizr).
 
