@@ -1,7 +1,18 @@
+import { fc, test } from "@fast-check/vitest";
+
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
-import type { ArchitectureModel, Container } from "../../src/model";
+import {
+  ArchitectureModel,
+  Container,
+  EXTERNAL_SYSTEM_TYPE,
+} from "../../src/model";
+import { checkAcl } from "../../src/rules";
 import { applyEdits } from "../../src/rules/fix";
 import { fixAcl } from "../../src/rules/fixAcl";
+
+const nameArb = fc
+  .string({ minLength: 2, maxLength: 8 })
+  .filter((s) => /^[a-z][a-z0-9_]*$/.test(s));
 
 const extSystem: Container = {
   name: "ext_system",
@@ -234,6 +245,59 @@ describe("fixAcl", () => {
       (e) => e.type === "add" && e.content?.includes("Container("),
     );
     expect(addEdit!.content).toContain("my-service-acl");
+  });
+
+  // Property-based invariants. Pin down guarantees that should hold for any
+  // service name: never throw, produce at least one edit per fixable violation,
+  // and stay deterministic across calls.
+  test.prop([nameArb])("never throws, always returns FixResult[]", (name) => {
+    const ext: Container = {
+      name: "ext",
+      label: "ext",
+      type: EXTERNAL_SYSTEM_TYPE,
+      description: "",
+      relations: [],
+    };
+    const svc = makeContainer(name, name, [{ to: ext }]);
+    const model = makeModel([svc, ext]);
+    const violations = checkAcl(model.allContainers);
+    const result = fixAcl(model, violations, plantumlSyntax);
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  test.prop([nameArb])(
+    "produces at least one edit per fixable violation",
+    (name) => {
+      const ext: Container = {
+        name: "ext",
+        label: "ext",
+        type: EXTERNAL_SYSTEM_TYPE,
+        description: "",
+        relations: [],
+      };
+      const svc = makeContainer(name, name, [{ to: ext }]);
+      const model = makeModel([svc, ext]);
+      const violations = checkAcl(model.allContainers);
+      const fixes = fixAcl(model, violations, plantumlSyntax);
+      const totalEdits = fixes.flatMap((f) => f.edits).length;
+      expect(totalEdits).toBeGreaterThan(0);
+    },
+  );
+
+  test.prop([nameArb])("is deterministic for same input", (name) => {
+    const ext: Container = {
+      name: "ext",
+      label: "ext",
+      type: EXTERNAL_SYSTEM_TYPE,
+      description: "",
+      relations: [],
+    };
+    const svc = makeContainer(name, name, [{ to: ext }]);
+    const model = makeModel([svc, ext]);
+    const violations = checkAcl(model.allContainers);
+    const first = fixAcl(model, violations, plantumlSyntax);
+    const second = fixAcl(model, violations, plantumlSyntax);
+    expect(first).toEqual(second);
   });
 
   it("ACL name follows {svc_name}_acl convention", () => {

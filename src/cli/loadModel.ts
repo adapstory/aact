@@ -41,6 +41,12 @@ export const loadModel = async (
       case "structurizr": {
         return await loadStructurizrElements(resolvedPath);
       }
+      /* c8 ignore next 4 — `: never` exhaustive guard. Unreachable at the
+         type level: config validation already restricts `source.type` to the
+         discriminant union "plantuml" | "structurizr". The branch exists so
+         TypeScript fails the build if a new source type is added without a
+         case here. Testing it would require unsafe casting that doesn't
+         reflect real usage. */
       default: {
         const sourceType: never = config.source.type;
         throw new Error(`Unsupported source type: ${String(sourceType)}`);

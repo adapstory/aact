@@ -51,6 +51,10 @@ export const applyEdits = (source: string, edits: SourceEdit[]): string => {
       );
     }
 
+    /* c8 ignore next — `?? ""` fallback. `/^(\s*)/` always matches
+       (zero or more whitespace at start of line); the capture group is
+       always defined. The fallback exists for TypeScript narrowing
+       only — there is no realistic input that takes this branch. */
     const indent = /^(\s*)/.exec(lines[idx])?.[1] ?? "";
 
     switch (edit.type) {

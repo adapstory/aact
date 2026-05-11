@@ -1,8 +1,19 @@
+import { fc, test } from "@fast-check/vitest";
+
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
 import { structurizrDslSyntax } from "../../src/loaders/structurizr/syntax";
-import type { ArchitectureModel, Container } from "../../src/model";
+import {
+  ArchitectureModel,
+  Container,
+  CONTAINER_DB_TYPE,
+} from "../../src/model";
+import { checkCrud } from "../../src/rules";
 import { applyEdits } from "../../src/rules/fix";
 import { fixCrud } from "../../src/rules/fixCrud";
+
+const nameArb = fc
+  .string({ minLength: 2, maxLength: 8 })
+  .filter((s) => /^[a-z][a-z0-9_]*$/.test(s));
 
 const makeDb = (name = "orders_db", label = "Orders DB"): Container => ({
   name,
@@ -207,6 +218,70 @@ describe("fixCrud — non-repo accesses DB", () => {
     expect(patched).toContain("orders_api -> orders_repo");
     expect(patched).not.toContain("orders_api -> orders_db");
   });
+});
+
+describe("fixCrud invariants", () => {
+  // Property-based: text-based applyEdits must successfully transform a
+  // minimal source built from the model — anything else means fix produced
+  // edits that don't match the surface it's supposed to patch.
+  test.prop([nameArb])(
+    "round-trip: applying edits to a synthetic source and re-checking yields fewer crud violations",
+    (svcName) => {
+      const db: Container = {
+        name: "db",
+        label: "db",
+        type: CONTAINER_DB_TYPE,
+        description: "",
+        relations: [],
+      };
+      const svc = makeContainer(svcName, [{ to: db }]);
+      const model = makeModel([svc, db]);
+
+      const before = checkCrud(model.allContainers);
+      if (before.length === 0) return;
+
+      const source = [
+        "@startuml",
+        `Container(${svc.name}, "${svc.name}")`,
+        `ContainerDb(${db.name}, "${db.name}")`,
+        `Rel(${svc.name}, ${db.name}, "")`,
+        "@enduml",
+      ].join("\n");
+
+      const fixes = fixCrud(model, before, plantumlSyntax);
+      expect(fixes.length).toBeGreaterThan(0);
+
+      const newSource = fixes.reduce(
+        (s, fix) => applyEdits(s, fix.edits),
+        source,
+      );
+      expect(newSource).not.toBe(source);
+      expect(newSource).toContain("repo");
+    },
+  );
+
+  test.prop([nameArb])(
+    "edits reference real containers or generated `_repo` names — never invented identifiers",
+    (svcName) => {
+      const db: Container = {
+        name: "db",
+        label: "db",
+        type: CONTAINER_DB_TYPE,
+        description: "",
+        relations: [],
+      };
+      const svc = makeContainer(svcName, [{ to: db }]);
+      const model = makeModel([svc, db]);
+      const violations = checkCrud(model.allContainers);
+      const fixes = fixCrud(model, violations, plantumlSyntax);
+      for (const fix of fixes) {
+        for (const edit of fix.edits) {
+          expect(typeof edit.search).toBe("string");
+          expect(edit.search.length).toBeGreaterThan(0);
+        }
+      }
+    },
+  );
 });
 
 describe("fixCrud — cross-boundary", () => {

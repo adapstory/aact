@@ -1,5 +1,21 @@
-import { Container } from "../../src/model";
+import { fc, test } from "@fast-check/vitest";
+
+import { Container, CONTAINER_TYPE } from "../../src/model";
 import { checkStableDependencies } from "../../src/rules";
+
+const typeArb = fc
+  .string({ minLength: 3, maxLength: 12 })
+  .filter((s) => /^[A-Z][a-zA-Z_]*$/.test(s));
+
+const makeContainer = (
+  over: Partial<Container> & Pick<Container, "name">,
+): Container => ({
+  label: over.name,
+  type: CONTAINER_TYPE,
+  description: "",
+  relations: [],
+  ...over,
+});
 
 describe("checkStableDependencies", () => {
   it("returns no violations when unstable depends on stable", () => {
@@ -146,4 +162,25 @@ describe("checkStableDependencies", () => {
 
     expect(checkStableDependencies([a, b, c])).toHaveLength(0);
   });
+
+  // Property-based: containers of the configured externalType must be excluded
+  // from coupling calculation regardless of the literal type name used.
+  test.prop([typeArb])(
+    "containers of the configured externalType are excluded from coupling calculation",
+    (customExternalType) => {
+      const ext = makeContainer({ name: "ext", type: customExternalType });
+      const stable = makeContainer({ name: "stable" });
+      const unstable = makeContainer({
+        name: "unstable",
+        relations: [{ to: stable }, { to: ext }],
+      });
+      const withExternal = checkStableDependencies([stable, unstable, ext], {
+        externalType: customExternalType,
+      });
+      const withoutExternal = checkStableDependencies([stable, unstable], {
+        externalType: customExternalType,
+      });
+      expect(withExternal).toEqual(withoutExternal);
+    },
+  );
 });

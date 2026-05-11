@@ -57,6 +57,11 @@ const mapFromConfig = (
     })
     .map((relation) => {
       relation.name = relation.name.toLowerCase();
+      /* c8 ignore next 3 — `synonymes` is initialised empty above and
+         not populated anywhere in the current code path. The loop is
+         scaffolding for a future synonym-map feature; until then the
+         body is unreachable. Remove this ignore when synonymes gains
+         entries. */
       for (const entry of synonymes.entries()) {
         if (entry[1].includes(relation.name)) relation.name = entry[0];
       }

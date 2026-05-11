@@ -163,6 +163,22 @@ describe("checkCommonReuse", () => {
     expect(checkCommonReuse(model)).toHaveLength(0);
   });
 
+  it("ignores containers that live in allContainers but no boundary (covers !srcBoundary branch)", () => {
+    // Common when a source loader emits an external system as a top-level
+    // container with no enclosing boundary — the rule should skip it instead
+    // of throwing or treating it as a context provider/consumer.
+    const c = makeContainer("C");
+    const d = makeContainer("D", [{ to: c }]);
+    const stray = makeContainer("stray", [{ to: c }]);
+    const model: ArchitectureModel = {
+      boundaries: [makeBoundary("ctx2", [c, d])],
+      allContainers: [c, d, stray],
+    };
+
+    expect(() => checkCommonReuse(model)).not.toThrow();
+    expect(checkCommonReuse(model)).toHaveLength(0);
+  });
+
   it("returns no violations for single boundary", () => {
     const a = makeContainer("A");
     const b = makeContainer("B", [{ to: a }]);

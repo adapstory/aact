@@ -97,13 +97,4 @@ export default tseslint.config(
       "sonarjs/cognitive-complexity": "off",
     },
   },
-  {
-    // Property-based tests using `test.prop(...)` from @fast-check/vitest
-    // — sonarjs/no-empty-test-file only recognises bare `it/test/describe`
-    // and incorrectly flags these files as empty.
-    files: ["test/property/**/*.test.ts"],
-    rules: {
-      "sonarjs/no-empty-test-file": "off",
-    },
-  },
 );

@@ -199,4 +199,34 @@ describe("resolveRedirectTarget", () => {
       ),
     ).toBeUndefined();
   });
+
+  it("returns undefined when the only non-db candidate IS the owner (fallback owner path)", () => {
+    // fixDbPerService can fall back to a non-tagged first accessor as owner.
+    // If that accessor is also the sole non-db container in the boundary,
+    // findPublicApiCandidate returns it (it isn't filtered out by ownerTags),
+    // and resolveRedirectTarget must catch the `publicApi === owner` branch
+    // and bail with a warning instead of redirecting to itself.
+    const db = makeDb("orders_db");
+    const owner = makeContainer("orders_only_svc", [{ to: db }]); // NO repo/relay tag
+    const bcOrders = makeBoundary("orders", [owner, db]);
+
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const bcFulfillment = makeBoundary("fulfillment", [accessor]);
+
+    const model = makeModel([bcOrders, bcFulfillment]);
+    const map = buildContainerBoundaryMap(model);
+
+    expect(
+      resolveRedirectTarget(
+        accessor,
+        db,
+        owner,
+        "ContainerDb",
+        ["repo"],
+        model,
+        map,
+        "test",
+      ),
+    ).toBeUndefined();
+  });
 });

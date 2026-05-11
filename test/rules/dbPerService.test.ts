@@ -1,5 +1,21 @@
-import { Container } from "../../src/model";
+import { fc, test } from "@fast-check/vitest";
+
+import { Container, CONTAINER_TYPE } from "../../src/model";
 import { checkDbPerService } from "../../src/rules";
+
+const typeArb = fc
+  .string({ minLength: 3, maxLength: 12 })
+  .filter((s) => /^[A-Z][a-zA-Z_]*$/.test(s));
+
+const makeContainer = (
+  over: Partial<Container> & Pick<Container, "name">,
+): Container => ({
+  label: over.name,
+  type: CONTAINER_TYPE,
+  description: "",
+  relations: [],
+  ...over,
+});
 
 describe("checkDbPerService", () => {
   const db: Container = {
@@ -132,4 +148,31 @@ describe("checkDbPerService", () => {
 
     expect(checkDbPerService(containers)).toHaveLength(0);
   });
+
+  // Property-based: dbType branch must read the option, not the default literal.
+  test.prop([typeArb])(
+    "two services accessing the same custom-type DB fire one violation",
+    (customDbType) => {
+      const sharedDb = makeContainer({ name: "shared_db", type: customDbType });
+      const a = makeContainer({ name: "a", relations: [{ to: sharedDb }] });
+      const b = makeContainer({ name: "b", relations: [{ to: sharedDb }] });
+      const violations = checkDbPerService([a, b, sharedDb], {
+        dbType: customDbType,
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0].container).toBe("shared_db");
+    },
+  );
+
+  test.prop([typeArb])(
+    "containers accessing a non-DB-typed target never fire dbPerService",
+    (customDbType) => {
+      const fake = makeContainer({ name: "fake", type: "Container" });
+      const a = makeContainer({ name: "a", relations: [{ to: fake }] });
+      const b = makeContainer({ name: "b", relations: [{ to: fake }] });
+      expect(
+        checkDbPerService([a, b, fake], { dbType: customDbType }),
+      ).toHaveLength(0);
+    },
+  );
 });

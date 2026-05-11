@@ -1,5 +1,23 @@
-import { Container } from "../../src/model";
+import { fc, test } from "@fast-check/vitest";
+
+import { Container, CONTAINER_DB_TYPE, CONTAINER_TYPE } from "../../src/model";
 import { checkCrud } from "../../src/rules";
+
+const tagArb = fc
+  .string({ minLength: 2, maxLength: 8 })
+  .filter((s) => /^[a-z][a-z0-9_]*$/.test(s));
+
+const tagArrayArb = fc.array(tagArb, { minLength: 1, maxLength: 3 });
+
+const makeContainer = (
+  over: Partial<Container> & Pick<Container, "name">,
+): Container => ({
+  label: over.name,
+  type: CONTAINER_TYPE,
+  description: "",
+  relations: [],
+  ...over,
+});
 
 describe("checkCrud", () => {
   const db: Container = {
@@ -120,4 +138,50 @@ describe("checkCrud", () => {
 
     expect(checkCrud(containers)).toHaveLength(0);
   });
+
+  // Property-based: both branches of the rule must read repoTags from options,
+  // not a literal. v2.1.5 had a regression where the "repo with non-DB outbound"
+  // branch ignored repoTags and only the "non-repo accesses DB" branch read it.
+  test.prop([tagArrayArb])(
+    "non-repo container accessing DB always fires (first branch reads repoTags)",
+    (customRepoTags) => {
+      const db = makeContainer({ name: "db", type: CONTAINER_DB_TYPE });
+      const svc = makeContainer({ name: "svc", relations: [{ to: db }] });
+      const violations = checkCrud([svc, db], { repoTags: customRepoTags });
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain("directly accesses database");
+    },
+  );
+
+  test.prop([tagArrayArb])(
+    "container tagged with first of repoTags is treated as repo (first branch reads repoTags)",
+    (customRepoTags) => {
+      const db = makeContainer({ name: "db", type: CONTAINER_DB_TYPE });
+      const repo = makeContainer({
+        name: "repo",
+        tags: [customRepoTags[0]],
+        relations: [{ to: db }],
+      });
+      expect(checkCrud([repo, db], { repoTags: customRepoTags })).toHaveLength(
+        0,
+      );
+    },
+  );
+
+  test.prop([tagArrayArb])(
+    "repo-tagged container with non-DB outbound fires (second branch reads repoTags) — regression for v2.1.5 bug",
+    (customRepoTags) => {
+      const other = makeContainer({ name: "other" });
+      const repo = makeContainer({
+        name: "repo",
+        tags: [customRepoTags[0]],
+        relations: [{ to: other }],
+      });
+      const violations = checkCrud([repo, other], {
+        repoTags: customRepoTags,
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain("non-database dependencies");
+    },
+  );
 });

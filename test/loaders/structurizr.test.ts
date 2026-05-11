@@ -2,6 +2,7 @@ import {
   loadStructurizrElements,
   mapContainersFromStructurizr,
 } from "../../src/loaders/structurizr";
+import { structurizrDslSyntax } from "../../src/loaders/structurizr/syntax";
 import { ArchitectureModel } from "../../src/model";
 
 describe("Structurizr Loader", () => {
@@ -113,5 +114,45 @@ describe("mapContainersFromStructurizr (unit)", () => {
     const result = mapContainersFromStructurizr(workspace as never);
     const ext = result.allContainers.find((c) => c.name === "ext");
     expect(ext?.type).toBe("System_Ext");
+  });
+});
+
+describe("structurizrDslSyntax helpers", () => {
+  it("containerPattern returns DSL assignment prefix", () => {
+    expect(structurizrDslSyntax.containerPattern("orders")).toBe(
+      "orders = container",
+    );
+  });
+
+  it("containerDecl without tags emits a single-line declaration", () => {
+    expect(structurizrDslSyntax.containerDecl("orders", "Orders Service")).toBe(
+      'orders = container "Orders Service"',
+    );
+  });
+
+  it("containerDecl with tags emits a block with tags clause", () => {
+    expect(
+      structurizrDslSyntax.containerDecl("orders_acl", "Orders ACL", "acl"),
+    ).toBe('orders_acl = container "Orders ACL" {\n    tags "acl"\n}');
+  });
+
+  it("relationPattern matches a `from -> to` arrow", () => {
+    expect(structurizrDslSyntax.relationPattern("a", "b")).toBe("a -> b");
+  });
+
+  it("relationDecl emits technology in quotes when present", () => {
+    expect(structurizrDslSyntax.relationDecl("a", "b", "REST")).toBe(
+      'a -> b "REST"',
+    );
+  });
+
+  it("relationDecl with tags appends a tags block", () => {
+    expect(structurizrDslSyntax.relationDecl("a", "b", "REST", "async")).toBe(
+      'a -> b "REST" {\n    tags "async"\n}',
+    );
+  });
+
+  it("relationDecl tolerates missing technology", () => {
+    expect(structurizrDslSyntax.relationDecl("a", "b")).toBe("a -> b");
   });
 });

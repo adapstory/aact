@@ -1,7 +1,18 @@
+import { fc, test } from "@fast-check/vitest";
+
 import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
-import type { ArchitectureModel, Container } from "../../src/model";
+import {
+  ArchitectureModel,
+  Container,
+  CONTAINER_DB_TYPE,
+} from "../../src/model";
+import { checkDbPerService } from "../../src/rules";
 import { applyEdits } from "../../src/rules/fix";
 import { fixDbPerService } from "../../src/rules/fixDbPerService";
+
+const nameArb = fc
+  .string({ minLength: 2, maxLength: 8 })
+  .filter((s) => /^[a-z][a-z0-9_]*$/.test(s));
 
 const makeDb = (name = "orders_db"): Container => ({
   name,
@@ -108,6 +119,22 @@ describe("fixDbPerService", () => {
     );
     expect(results[0].edits[0].content).toContain("orders_repo");
     expect(results[0].edits[0].search).toContain("payments");
+  });
+
+  it("warns and uses the first when multiple tagged owners are present", () => {
+    const db = makeDb();
+    const repo1 = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const repo2 = makeContainer("payments_repo", [{ to: db }], ["repo"]);
+    const model = makeModel([repo1, repo2, db]);
+
+    const results = fixDbPerService(
+      model,
+      [{ container: "orders_db", message: "" }],
+      plantumlSyntax,
+    );
+    // owner = orders_repo (first tagged), redirect payments_repo → orders_repo
+    expect(results[0].edits[0].content).toContain("orders_repo");
+    expect(results[0].edits[0].search).toContain("payments_repo");
   });
 
   it("falls back to first accessor when no repo tag found", () => {
@@ -230,6 +257,29 @@ describe("fixDbPerService", () => {
     );
     expect(results[0].edits[0].content).toContain('$tags="async"');
   });
+});
+
+describe("fixDbPerService invariants", () => {
+  // Property-based: fix must tolerate any pair of service names without
+  // throwing — defensive guard for the always-returns-array contract.
+  test.prop([nameArb, nameArb])(
+    "never throws on any pair of services sharing a db",
+    (a, b) => {
+      const db: Container = {
+        name: "shared",
+        label: "shared",
+        type: CONTAINER_DB_TYPE,
+        description: "",
+        relations: [],
+      };
+      const svcA = makeContainer(a, [{ to: db }]);
+      const svcB = makeContainer(b, [{ to: db }]);
+      const model = makeModel([svcA, svcB, db]);
+      const violations = checkDbPerService(model.allContainers);
+      const result = fixDbPerService(model, violations, plantumlSyntax);
+      expect(Array.isArray(result)).toBe(true);
+    },
+  );
 });
 
 describe("fixDbPerService — cross-boundary", () => {

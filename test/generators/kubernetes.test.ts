@@ -325,6 +325,44 @@ describe("generateKubernetes", () => {
     expect(result[0].fileName).toBe("orders.yml");
   });
 
+  it("renders the full env block end-to-end (regression snapshot)", () => {
+    // Inline snapshot pins the YAML output for the canonical case —
+    // db, sync sibling, async kafka topic, external https. Any change to
+    // ordering, scalar formatting, or env-var naming shows up in the diff.
+    const db = makeContainer({ name: "orders_db", type: "ContainerDb" });
+    const payments = makeContainer({ name: "payments" });
+    const notifications = makeContainer({ name: "notifications" });
+    const ext = makeContainer({ name: "ext_api", type: "System_Ext" });
+
+    const orders = makeContainer({
+      name: "orders",
+      relations: [
+        { to: db },
+        { to: payments },
+        { to: notifications, tags: ["async"], technology: "order-events" },
+        { to: ext },
+      ],
+    });
+    const model = makeModel([orders, db, payments, notifications, ext]);
+
+    const out = generateKubernetes(model).find(
+      (r) => r.fileName === "orders.yml",
+    )!;
+    expect(out.content).toMatchInlineSnapshot(`
+      "name: orders
+      environment:
+        EXT_API_BASE_URL:
+          default: https://ext-api
+        KAFKA_NOTIFICATIONS_TOPIC:
+          default: order-events
+        PAYMENTS_BASE_URL:
+          default: http://payments:8080
+        PG_CONNECTION_STRING:
+          default: postgresql://orders:pass-orders@postgresql:5432/orders
+      "
+    `);
+  });
+
   it("round-trip: generateKubernetes output can be parsed back", () => {
     const db = makeContainer({ name: "orders_db", type: "ContainerDb" });
     const payments = makeContainer({ name: "payments" });

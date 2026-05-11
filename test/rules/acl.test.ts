@@ -1,5 +1,25 @@
-import { Container } from "../../src/model";
+import { fc, test } from "@fast-check/vitest";
+
+import { Container, CONTAINER_TYPE } from "../../src/model";
 import { checkAcl } from "../../src/rules";
+
+const tagArb = fc
+  .string({ minLength: 2, maxLength: 8 })
+  .filter((s) => /^[a-z][a-z0-9_]*$/.test(s));
+
+const typeArb = fc
+  .string({ minLength: 3, maxLength: 12 })
+  .filter((s) => /^[A-Z][a-zA-Z_]*$/.test(s));
+
+const makeContainer = (
+  over: Partial<Container> & Pick<Container, "name">,
+): Container => ({
+  label: over.name,
+  type: CONTAINER_TYPE,
+  description: "",
+  relations: [],
+  ...over,
+});
 
 describe("checkAcl", () => {
   const externalSystem: Container = {
@@ -119,4 +139,40 @@ describe("checkAcl", () => {
       checkAcl(containers, { externalType: "Legacy_System" }),
     ).toHaveLength(1);
   });
+
+  // Property-based: option-bearing branches must read the option, not literals.
+  // The class of bugs we keep fixing — "hardcoded tag where the option should
+  // be read" — only fires when the option value differs from the default, so
+  // fast-check randomizes the value on every run.
+  test.prop([tagArb, typeArb])(
+    "container without the configured `tag` calling an external of the configured `externalType` always fires",
+    (customTag, customExternalType) => {
+      const ext = makeContainer({ name: "ext", type: customExternalType });
+      const svc = makeContainer({ name: "svc", relations: [{ to: ext }] });
+      const violations = checkAcl([svc, ext], {
+        tag: customTag,
+        externalType: customExternalType,
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0].container).toBe("svc");
+    },
+  );
+
+  test.prop([tagArb, typeArb])(
+    "container WITH the configured `tag` calling an external of the configured `externalType` never fires",
+    (customTag, customExternalType) => {
+      const ext = makeContainer({ name: "ext", type: customExternalType });
+      const svc = makeContainer({
+        name: "svc",
+        tags: [customTag],
+        relations: [{ to: ext }],
+      });
+      expect(
+        checkAcl([svc, ext], {
+          tag: customTag,
+          externalType: customExternalType,
+        }),
+      ).toHaveLength(0);
+    },
+  );
 });

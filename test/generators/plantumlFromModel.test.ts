@@ -243,6 +243,66 @@ describe("generatePlantumlFromModel", () => {
     expect(result).toContain('Boundary(project, "My System")');
   });
 
+  it("renders a full model end-to-end (regression snapshot)", () => {
+    // Inline snapshot pins the full surface of the generator. Any silent
+    // change to spacing, ordering, or rendered tokens shows up in the diff
+    // and forces a reviewer to confirm the change is intentional.
+    const db = makeContainer({
+      name: "orders_db",
+      label: "Orders DB",
+      type: "ContainerDb",
+    });
+    const repo = makeContainer({
+      name: "orders_repo",
+      label: "Orders Repo",
+      tags: ["repo"],
+      relations: [{ to: db, technology: "SQL" }],
+    });
+    const ext = makeContainer({
+      name: "ext_payments",
+      label: "External Payments",
+      type: "System_Ext",
+    });
+    const api = makeContainer({
+      name: "orders_api",
+      label: "Orders API",
+      relations: [
+        { to: repo },
+        { to: ext, technology: "REST", tags: ["async"] },
+      ],
+    });
+    const boundary: Boundary = {
+      name: "orders",
+      label: "Orders Context",
+      type: "Boundary",
+      boundaries: [],
+      containers: [api, repo, db],
+    };
+    const model: ArchitectureModel = {
+      boundaries: [boundary],
+      allContainers: [api, repo, db, ext],
+    };
+
+    expect(generatePlantumlFromModel(model)).toMatchInlineSnapshot(`
+      "@startuml
+      !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+      LAYOUT_WITH_LEGEND()
+      AddRelTag("async", $lineStyle = DottedLine())
+
+      Boundary(orders, "Orders Context") {
+        Container(orders_api, "Orders API")
+        Container(orders_repo, "Orders Repo", $tags="repo")
+        ContainerDb(orders_db, "Orders DB")
+      }
+      System_Ext(ext_payments, "External Payments")
+
+      Rel(orders_api, orders_repo, "")
+      Rel(orders_api, ext_payments, "", "REST", $tags="async")
+      Rel(orders_repo, orders_db, "", "SQL")
+      @enduml"
+    `);
+  });
+
   it("does not render boundary containers as standalone", () => {
     const inside = makeContainer({ name: "inside_svc" });
     const outside = makeContainer({

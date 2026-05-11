@@ -61,12 +61,12 @@ export default defineConfig({
       // Threshold floors — current baseline minus a small buffer, so CI
       // catches regressions but does not block normal work. Ratchet up over
       // time as new branches get covered (especially via @fast-check/vitest
-      // property tests). Baseline at first commit: 96.5/88.9/99.14/97.54.
+      // property tests). Baseline at this commit: 97.32/90.82/99.57/98.36.
       thresholds: {
-        statements: 95,
-        branches: 85,
-        functions: 98,
-        lines: 95,
+        statements: 97,
+        branches: 90,
+        functions: 99,
+        lines: 98,
       },
     },
   },

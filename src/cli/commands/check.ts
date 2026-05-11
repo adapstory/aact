@@ -55,6 +55,10 @@ const getSyntax = (config: AactConfig): SourceSyntax | null => {
     }
     return structurizrDslSyntax;
   }
+  /* c8 ignore next — defensive guard. Config validation restricts
+     `source.type` to "plantuml" | "structurizr"; both branches above
+     are covered. Reaching this `return null` requires unsafe casting
+     that bypasses the config schema. */
   return null;
 };
 
