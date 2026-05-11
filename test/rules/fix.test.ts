@@ -1,3 +1,5 @@
+import consola from "consola";
+
 import { applyEdits } from "../../src/rules/fix";
 
 describe("applyEdits", () => {
@@ -94,5 +96,34 @@ describe("applyEdits", () => {
       { type: "remove", search: "NonExistentLine" },
     ]);
     expect(result).toBe(source);
+  });
+
+  it("warns with the pattern when search is not found", () => {
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    applyEdits(source, [{ type: "remove", search: "NonExistentLine" }]);
+    expect(warn).toHaveBeenCalledOnce();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("fix: pattern not found in source");
+    expect(msg).toContain("NonExistentLine");
+  });
+
+  it("warns with match count when pattern is ambiguous", () => {
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    const ambiguous = ["Container(svc)", "Container(svc)", "End"].join("\n");
+    applyEdits(ambiguous, [{ type: "remove", search: "Container(svc)" }]);
+    expect(warn).toHaveBeenCalledOnce();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("ambiguous pattern");
+    expect(msg).toContain("Container(svc)");
+    expect(msg).toContain("matches 2 lines");
+    expect(msg).toContain("using first");
+  });
+
+  it("does NOT warn about ambiguity when pattern matches exactly one line (boundary)", () => {
+    // Stryker mutated `matchCount > 1` to `>= 1` — that mutation would warn on
+    // every successful edit. The pin keeps the threshold honest.
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    applyEdits(source, [{ type: "remove", search: "Rel(svc_a, svc_b" }]);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

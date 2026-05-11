@@ -124,6 +124,51 @@ describe("checkCrud", () => {
     expect(violations[0].message).toContain("non-database dependencies");
   });
 
+  it("violation message names the database and the remediation", () => {
+    const containers: Container[] = [
+      {
+        name: "orders_service",
+        label: "Orders Service",
+        type: "Container",
+        description: "",
+        relations: [{ to: db }],
+      },
+      db,
+    ];
+    const violations = checkCrud(containers);
+    expect(violations[0].message).toBe(
+      "directly accesses database orders_db — add a repo or relay",
+    );
+  });
+
+  it("repo-with-non-db message lists offending targets verbatim", () => {
+    const other2: Container = {
+      name: "audit_svc",
+      label: "Audit",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const containers: Container[] = [
+      {
+        name: "orders_repo",
+        label: "Orders Repo",
+        type: "Container",
+        tags: ["repo"],
+        description: "",
+        relations: [{ to: db }, { to: otherService }, { to: other2 }],
+      },
+      db,
+      otherService,
+      other2,
+    ];
+
+    const violations = checkCrud(containers);
+    expect(violations[0].message).toBe(
+      "repo has non-database dependencies: notifications, audit_svc — repos should only access databases",
+    );
+  });
+
   it("returns no violations when container has no db relations", () => {
     const containers: Container[] = [
       {

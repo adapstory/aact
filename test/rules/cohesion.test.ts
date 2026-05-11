@@ -70,7 +70,42 @@ describe("checkCohesion", () => {
 
     const violations = checkCohesion(model);
     expect(violations.length).toBeGreaterThan(0);
-    expect(violations[0].message).toContain("cohesion");
+    expect(violations[0].message).toBe(
+      "coupling (1) ≥ cohesion (0) — more cross-boundary dependencies than internal connections",
+    );
+    expect(violations[0].container).toBe("ctx");
+  });
+
+  it("does NOT fire when cohesion strictly exceeds coupling (boundary)", () => {
+    // Stryker mutated `cohesion <= coupling` to `cohesion < coupling` —
+    // that would silently let through cohesion == coupling cases. Pin
+    // strict-less-than: cohesion=1, coupling=0 → no violation.
+    const a: Container = {
+      name: "a",
+      label: "A",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const b: Container = {
+      name: "b",
+      label: "B",
+      type: "Container",
+      description: "",
+      relations: [{ to: a }],
+    };
+    const model: ArchitectureModel = {
+      allContainers: [a, b],
+      boundaries: [
+        {
+          name: "ctx",
+          label: "Context",
+          boundaries: [],
+          containers: [a, b],
+        },
+      ],
+    };
+    expect(checkCohesion(model)).toHaveLength(0);
   });
 
   it("checks that parent cohesion < sum of inner cohesions", () => {
@@ -139,6 +174,42 @@ describe("checkCohesion", () => {
 
     const violations = checkCohesion(model);
     expect(violations.some((v) => v.container === "parent")).toBe(true);
+  });
+
+  it("emits the parent-vs-inner-cohesions message when applicable", () => {
+    // Model: parent has 1 inner boundary with no relations. inner.cohesion=0,
+    // sum=0. parent.cohesion=0 (no containers, sole sub-boundary contributes
+    // its coupling=0). Both checks fire (coupling ≥ cohesion, then parent
+    // ≥ inner sum). Pin the parent-vs-inner message format so a Stryker
+    // mutation emptying the string is killed.
+    const inner = {
+      name: "inner",
+      label: "Inner",
+      boundaries: [],
+      containers: [],
+    };
+    const model: ArchitectureModel = {
+      allContainers: [],
+      boundaries: [
+        {
+          name: "parent",
+          label: "Parent",
+          boundaries: [inner],
+          containers: [],
+        },
+        inner,
+      ],
+    };
+
+    const violations = checkCohesion(model);
+    const parentVsInner = violations.find(
+      (v) =>
+        v.container === "parent" && v.message.startsWith("parent cohesion"),
+    );
+    expect(parentVsInner).toBeDefined();
+    expect(parentVsInner!.message).toBe(
+      "parent cohesion (0) ≥ sum of inner cohesions (0) — parent boundary should be less cohesive than its sub-boundaries",
+    );
   });
 
   it("propagates internalType through nested boundary cohesion calculation", () => {

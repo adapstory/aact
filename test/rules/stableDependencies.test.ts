@@ -70,7 +70,68 @@ describe("checkStableDependencies", () => {
 
     const violations = checkStableDependencies([a, b, c]);
     expect(violations.length).toBeGreaterThanOrEqual(1);
-    expect(violations.some((v) => v.container === "a")).toBe(true);
+    const aViolation = violations.find((v) => v.container === "a");
+    expect(aViolation).toBeDefined();
+    // Assert message format, not just existence — Stryker showed a
+    // surviving StringLiteral mutation that emptied the message.
+    expect(aViolation!.message).toMatch(
+      /stable module \(I=\d\.\d{2}\) depends on less stable "c" \(I=\d\.\d{2}\) — dependencies should point toward stability/,
+    );
+  });
+
+  it("equal-instability A→B does NOT fire (strict-less-than boundary)", () => {
+    // Both A and B end up at I=0.5: each has one in-degree and one out-degree
+    // through the cycle. Stryker mutated `iSource < iTarget` to `<=`, which
+    // would make equal instabilities fire — this pin guards that boundary.
+    const a: Container = {
+      name: "a",
+      label: "A",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const b: Container = {
+      name: "b",
+      label: "B",
+      type: "Container",
+      description: "",
+      relations: [{ to: a }],
+    };
+    (a as { relations: Container["relations"] }).relations = [{ to: b }];
+
+    // I(a) = 1/(1+1) = 0.5, I(b) = 1/(1+1) = 0.5 → equal, no violation
+    expect(checkStableDependencies([a, b])).toHaveLength(0);
+  });
+
+  it("counts each internal relation in efferent/afferent maps (regression)", () => {
+    // a → b → c → a (cycle): every node has Ce=1, Ca=1, I=0.5 — no violation.
+    // Mutation `ce.get(c)! - 1` would make Ce=-1, perturbing I and causing
+    // spurious violations.
+    const a: Container = {
+      name: "a",
+      label: "A",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const b: Container = {
+      name: "b",
+      label: "B",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const c: Container = {
+      name: "c",
+      label: "C",
+      type: "Container",
+      description: "",
+      relations: [{ to: a }],
+    };
+    (a as { relations: Container["relations"] }).relations = [{ to: b }];
+    (b as { relations: Container["relations"] }).relations = [{ to: c }];
+
+    expect(checkStableDependencies([a, b, c])).toHaveLength(0);
   });
 
   it("returns no violations for isolated container", () => {

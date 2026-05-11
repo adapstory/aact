@@ -18,13 +18,24 @@
 export default {
   packageManager: "pnpm",
   testRunner: "vitest",
+  // Explicit plugin path — pnpm's flat-symlink layout breaks Stryker's
+  // glob-based auto-discovery, so it can't find the test runner unless we
+  // point at it by name.
+  plugins: ["@stryker-mutator/vitest-runner"],
   vitest: {
-    // Run only unit tests for mutation — integration/e2e are too slow
-    // and rely on the built CLI, not the source under mutation.
-    configFile: "vitest.config.ts",
-    project: "unit",
+    // Slimmed config that only exposes the unit suite — integration loads
+    // real fixtures and e2e spawns the built CLI, neither makes sense for
+    // mutation testing. @stryker-mutator/vitest-runner v9 has no option to
+    // pick a project from the main config, hence the dedicated file.
+    configFile: "vitest.mutation.config.ts",
   },
-  coverageAnalysis: "perTest",
+  // "perTest" is faster but skips a test when it doesn't appear to cover
+  // the mutated line. For module-level constants (e.g. ruleRegistry) the
+  // construction runs once at import time, so registry tests are not seen
+  // as "covering" those lines and Stryker reports their mutants as
+  // survived. "all" runs every test against every mutant — slower but
+  // gives an honest score.
+  coverageAnalysis: "all",
 
   // Focus on the surfaces where we have shipped this class of bugs.
   // Expand to "src/**/*.ts" once the focused score is comfortable.
@@ -36,8 +47,9 @@ export default {
     "!src/**/types.ts",
   ],
 
-  reporters: ["progress", "clear-text", "html"],
+  reporters: ["progress", "clear-text", "html", "json"],
   htmlReporter: { fileName: "reports/mutation/index.html" },
+  jsonReporter: { fileName: "reports/mutation/mutation-report.json" },
 
   // Hide the baseline noise — start with a low threshold and tighten
   // as the suite hardens.
@@ -48,6 +60,5 @@ export default {
   concurrency: 4,
   timeoutMS: 10_000,
 
-  // Speed up: skip files where no test references them at all.
-  ignoreStatic: true,
+  // ignoreStatic is incompatible with coverageAnalysis: "all".
 };

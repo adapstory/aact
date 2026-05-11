@@ -89,6 +89,41 @@ describe("checkAcl", () => {
     expect(checkAcl([])).toHaveLength(0);
   });
 
+  it("violation message uses singular 'system' for one external dependency", () => {
+    const svc: Container = {
+      name: "single",
+      label: "Single",
+      type: "Container",
+      description: "",
+      relations: [{ to: externalSystem }],
+    };
+    const violations = checkAcl([svc, externalSystem]);
+    expect(violations[0].message).toContain("external system ext_system");
+    expect(violations[0].message).not.toMatch(/external systems/);
+    expect(violations[0].message).toContain("without an ACL layer");
+  });
+
+  it("violation message uses plural 'systems' for multiple externals", () => {
+    const ext2: Container = {
+      name: "ext_b",
+      label: "Ext B",
+      type: "System_Ext",
+      description: "",
+      relations: [],
+    };
+    const svc: Container = {
+      name: "multi",
+      label: "Multi",
+      type: "Container",
+      description: "",
+      relations: [{ to: externalSystem }, { to: ext2 }],
+    };
+    const violations = checkAcl([svc, externalSystem, ext2]);
+    expect(violations[0].message).toContain("external systems");
+    expect(violations[0].message).toContain("ext_system, ext_b");
+    expect(violations[0].message).toContain("without an ACL layer");
+  });
+
   it("violation message lists all external dependencies", () => {
     const ext2: Container = {
       name: "ext_payments",

@@ -1,3 +1,5 @@
+import consola from "consola";
+
 import type { ArchitectureModel, Boundary, Container } from "../../src/model";
 import {
   buildContainerBoundaryMap,
@@ -147,6 +149,89 @@ describe("resolveRedirectTarget", () => {
         "test",
       ),
     ).toBe(publicApi);
+  });
+
+  it("warns by name+rule when cross-boundary has no public API", () => {
+    const db = makeDb("orders_db");
+    const repo = makeContainer("orders_repo", [{ to: db }], ["repo"]);
+    const bcOrders = makeBoundary("orders", [repo, db]);
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const bcFulfillment = makeBoundary("fulfillment", [accessor]);
+    const model = makeModel([bcOrders, bcFulfillment]);
+    const map = buildContainerBoundaryMap(model);
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+
+    resolveRedirectTarget(
+      accessor,
+      db,
+      repo,
+      "ContainerDb",
+      ["repo"],
+      model,
+      map,
+      "dbPerService",
+    );
+
+    expect(warn).toHaveBeenCalledOnce();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("fix dbPerService");
+    expect(msg).toContain("orders");
+    expect(msg).toContain("no public API");
+    expect(msg).toContain("fulfillment_api");
+    expect(msg).toContain("orders_db");
+  });
+
+  it("warns when only candidate IS the owner — distinct from no-API case", () => {
+    const db = makeDb("orders_db");
+    const owner = makeContainer("orders_only_svc", [{ to: db }]);
+    const bcOrders = makeBoundary("orders", [owner, db]);
+    const accessor = makeContainer("fulfillment_api", [{ to: db }]);
+    const bcFulfillment = makeBoundary("fulfillment", [accessor]);
+    const model = makeModel([bcOrders, bcFulfillment]);
+    const map = buildContainerBoundaryMap(model);
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+
+    resolveRedirectTarget(
+      accessor,
+      db,
+      owner,
+      "ContainerDb",
+      ["repo"],
+      model,
+      map,
+      "crud",
+    );
+
+    expect(warn).toHaveBeenCalledOnce();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("fix crud");
+    expect(msg).toContain("only public API candidate");
+    expect(msg).toContain("repo owner");
+    expect(msg).toContain("fulfillment_api");
+  });
+
+  it("ties are broken by toSorted order when in-degrees are equal", () => {
+    // Both candidates have the same in-degree (0). Stryker mutated the
+    // sort `(inDegree(b) ?? 0) - (inDegree(a) ?? 0)` — if the comparator
+    // breaks, an arbitrary candidate is picked. Assert that we still
+    // return SOMETHING in that case (no throw) and it's one of the two
+    // candidates — guarding the function from regressions where the
+    // comparator returns NaN.
+    const apiA = makeContainer("a_api");
+    const apiB = makeContainer("b_api");
+    const db = makeDb("orders_db");
+    const bc = makeBoundary("bc", [apiA, apiB, db]);
+    const model = makeModel([bc]);
+    const map = buildContainerBoundaryMap(model);
+
+    const result = findPublicApiCandidate(
+      bc,
+      "ContainerDb",
+      ["repo"],
+      model,
+      map,
+    );
+    expect([apiA, apiB]).toContain(result);
   });
 
   it("returns undefined when cross-boundary has no public API", () => {
