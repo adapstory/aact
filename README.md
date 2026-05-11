@@ -130,6 +130,27 @@ console.log(`Elements: ${report.elementsCount}`);
 - [ADR](ADRs/) — Architecture Decision Records
 - [Roadmap](roadmap.md) — планы развития
 
+## Testing
+
+Тестовый стек разделён на четыре уровня:
+
+```bash
+pnpm test            # все unit + integration + e2e
+pnpm test:unit       # только unit
+pnpm test:integration # интеграционные на реальных фикстурах
+pnpm test:e2e        # subprocess-тесты CLI через execa
+pnpm test:coverage   # с v8 coverage + порогами
+pnpm test:mutation   # Stryker mutation testing
+```
+
+**Метрики качества тестов:**
+
+- **Coverage** (v8): порог в CI — statements ≥97%, branches ≥90%, functions ≥99%, lines ≥98%
+- **Mutation score** (Stryker) ≥95% — каждое смысловое изменение в исходнике должно ломать хотя бы один тест
+- **Property-based** (`@fast-check/vitest`) на option-bearing правилах — защита от «hardcoded literal where option should be read» бага
+- **Inline snapshots** на генераторах для regression-pin'а формата вывода
+- **E2E** на цепочке `init → check → fix → recheck` через `npx aact` в subprocess
+
 ## Публичные материалы
 
 ### Раз архитектура — «as Code», почему бы её не покрыть тестами?!
