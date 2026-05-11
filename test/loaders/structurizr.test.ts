@@ -436,6 +436,119 @@ describe("mapContainersFromStructurizr (unit)", () => {
     expect(result.allContainers[0].type).toBe("System_Ext");
   });
 
+  it("description falls back to empty string when not provided", () => {
+    // Stryker mutated `cont.description ?? ""` → "Stryker was here!". Pin
+    // that missing description yields an empty string on the container.
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [{ id: "c", name: "svc", relationships: [] }],
+          },
+        ],
+        people: [],
+      },
+    } as never);
+    expect(result.allContainers[0].description).toBe("");
+  });
+
+  it("external system tags are parsed from comma-separated string", () => {
+    // Pin the tag splitting/trim/filter chain for processExternalSystem.
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [
+          {
+            id: "ext",
+            name: "External",
+            location: "External",
+            tags: "Critical, Vendor , ", // mixed whitespace + trailing empty
+            containers: [],
+          },
+        ],
+        people: [],
+      },
+    } as never);
+    const ext = result.allContainers.find((c) => c.name === "ext");
+    expect(ext?.tags).toEqual(["Critical", "Vendor"]);
+  });
+
+  it("external system description falls back to empty string", () => {
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [
+          { id: "ext", name: "Ext", location: "External", containers: [] },
+        ],
+        people: [],
+      },
+    } as never);
+    const ext = result.allContainers.find((c) => c.name === "ext");
+    expect(ext?.description).toBe("");
+  });
+
+  it("iterates over components without throwing (covers `for (const comp of ...)` block)", () => {
+    // Components aren't currently pushed to `containers` (only containers
+    // and people are). The components loop calls `addRelations` for each,
+    // but since components aren't in `allElements`, the relation is
+    // dropped silently. Pin: the function runs without throwing on a
+    // model that includes components.
+    expect(() =>
+      mapContainersFromStructurizr({
+        model: {
+          softwareSystems: [
+            {
+              id: "1",
+              name: "Sys",
+              containers: [
+                {
+                  id: "a",
+                  name: "A",
+                  components: [
+                    {
+                      id: "comp",
+                      name: "Comp",
+                      relationships: [{ destinationId: "b" }],
+                    },
+                  ],
+                  relationships: [],
+                },
+                { id: "b", name: "B", relationships: [] },
+              ],
+            },
+          ],
+          people: [],
+        },
+      } as never),
+    ).not.toThrow();
+  });
+
+  it("iterates over people relationships in the addRelations pass", () => {
+    // L235 BlockStatement: the people-relationship loop. With `{}` body,
+    // people's relations aren't registered. Pin: a person → container
+    // relation materialises.
+    const result = mapContainersFromStructurizr({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [{ id: "svc", name: "Svc", relationships: [] }],
+          },
+        ],
+        people: [
+          {
+            id: "user",
+            name: "User",
+            relationships: [{ destinationId: "svc" }],
+          },
+        ],
+      },
+    } as never);
+    const user = result.allContainers.find((c) => c.name === "user");
+    expect(user?.relations[0]?.to.name).toBe("svc");
+  });
+
   it("processes people with type Person", () => {
     const result = mapContainersFromStructurizr({
       model: {

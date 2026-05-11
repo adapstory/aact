@@ -309,6 +309,55 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
       expect(c.relations).toEqual([]);
     }
   });
+
+  it("renders System type from PUML", async () => {
+    const model = await loadModel(
+      "system.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'System(core, "Core System")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(model.allContainers.find((c) => c.name === "core")?.type).toBe(
+      "System",
+    );
+  });
+
+  it("renders Person type from PUML", async () => {
+    const model = await loadModel(
+      "person.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Person(user, "End User")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(model.allContainers.find((c) => c.name === "user")?.type).toBe(
+      "Person",
+    );
+  });
+
+  it("silently skips Rel() that references unknown containers (covers !containerFrom/!containerTo)", async () => {
+    // mapContainersFromPlantumlElements L16, L18: `if (!containerFrom) return;`
+    // and `if (!containerTo) return;`. Without those, push throws on
+    // undefined. Pin: a Rel() with non-existent endpoints leaves the
+    // model intact, no extra relations, no throw.
+    const model = await loadModel(
+      "missing.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Rel(ghost_from, ghost_to, "")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(model.allContainers).toHaveLength(1);
+    expect(model.allContainers[0].relations).toEqual([]);
+  });
 });
 
 describe("mapContainersFromPlantumlElements (unit)", () => {

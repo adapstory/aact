@@ -127,16 +127,23 @@ describe("fixDbPerService", () => {
     const repo1 = makeContainer("orders_repo", [{ to: db }], ["repo"]);
     const repo2 = makeContainer("payments_repo", [{ to: db }], ["repo"]);
     const model = makeModel([repo1, repo2, db]);
-    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    const calls: unknown[][] = [];
+    const original = consola.warn;
+    consola.warn = ((...args: unknown[]) => {
+      calls.push(args);
+    }) as typeof consola.warn;
+    try {
+      fixDbPerService(
+        model,
+        [{ container: "orders_db", message: "" }],
+        plantumlSyntax,
+      );
+    } finally {
+      consola.warn = original;
+    }
 
-    fixDbPerService(
-      model,
-      [{ container: "orders_db", message: "" }],
-      plantumlSyntax,
-    );
-
-    expect(warn).toHaveBeenCalled();
-    const msg = String(warn.mock.calls[0][0]);
+    expect(calls.length).toBeGreaterThan(0);
+    const msg = String(calls[0][0]);
     expect(msg).toContain("Cannot determine owner of orders_db");
     expect(msg).toContain("multiple tagged accessors");
     expect(msg).toContain("orders_repo");
