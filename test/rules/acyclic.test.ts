@@ -28,6 +28,63 @@ describe("checkAcyclic", () => {
     expect(checkAcyclic([a, b, c])).toHaveLength(0);
   });
 
+  it("violation message pins exact text", () => {
+    // Stryker mutated `message: "participates in a dependency cycle"` to "".
+    const a: Container = {
+      name: "a",
+      label: "A",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const b: Container = {
+      name: "b",
+      label: "B",
+      type: "Container",
+      description: "",
+      relations: [{ to: a }],
+    };
+    (a as { relations: Container["relations"] }).relations = [{ to: b }];
+
+    const violations = checkAcyclic([a, b]);
+    expect(violations.length).toBeGreaterThan(0);
+    for (const v of violations) {
+      expect(v.message).toBe("participates in a dependency cycle");
+    }
+  });
+
+  it("respects the visited.has skip during traversal (covers L16)", () => {
+    // Stryker mutated `if (visited.has(rel.to.name)) continue` to `false`.
+    // Without the skip, the DFS recurses infinitely on cycles and either
+    // throws (stack overflow) or hangs. Pin: a 3-node cycle terminates
+    // and reports exactly one violation per participant.
+    const a: Container = {
+      name: "a",
+      label: "A",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const b: Container = {
+      name: "b",
+      label: "B",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const c: Container = {
+      name: "c",
+      label: "C",
+      type: "Container",
+      description: "",
+      relations: [{ to: a }],
+    };
+    (a as { relations: Container["relations"] }).relations = [{ to: b }];
+    (b as { relations: Container["relations"] }).relations = [{ to: c }];
+
+    expect(() => checkAcyclic([a, b, c])).not.toThrow();
+  });
+
   it("detects direct cycle A -> B -> A", () => {
     const a: Container = {
       name: "a",

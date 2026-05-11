@@ -65,6 +65,13 @@ describe("detectNamingConvention", () => {
     ).toBe("camel");
   });
 
+  it("returns camel when hyphen ties with camel (covers strict > on camel)", () => {
+    // Stryker mutated `withHyphen > withCamel` to `>=`. With >=, a tied
+    // count (1 hyphen, 1 camel, 0 underscore) would return "kebab"; with
+    // strict >, the kebab condition fails and camel wins.
+    expect(detectNamingConvention(makeModel(["fooBar", "a-b"]))).toBe("camel");
+  });
+
   it("returns snake when no naming style dominates (covers ConditionalExpression true)", () => {
     // Stryker mutated `if (...) return \"kebab\"` to `if (true)`. With true,
     // any non-empty input returns kebab. Pin: snake_case only → snake.

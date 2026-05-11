@@ -68,6 +68,30 @@ describe("checkDbPerService", () => {
     expect(violations[0].message).toContain("payments_service");
   });
 
+  it("violation message pins exact format", () => {
+    const containers: Container[] = [
+      {
+        name: "orders_repo",
+        label: "Orders Repo",
+        type: "Container",
+        description: "",
+        relations: [{ to: db }],
+      },
+      {
+        name: "payments_service",
+        label: "Payments Service",
+        type: "Container",
+        description: "",
+        relations: [{ to: db }],
+      },
+      db,
+    ];
+    const violations = checkDbPerService(containers);
+    expect(violations[0].message).toBe(
+      "shared between orders_repo, payments_service — each database should have a single owner",
+    );
+  });
+
   it("returns no violations when no db relations", () => {
     const other: Container = {
       name: "notifications",

@@ -163,6 +163,39 @@ describe("checkCommonReuse", () => {
     expect(checkCommonReuse(model)).toHaveLength(0);
   });
 
+  it("does NOT fire when only one public service exists (covers pubNames.size < 2)", () => {
+    // Stryker mutated `if (pubNames.size < 2) continue` to `false`. With
+    // false, a single public service would fire violations for any
+    // consumer that doesn't use it. Pin: 1 public → no violations.
+    const c = makeContainer("C");
+    const a = makeContainer("A", [{ to: c }]);
+    const model = makeModel([
+      makeBoundary("ctx1", [a]),
+      makeBoundary("ctx2", [c]),
+    ]);
+    expect(checkCommonReuse(model)).toHaveLength(0);
+  });
+
+  it("violation message pins exact format", () => {
+    // Stryker mutated the message template StringLiterals. Pin format.
+    const c = makeContainer("C");
+    const d = makeContainer("D", [{ to: c }]);
+    const a = makeContainer("A", [{ to: c }]);
+    const b = makeContainer("B", [{ to: c }, { to: d }]);
+    const z = makeContainer("Z", [{ to: d }]);
+    const model = makeModel([
+      makeBoundary("ctx1", [a, b]),
+      makeBoundary("ctx2", [c, d]),
+      makeBoundary("ctx3", [z]),
+    ]);
+    const violation = checkCommonReuse(model).find(
+      (v) => v.container === "ctx3",
+    );
+    expect(violation?.message).toBe(
+      'uses D of "ctx2" but not C — all public services of a context should be used together',
+    );
+  });
+
   it("ignores containers that live in allContainers but no boundary (covers !srcBoundary branch)", () => {
     // Common when a source loader emits an external system as a top-level
     // container with no enclosing boundary — the rule should skip it instead

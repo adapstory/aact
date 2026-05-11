@@ -132,6 +132,28 @@ describe("checkApiGateway", () => {
     ).toHaveLength(1);
   });
 
+  it("falls back to empty array when technology is undefined (covers ?? [])", () => {
+    // Stryker mutated `rel.technology?.split(", ") ?? []` to use a sentinel
+    // array. With sentinel, the empty path would inject junk into the techs
+    // collection and possibly produce false positives. Pin: undefined tech
+    // produces a violation referencing the external system.
+    const containers: Container[] = [
+      {
+        name: "my_acl",
+        label: "My ACL",
+        type: "Container",
+        tags: ["acl"],
+        description: "",
+        relations: [{ to: externalSystem /* no technology */ }],
+      },
+      externalSystem,
+    ];
+    const violations = checkApiGateway(containers);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].container).toBe("my_acl");
+    expect(violations[0].message).toContain("ext_system");
+  });
+
   it("fires when relation has no technology field at all (covers `?? []` branch)", () => {
     const containers: Container[] = [
       {
