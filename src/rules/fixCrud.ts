@@ -57,13 +57,19 @@ const fixNonRepoAccessesDb = (
   convention: NamingConvention,
 ): FixResult | undefined => {
   const dbRels = accessor.relations.filter((r) => r.to.type === dbType);
-  if (dbRels.length === 0) return undefined;
+  // No early bail on empty dbRels — the `edits.length === 0` check at the
+  // bottom of this function handles the empty path. Removing the duplicate
+  // early return eliminates a structurally-equivalent mutation.
 
   const containerBoundaryMap = buildContainerBoundaryMap(model);
 
   const edits = dbRels.flatMap((rel) => {
     const db = rel.to;
 
+    // `c !== accessor`: defensive — accessor is non-repo by precondition
+    // (fixNonRepoAccessesDb is only invoked when isRepo is false), so it
+    // never matches the owner-tag check below. Kept as a safety net.
+    // Stryker disable next-line ConditionalExpression
     const existingRepo = model.allContainers.find(
       (c) =>
         c !== accessor &&

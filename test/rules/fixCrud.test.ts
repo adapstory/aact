@@ -225,6 +225,35 @@ describe("fixCrud — non-repo accesses DB", () => {
     );
   });
 
+  it("accepts existing repo with mixed relations as long as ONE reaches the db (covers .some vs .every)", () => {
+    // Stryker mutated `c.relations.some(r => r.to.name === db.name)` to
+    // `.every`. A repo with multiple relations (one to db, one to cache)
+    // satisfies `.some` (one matches) but fails `.every` (cache doesn't).
+    // Pin: such a repo IS picked as the existing repo and the redirect
+    // emits a single replace edit, not 3 "create repo" edits.
+    const db = makeDb();
+    const cache: Container = {
+      name: "orders_cache",
+      label: "Cache",
+      type: "Container",
+      description: "",
+      relations: [],
+    };
+    const repo = makeContainer(
+      "orders_repo",
+      [{ to: db }, { to: cache }],
+      ["repo"],
+    );
+    const api = makeContainer("orders_api", [{ to: db }]);
+    const model = makeModel([api, repo, db, cache]);
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results).toHaveLength(1);
+    expect(results[0].edits).toHaveLength(1); // redirect, not create
+    expect(results[0].edits[0].type).toBe("replace");
+    expect(results[0].edits[0].content).toContain("orders_repo");
+  });
+
   it("requires the candidate repo to actually reach the same db (covers .some)", () => {
     // Stryker mutated `c.relations.some(r => r.to.name === db.name)` to
     // `.every`. A tagged container with relations to unrelated targets
@@ -556,6 +585,49 @@ describe("fixCrud — cross-boundary", () => {
     expect(results[0].edits[0].type).toBe("replace");
     expect(results[0].edits[0].content).toContain("orders_public_api");
     expect(results[0].edits[0].content).not.toContain("orders_repo");
+  });
+
+  it("creates repo when accessor has no boundary (covers accessorBoundary !== undefined)", () => {
+    // Stryker mutated `accessorBoundary !== undefined &&` to `true &&`
+    // (and to `||`). With true, accessor-without-boundary would be
+    // treated as cross-boundary and bail; without mutation, the check
+    // fails and the fix proceeds to create a repo.
+    const db = makeDb();
+    const accessor = makeContainer("orders_api", [{ to: db }]);
+    // db is in a boundary; accessor floats outside (allContainers only).
+    const model: ArchitectureModel = {
+      boundaries: [
+        { name: "orders", label: "orders", containers: [db], boundaries: [] },
+      ],
+      allContainers: [accessor, db],
+    };
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results).toHaveLength(1);
+    expect(results[0].edits).toHaveLength(3); // create repo, not bail
+  });
+
+  it("creates repo when db has no boundary (covers dbBoundary !== undefined)", () => {
+    // Stryker mutated `dbBoundary !== undefined &&` to `true &&`. Same
+    // shape as above but on the db side.
+    const db = makeDb();
+    const accessor = makeContainer("orders_api", [{ to: db }]);
+    // accessor is in a boundary; db floats outside.
+    const model: ArchitectureModel = {
+      boundaries: [
+        {
+          name: "orders",
+          label: "orders",
+          containers: [accessor],
+          boundaries: [],
+        },
+      ],
+      allContainers: [accessor, db],
+    };
+
+    const results = fixCrud(model, [violation("orders_api")], plantumlSyntax);
+    expect(results).toHaveLength(1);
+    expect(results[0].edits).toHaveLength(3);
   });
 
   it("does NOT treat same-boundary access as cross-boundary (covers &&-vs-||)", () => {

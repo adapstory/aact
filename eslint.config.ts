@@ -93,6 +93,8 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/restrict-template-expressions": "off",
       "no-console": "off",
+      // vitest inline snapshots escape `$` inside backticks — we accept it.
+      "no-useless-escape": "off",
       "sonarjs/no-duplicate-string": "off",
       "sonarjs/cognitive-complexity": "off",
     },

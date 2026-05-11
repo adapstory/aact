@@ -219,6 +219,22 @@ describe("fixDbPerService", () => {
     );
   });
 
+  it("does NOT throw when a violation names a db with zero accessors (defensive)", () => {
+    // Stryker mutated `if (accessors.length <= 1) continue` to `false`.
+    // With that mutation, the empty-accessors path tries `accessors[0]`
+    // in resolveOwner and throws. Pin: zero accessors short-circuits
+    // cleanly.
+    const db = makeDb("orders_db");
+    const model = makeModel([db]);
+    expect(() =>
+      fixDbPerService(
+        model,
+        [{ container: "orders_db", message: "" }],
+        plantumlSyntax,
+      ),
+    ).not.toThrow();
+  });
+
   it("matches accessors whose tags array CONTAINS a repo tag, not requires all (.some vs .every)", () => {
     // Stryker mutated `c.tags?.some(t => ownerTags.includes(t))` to `.every`.
     // A container tagged ["repo", "internal"] passes `.some` (repo is an

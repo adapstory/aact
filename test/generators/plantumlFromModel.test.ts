@@ -224,6 +224,11 @@ describe("generatePlantumlFromModel", () => {
 
   it("wraps in project boundary when boundaryLabel is set", () => {
     const svc = makeContainer({ name: "svc", label: "Service" });
+    const standalone = makeContainer({
+      name: "ext",
+      label: "Ext",
+      type: "System_Ext",
+    });
     const boundary: Boundary = {
       name: "ctx",
       label: "Context",
@@ -233,14 +238,63 @@ describe("generatePlantumlFromModel", () => {
     };
     const model: ArchitectureModel = {
       boundaries: [boundary],
-      allContainers: [svc],
+      allContainers: [svc, standalone],
     };
 
     const result = generatePlantumlFromModel(model, {
       boundaryLabel: "My System",
     });
 
-    expect(result).toContain('Boundary(project, "My System")');
+    // Pin the wrapping shape: opening, indented inner boundary, indented
+    // standalone container, closing brace — all on their own lines with
+    // exactly two-space indent. Stryker mutated several pieces of this
+    // (indent string, closing `}`, the `.map` callbacks). Snapshot kills
+    // them in one stroke.
+
+    expect(result).toMatchInlineSnapshot(`
+      "@startuml
+      !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+      LAYOUT_WITH_LEGEND()
+      AddRelTag("async", \$lineStyle = DottedLine())
+
+      Boundary(project, "My System") {
+        Boundary(ctx, "Context") {
+          Container(svc, "Service")
+        }
+        System_Ext(ext, "Ext")
+      }
+
+      @enduml"
+    `);
+  });
+
+  it("does NOT emit $tags suffix when container.tags is an empty array", () => {
+    // Stryker mutated `container.tags && container.tags.length > 0` so
+    // that empty arrays render `$tags=""`. Pin: empty array means no
+    // $tags attribute, identical to the no-tags case.
+    const svc = makeContainer({ name: "svc", label: "Svc", tags: [] });
+    const model: ArchitectureModel = {
+      boundaries: [],
+      allContainers: [svc],
+    };
+    const result = generatePlantumlFromModel(model);
+    expect(result).toContain('Container(svc, "Svc")');
+    expect(result).not.toContain("$tags=");
+  });
+
+  it("does NOT emit $tags suffix when relation.tags is an empty array", () => {
+    const target = makeContainer({ name: "b" });
+    const source = makeContainer({
+      name: "a",
+      relations: [{ to: target, tags: [] }],
+    });
+    const model: ArchitectureModel = {
+      boundaries: [],
+      allContainers: [source, target],
+    };
+    const result = generatePlantumlFromModel(model);
+    expect(result).toContain("Rel(a, b,");
+    expect(result).not.toContain("$tags=");
   });
 
   it("renders a full model end-to-end (regression snapshot)", () => {

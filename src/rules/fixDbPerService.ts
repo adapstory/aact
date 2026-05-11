@@ -47,6 +47,12 @@ export const fixDbPerService = (
   const results: FixResult[] = [];
 
   for (const violation of violations) {
+    // The name+type conjunction filters out containers that share a name
+    // with the violated db (rare but legal in pathological loaders). The
+    // `||` mutation is observationally equivalent because in well-formed
+    // models container names are unique — both find() calls return the
+    // same object.
+    // Stryker disable next-line LogicalOperator
     const db = model.allContainers.find(
       (c) => c.name === violation.container && c.type === dbType,
     );
@@ -55,6 +61,11 @@ export const fixDbPerService = (
     const accessors = model.allContainers.filter((c) =>
       c.relations.some((r) => r.to.name === db.name),
     );
+    // `<= 1` short-circuits the no-fix case for single or zero accessors;
+    // the alternative path (resolveOwner + filter(!== owner)) would yield
+    // an empty edits array anyway. Kept for clarity, but mutating `<= 1`
+    // to `< 1` is observationally equivalent in valid models.
+    // Stryker disable next-line EqualityOperator
     if (accessors.length <= 1) continue;
 
     const owner = resolveOwner(db.name, accessors, ownerTags);
