@@ -97,6 +97,12 @@ export default tseslint.config(
       "no-useless-escape": "off",
       "sonarjs/no-duplicate-string": "off",
       "sonarjs/cognitive-complexity": "off",
+      // Test fixtures use http URLs and small inline sorts; the rules are
+      // for production code, not test data.
+      "sonarjs/no-clear-text-protocols": "off",
+      "sonarjs/no-alphabetical-sort": "off",
+      "sonarjs/no-identical-functions": "off",
+      "unicorn/import-style": "off",
     },
   },
 );
