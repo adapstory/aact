@@ -1,54 +1,39 @@
-import { analyzeArchitecture } from "../src/analyzer";
-import type { ArchitectureModel, Container } from "../src/model";
+import { analyzeArchitecture } from "../src/analyze";
+import { makeModel } from "./helpers/makeModel";
 
 describe("analyzeArchitecture", () => {
-  const db: Container = {
-    name: "orders_db",
-    label: "Orders DB",
-    type: "ContainerDb",
-    description: "",
-    relations: [],
-  };
-
-  const extSystem: Container = {
-    name: "ext_payment",
-    label: "External Payment",
-    type: "System_Ext",
-    description: "",
-    relations: [],
-  };
-
-  const svcB: Container = {
-    name: "svc_b",
-    label: "Service B",
-    type: "Container",
-    description: "",
-    relations: [{ to: db }],
-  };
-
-  const svcA: Container = {
-    name: "svc_a",
-    label: "Service A",
-    type: "Container",
-    description: "",
-    relations: [
-      { to: svcB, technology: "http" },
-      { to: extSystem, technology: "https://api.ext.com" },
-      { to: svcB, tags: ["async"] },
+  const model = makeModel({
+    containers: [
+      { name: "orders_db", label: "Orders DB", kind: "ContainerDb" },
+      {
+        name: "ext_payment",
+        label: "External Payment",
+        kind: "System",
+        external: true,
+      },
+      {
+        name: "svc_b",
+        label: "Service B",
+        relations: [{ to: "orders_db" }],
+      },
+      {
+        name: "svc_a",
+        label: "Service A",
+        relations: [
+          { to: "svc_b", technology: "http" },
+          { to: "ext_payment", technology: "https://api.ext.com" },
+          { to: "svc_b", tags: ["async"] },
+        ],
+      },
     ],
-  };
-
-  const model: ArchitectureModel = {
     boundaries: [
       {
         name: "project",
         label: "Project",
-        containers: [svcA, svcB, db, extSystem],
-        boundaries: [],
+        containerNames: ["svc_a", "svc_b", "orders_db", "ext_payment"],
       },
     ],
-    allContainers: [svcA, svcB, db, extSystem],
-  };
+  });
 
   it("counts elements", () => {
     const { report } = analyzeArchitecture(model);
@@ -57,13 +42,13 @@ describe("analyzeArchitecture", () => {
 
   it("counts sync API calls", () => {
     const { report } = analyzeArchitecture(model);
-    // svcA→svcB (http) and svcA→extSystem (System_Ext, non-async)
+    // svc_a→svc_b (http) and svc_a→ext_payment (external System, non-async)
     expect(report.syncApiCalls).toBe(2);
   });
 
   it("counts async API calls", () => {
     const { report } = analyzeArchitecture(model);
-    // svcA→svcB (async tag)
+    // svc_a→svc_b (async tag)
     expect(report.asyncApiCalls).toBe(1);
   });
 
@@ -85,51 +70,27 @@ describe("analyzeArchitecture", () => {
     // parent → [domainA (svc1→svc2), domainB (svc3)]
     // svc1→svc2: cohesion for domainA, cohesion for parent
     // svc1→svc3: coupling for domainA (sibling), cohesion for parent
-    const svc2: Container = {
-      name: "svc2",
-      label: "Svc2",
-      type: "Container",
-      description: "",
-      relations: [],
-    };
-    const svc3: Container = {
-      name: "svc3",
-      label: "Svc3",
-      type: "Container",
-      description: "",
-      relations: [],
-    };
-    const svc1: Container = {
-      name: "svc1",
-      label: "Svc1",
-      type: "Container",
-      description: "",
-      relations: [{ to: svc2 }, { to: svc3 }],
-    };
-
-    const domainA = {
-      name: "domainA",
-      label: "Domain A",
-      containers: [svc1, svc2],
-      boundaries: [],
-    };
-    const domainB = {
-      name: "domainB",
-      label: "Domain B",
-      containers: [svc3],
-      boundaries: [],
-    };
-    const parent = {
-      name: "parent",
-      label: "Parent",
-      containers: [],
-      boundaries: [domainA, domainB],
-    };
-
-    const nestedModel: ArchitectureModel = {
-      boundaries: [parent, domainA, domainB],
-      allContainers: [svc1, svc2, svc3],
-    };
+    const nestedModel = makeModel({
+      containers: [
+        { name: "svc1", relations: [{ to: "svc2" }, { to: "svc3" }] },
+        { name: "svc2" },
+        { name: "svc3" },
+      ],
+      boundaries: [
+        {
+          name: "parent",
+          label: "Parent",
+          boundaryNames: ["domainA", "domainB"],
+        },
+        {
+          name: "domainA",
+          label: "Domain A",
+          containerNames: ["svc1", "svc2"],
+        },
+        { name: "domainB", label: "Domain B", containerNames: ["svc3"] },
+      ],
+      rootBoundaryNames: ["parent"],
+    });
 
     it("counts cohesion within sub-boundary", () => {
       const { report } = analyzeArchitecture(nestedModel);
@@ -157,36 +118,21 @@ describe("analyzeArchitecture", () => {
 
     it("attributes out-of-parent relation to parent.coupling, not child", () => {
       // svc1 also connects to an external system outside any boundary
-      const ext: Container = {
-        name: "ext",
-        label: "Ext",
-        type: "System_Ext",
-        description: "",
-        relations: [],
-      };
-      const svc1ext: Container = {
-        name: "svc1",
-        label: "Svc1",
-        type: "Container",
-        description: "",
-        relations: [{ to: ext }],
-      };
-      const domainAext = {
-        name: "domainA",
-        label: "Domain A",
-        containers: [svc1ext],
-        boundaries: [],
-      };
-      const parentExt = {
-        name: "parent",
-        label: "Parent",
-        containers: [],
-        boundaries: [domainAext],
-      };
-      const m: ArchitectureModel = {
-        boundaries: [parentExt, domainAext],
-        allContainers: [svc1ext, ext],
-      };
+      const m = makeModel({
+        containers: [
+          { name: "svc1", relations: [{ to: "ext" }] },
+          { name: "ext", kind: "System", external: true },
+        ],
+        boundaries: [
+          { name: "parent", label: "Parent", boundaryNames: ["domainA"] },
+          {
+            name: "domainA",
+            label: "Domain A",
+            containerNames: ["svc1"],
+          },
+        ],
+        rootBoundaryNames: ["parent"],
+      });
       const { report } = analyzeArchitecture(m);
       const a = report.boundaries.find((b) => b.name === "domainA")!;
       const p = report.boundaries.find((b) => b.name === "parent")!;
