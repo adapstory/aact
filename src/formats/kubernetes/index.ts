@@ -15,7 +15,3 @@ export const kubernetesFormat: Format = {
   name: "kubernetes",
   generate,
 };
-
-
-
-export {generate} from "./generate";

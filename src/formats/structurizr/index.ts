@@ -14,8 +14,3 @@ export const structurizrFormat: Format = {
   load,
   fix: { syntax: structurizrDslSyntax },
 };
-
-
-
-export {load} from "./load";
-export {structurizrDslSyntax} from "./syntax";

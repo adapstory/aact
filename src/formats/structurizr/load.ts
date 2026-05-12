@@ -7,11 +7,6 @@ import { buildModel } from "../../model";
 import { inferKindFromTechnology } from "../_shared/kindHeuristics";
 import { parseCsvTags } from "../_shared/tags";
 import type { LoadResult } from "../types";
-import {
-  STRUCTURIZR_INTERACTION_ASYNC,
-  STRUCTURIZR_LOCATION_EXTERNAL,
-  STRUCTURIZR_TAG_ASYNC,
-} from "./dslTypes";
 import type {
   StructurizrContainer,
   StructurizrPerson,
@@ -19,6 +14,11 @@ import type {
   StructurizrRelationship,
   StructurizrSoftwareSystem,
   StructurizrWorkspace,
+} from "./types";
+import {
+  STRUCTURIZR_INTERACTION_ASYNC,
+  STRUCTURIZR_LOCATION_EXTERNAL,
+  STRUCTURIZR_TAG_ASYNC,
 } from "./types";
 
 /** Resolve human-readable name через `structurizr.dsl.identifier` property,

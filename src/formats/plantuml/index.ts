@@ -10,9 +10,3 @@ export const plantumlFormat: Format = {
   generate,
   fix: { syntax: plantumlSyntax },
 };
-
-
-
-export {generate} from "./generate";
-export {load} from "./load";
-export {plantumlSyntax} from "./syntax";
