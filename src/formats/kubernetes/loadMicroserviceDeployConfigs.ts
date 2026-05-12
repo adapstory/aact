@@ -5,7 +5,7 @@ import YAML from "yaml";
 
 import { DeployConfig } from "./deployConfig";
 
-const DEFAULT_DEPLOYS_PATH = path.join("resources/kubernetes", "microservices");
+const DEFAULT_DEPLOYS_PATH = path.join("fixtures/kubernetes", "microservices");
 const DEFAULT_EXCLUDE = ["migrator", "platform", "citest", "tests"];
 
 export interface LoadDeployConfigsOptions {

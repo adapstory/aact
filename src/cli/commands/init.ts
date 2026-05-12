@@ -29,7 +29,7 @@ const config: AactConfig = {
 
   // PlantUML generation from Kubernetes configs (aact generate)
   // generate: {
-  //   kubernetes: { path: "./resources/kubernetes" },
+  //   kubernetes: { path: "./fixtures/kubernetes" },
   //   boundaryLabel: "Our system",
   // },
 };
