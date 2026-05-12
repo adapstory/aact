@@ -1,37 +1,36 @@
-import { analyzeArchitecture } from "../../src/analyzer";
-import { generateKubernetes } from "../../src/generators/kubernetes";
-import { generatePlantumlFromModel } from "../../src/generators/plantumlFromModel";
-import { loadStructurizrElements } from "../../src/loaders/structurizr";
-import { ArchitectureModel } from "../../src/model";
+import { analyzeArchitecture } from "../../src/analyze";
+import { kubernetesFormat } from "../../src/formats/kubernetes";
+import { plantumlFormat } from "../../src/formats/plantuml";
+import { load } from "../../src/formats/structurizr/load";
+import type { Model } from "../../src/model";
+import { allContainers } from "../../src/model";
 import {
-  checkAcl,
-  checkAcyclic,
-  checkCohesion,
-  checkCrud,
-  checkDbPerService,
+  aclRule,
+  acyclicRule,
+  crudRule,
+  dbPerServiceRule,
 } from "../../src/rules";
+import { cohesionRule } from "../../src/rules/cohesion";
 
 describe("Microservices (Structurizr)", () => {
-  let model: ArchitectureModel;
+  let model: Model;
 
   beforeAll(async () => {
-    model = await loadStructurizrElements(
-      "resources/architecture/workspace.json",
-    );
+    const result = await load("fixtures/architecture/workspace.json");
+    model = result.model;
   });
 
   it("loads containers, boundaries, and relations", () => {
-    expect(model.allContainers.length).toBeGreaterThan(0);
-    expect(model.boundaries.length).toBeGreaterThan(0);
-
-    const withRelations = model.allContainers.filter(
+    expect(allContainers(model).length).toBeGreaterThan(0);
+    expect(Object.values(model.boundaries).length).toBeGreaterThan(0);
+    const withRelations = allContainers(model).filter(
       (c) => c.relations.length > 0,
     );
     expect(withRelations.length).toBeGreaterThan(0);
   });
 
   it("ACL — only acl-tagged containers depend on externals", () => {
-    const violations = checkAcl(model.allContainers);
+    const violations = aclRule.check(model);
     for (const v of violations) {
       console.log(`${v.container}: ${v.message}`);
     }
@@ -39,22 +38,19 @@ describe("Microservices (Structurizr)", () => {
   });
 
   it("Acyclic — no dependency cycles", () => {
-    const violations = checkAcyclic(model.allContainers);
-    expect(violations).toHaveLength(0);
+    expect(acyclicRule.check(model)).toHaveLength(0);
   });
 
   it("DB per service — each database accessed by single service", () => {
-    const violations = checkDbPerService(model.allContainers);
-    expect(violations).toHaveLength(0);
+    expect(dbPerServiceRule.check(model)).toHaveLength(0);
   });
 
   it("CRUD — only repo-tagged containers access databases", () => {
-    const violations = checkCrud(model.allContainers);
-    expect(violations).toHaveLength(0);
+    expect(crudRule.check(model)).toHaveLength(0);
   });
 
   it("Cohesion — boundaries have more cohesion than coupling", () => {
-    const violations = checkCohesion(model);
+    const violations = cohesionRule.check(model);
     for (const v of violations) {
       console.log(`${v.container}: ${v.message}`);
     }
@@ -63,26 +59,24 @@ describe("Microservices (Structurizr)", () => {
 
   it("analyzeArchitecture returns metrics", () => {
     const { report } = analyzeArchitecture(model);
-
     expect(report.elementsCount).toBeGreaterThan(0);
     expect(report.boundaries.length).toBeGreaterThan(0);
     expect(report.databases.count).toBeGreaterThanOrEqual(0);
   });
 
   it("generates Kubernetes configs from model", () => {
-    const outputs = generateKubernetes(model);
-
-    expect(outputs.length).toBeGreaterThan(0);
-    for (const output of outputs) {
-      expect(output.fileName).toMatch(/\.yml$/);
-      expect(output.content).toContain("name:");
+    const output = kubernetesFormat.generate!(model);
+    expect(output.files.length).toBeGreaterThan(0);
+    for (const file of output.files) {
+      expect(file.path).toMatch(/\.yml$/);
+      expect(file.content).toContain("name:");
     }
   });
 
   it("generates valid PlantUML from model", () => {
-    const puml = generatePlantumlFromModel(model);
-
-    expect(puml).toContain("@startuml");
-    expect(puml).toContain("@enduml");
+    const output = plantumlFormat.generate!(model);
+    expect(output.files).toHaveLength(1);
+    expect(output.files[0].content).toContain("@startuml");
+    expect(output.files[0].content).toContain("@enduml");
   });
 });
