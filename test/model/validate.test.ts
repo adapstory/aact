@@ -244,6 +244,107 @@ describe("validateModel", () => {
     });
   });
 
+  it.each([
+    "Person",
+    "System",
+    "Container",
+    "ContainerDb",
+    "ContainerQueue",
+    "Component",
+    "ComponentDb",
+    "ComponentQueue",
+  ])("accepts known kind: %s (no unknown-kind issue)", (kind) => {
+    // Exhaustive — covers every entry in KNOWN_KINDS. Без таких тестов
+    // Stryker может мутировать "Person" / "ContainerDb" / etc. на пустые
+    // строки и валидный input будет давать unknown-kind issues.
+    const { model } = buildModel({
+      containers: [
+        {
+          name: "x",
+          label: "x",
+          kind: kind as never,
+          external: false,
+          description: "",
+          tags: [],
+          relations: [],
+        },
+      ],
+      boundaries: [],
+      rootBoundaryNames: [],
+    });
+    expect(
+      validateModel(model).filter((i) => i.kind === "unknown-kind"),
+    ).toHaveLength(0);
+  });
+
+  it("cycle path: 3-node chain a→b→c→a contains all participating nodes", () => {
+    // Stryker mutates the while-loop reconstruction (cursor walk, unshift
+    // calls, path equality check). A closed cycle path должна содержать
+    // все три узла (длинна ≥3, все имена присутствуют).
+    const { model } = buildModel({
+      containers: [],
+      boundaries: [
+        {
+          name: "a",
+          label: "a",
+          kind: "System",
+          tags: [],
+          containerNames: [],
+          boundaryNames: ["b"],
+        },
+        {
+          name: "b",
+          label: "b",
+          kind: "System",
+          tags: [],
+          containerNames: [],
+          boundaryNames: ["c"],
+        },
+        {
+          name: "c",
+          label: "c",
+          kind: "System",
+          tags: [],
+          containerNames: [],
+          boundaryNames: ["a"],
+        },
+      ],
+      rootBoundaryNames: ["a"],
+    });
+    const cycles = validateModel(model).filter(
+      (i) => i.kind === "boundary-cycle",
+    );
+    expect(cycles.length).toBeGreaterThan(0);
+    const cycle = cycles[0];
+    if (cycle.kind !== "boundary-cycle") throw new Error("unreachable");
+    expect(cycle.path).toContain("a");
+    expect(cycle.path).toContain("b");
+    expect(cycle.path).toContain("c");
+    expect(cycle.path.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("self-loop boundary detected as cycle", () => {
+    // Boundary a → a. Stryker mutates cycle entry condition (c === GRAY).
+    const { model } = buildModel({
+      containers: [],
+      boundaries: [
+        {
+          name: "a",
+          label: "a",
+          kind: "System",
+          tags: [],
+          containerNames: [],
+          boundaryNames: ["a"],
+        },
+      ],
+      rootBoundaryNames: ["a"],
+    });
+    const cycles = validateModel(model).filter(
+      (i) => i.kind === "boundary-cycle",
+    );
+    expect(cycles.length).toBeGreaterThan(0);
+  });
+
   it("forwards preIssues from loader through buildModel result", () => {
     const { issues } = buildModel({
       containers: [],

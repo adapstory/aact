@@ -589,6 +589,228 @@ describe("structurizr load — people", () => {
   });
 });
 
+describe("structurizr load — properties forwarding", () => {
+  it("preserves arbitrary string properties on container", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "c",
+                name: "Svc",
+                properties: { archetype: "Microservice", owner: "team-a" },
+                relationships: [],
+              },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "c")?.properties).toEqual({
+      archetype: "Microservice",
+      owner: "team-a",
+    });
+  });
+
+  it("filters out non-string property values (toProperties typeof check)", async () => {
+    // Pin the `typeof entry[1] === "string"` filter — non-string values
+    // (numbers, nested objects from LikeC4) must NOT leak through.
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "c",
+                name: "Svc",
+                properties: {
+                  good: "value",
+                  // @ts-expect-error — testing runtime filter
+                  numeric: 42,
+                  // @ts-expect-error — testing runtime filter
+                  nested: { key: "val" },
+                },
+                relationships: [],
+              },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "c")?.properties).toEqual({ good: "value" });
+  });
+
+  it("returns undefined for container with no properties", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [{ id: "c", name: "Svc", relationships: [] }],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "c")?.properties).toBeUndefined();
+  });
+
+  it("returns undefined when all properties filtered out (entries.length===0)", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "c",
+                name: "Svc",
+                properties: {
+                  // @ts-expect-error — all values non-string
+                  bad: 42,
+                },
+                relationships: [],
+              },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "c")?.properties).toBeUndefined();
+  });
+});
+
+describe("structurizr load — relation field preservation", () => {
+  it("preserves rel.description as relation.description", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  {
+                    destinationId: "b",
+                    description: "calls",
+                    technology: "REST",
+                  },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].description).toBe("calls");
+  });
+
+  it("description=undefined when not provided in rel", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [{ destinationId: "b" }],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].description).toBeUndefined();
+  });
+});
+
+describe("structurizr load — boundary metadata", () => {
+  it("preserves boundary tags from system tags", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            tags: "domain, public",
+            containers: [],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(model.boundaries[1]?.tags).toEqual(["domain", "public"]);
+  });
+
+  it("internal SoftwareSystem relationships are silently dropped (documented limitation)", async () => {
+    // Pin documented behavior: relations on internal SoftwareSystem are NOT
+    // pushed into the resulting Boundary (it has no relations). Otherwise
+    // we'd silently produce data not in v3 Model contract.
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "sys_a",
+            name: "Sys A",
+            relationships: [{ destinationId: "sys_b" }],
+            containers: [],
+          },
+          {
+            id: "sys_b",
+            name: "Sys B",
+            containers: [],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(allContainers(model)).toHaveLength(0);
+    expect(model.boundaries.sys_a?.containerNames).toEqual([]);
+  });
+
+  it("multiple internal SoftwareSystems each become a root boundary", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "alpha",
+            name: "Alpha",
+            containers: [{ id: "a1", name: "A1", relationships: [] }],
+          },
+          {
+            id: "beta",
+            name: "Beta",
+            containers: [{ id: "b1", name: "B1", relationships: [] }],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(model.rootBoundaryNames).toContain("alpha");
+    expect(model.rootBoundaryNames).toContain("beta");
+  });
+});
+
 describe("structurizrDslSyntax helpers", () => {
   it("containerPattern returns DSL assignment prefix", () => {
     expect(structurizrDslSyntax.containerPattern("orders")).toBe(

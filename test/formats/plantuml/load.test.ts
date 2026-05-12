@@ -215,6 +215,183 @@ describe("PlantUML load — unit", () => {
     },
   );
 
+  it("Container without technology arg has technology=undefined", async () => {
+    const model = await loadFromContent(
+      "no-tech.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(svc, "Svc")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "svc")?.technology).toBeUndefined();
+  });
+
+  it("Container with technology arg preserves it", async () => {
+    const model = await loadFromContent(
+      "tech-arg.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(svc, "Svc", "Spring Boot")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "svc")?.technology).toBe("Spring Boot");
+  });
+
+  it("Person ignores technology slot (Context, no techn field)", async () => {
+    // Pin: technology populated только когда `techn` IN el AND non-empty.
+    // Person doesn't have techn → must stay undefined.
+    const model = await loadFromContent(
+      "person-no-tech.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Person(user, "User")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "user")?.technology).toBeUndefined();
+  });
+
+  it("Container with explicit description fills the description field", async () => {
+    const model = await loadFromContent(
+      "with-desc.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(svc, "Svc", "tech", "Detailed purpose")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "svc")?.description).toBe("Detailed purpose");
+  });
+
+  it("Container without description has empty-string description (covers el.descr || '')", async () => {
+    const model = await loadFromContent(
+      "no-desc.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(svc, "Svc")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "svc")?.description).toBe("");
+  });
+
+  it("Rel preserves description from label arg", async () => {
+    const model = await loadFromContent(
+      "rel-desc.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "calls")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0].description).toBe("calls");
+  });
+
+  it("Rel without technology has technology=undefined (covers rel.techn || undefined)", async () => {
+    const model = await loadFromContent(
+      "rel-no-tech.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0].technology).toBeUndefined();
+  });
+
+  it("Rel without label has description=undefined", async () => {
+    const model = await loadFromContent(
+      "rel-empty-label.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0].description).toBeUndefined();
+  });
+
+  it("Rel preserves technology from techn arg", async () => {
+    const model = await loadFromContent(
+      "rel-with-tech.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "calls", "REST")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0].technology).toBe("REST");
+  });
+
+  it("Rel without tags has tags=[] (covers parseCsvTags empty)", async () => {
+    const model = await loadFromContent(
+      "rel-no-tags.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "x")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0].tags).toEqual([]);
+  });
+
+  it("Comment elements are ignored by normalizeRelBack (covers instanceof Comment continue)", async () => {
+    // Comments before Rel_Back must not interfere with swap logic.
+    const model = await loadFromContent(
+      "comment-rel-back.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        "' top-level comment",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        "' another comment",
+        'Rel_Back(a, b, "test")',
+        "@enduml",
+      ].join("\n"),
+    );
+    // Rel_Back(a,b) → swap → b → a
+    expect(getContainer(model, "b")?.relations[0].to).toBe("a");
+  });
+
+  it("non-Rel_Back relation in normalizeRelBack scope stays untouched (instanceof Stdlib_C4_Dynamic_Rel guard)", async () => {
+    const model = await loadFromContent(
+      "rel-normal-untouched.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "x")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0].to).toBe("b");
+    expect(getContainer(model, "b")?.relations ?? []).toHaveLength(0);
+  });
+
   it.each([
     ["System_Boundary", "System"],
     ["Container_Boundary", "Container"],
