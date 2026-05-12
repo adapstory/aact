@@ -26,17 +26,34 @@ import {
 const dslId = (id: string, properties?: StructurizrProperties): string =>
   properties?.["structurizr.dsl.identifier"] ?? id;
 
-/** Все user-properties (включая archetype если есть) preserved для round-trip.
- * Single string values only — nested objects/arrays из LikeC4 не поддерживаются. */
+/**
+ * Composite properties bag: user-defined + group (как prefix `group`) +
+ * perspectives (как `perspective.<name>` + опциональный `perspective.<name>.value`).
+ *
+ * Solution Architect добавляет perspectives (security/scalability/ops view)
+ * к одной модели — сохраняем для round-trip без потерь. Без этого rules не
+ * увидят что у container'а есть security-related metadata.
+ */
 const toProperties = (
-  props: StructurizrProperties | undefined,
+  base: StructurizrProperties | undefined,
+  group?: string,
+  perspectives?: Record<string, { description: string; value?: string }>,
 ): Container["properties"] => {
-  if (!props) return undefined;
-  const entries = Object.entries(props).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
-  );
-  if (entries.length === 0) return undefined;
-  return Object.freeze(Object.fromEntries(entries));
+  const out: Record<string, string> = {};
+  if (base) {
+    for (const [k, v] of Object.entries(base)) {
+      if (typeof v === "string") out[k] = v;
+    }
+  }
+  if (group !== undefined && group.length > 0) out.group = group;
+  if (perspectives) {
+    for (const [name, p] of Object.entries(perspectives)) {
+      out[`perspective.${name}`] = p.description;
+      if (p.value !== undefined) out[`perspective.${name}.value`] = p.value;
+    }
+  }
+  if (Object.keys(out).length === 0) return undefined;
+  return Object.freeze(out);
 };
 
 const isExternal = (system: StructurizrSoftwareSystem): boolean =>
@@ -51,7 +68,8 @@ const buildPersonContainer = (p: StructurizrPerson): Container => ({
   description: p.description ?? "",
   tags: parseCsvTags(p.tags),
   relations: [],
-  properties: toProperties(p.properties),
+  link: p.url,
+  properties: toProperties(p.properties, p.group, p.perspectives),
 });
 
 const buildExternalSystemContainer = (
@@ -64,7 +82,8 @@ const buildExternalSystemContainer = (
   description: s.description ?? "",
   tags: parseCsvTags(s.tags),
   relations: [],
-  properties: toProperties(s.properties),
+  link: s.url,
+  properties: toProperties(s.properties, s.group, s.perspectives),
 });
 
 const buildContainer = (c: StructurizrContainer): Container => ({
@@ -76,7 +95,8 @@ const buildContainer = (c: StructurizrContainer): Container => ({
   technology: c.technology,
   tags: parseCsvTags(c.tags),
   relations: [],
-  properties: toProperties(c.properties),
+  link: c.url,
+  properties: toProperties(c.properties, c.group, c.perspectives),
 });
 
 const buildSystemBoundary = (s: StructurizrSoftwareSystem): Boundary => ({
@@ -87,7 +107,8 @@ const buildSystemBoundary = (s: StructurizrSoftwareSystem): Boundary => ({
   tags: parseCsvTags(s.tags),
   containerNames: (s.containers ?? []).map((c) => dslId(c.id, c.properties)),
   boundaryNames: [],
-  properties: toProperties(s.properties),
+  link: s.url,
+  properties: toProperties(s.properties, s.group, s.perspectives),
 });
 
 const buildRelation = (
@@ -104,6 +125,8 @@ const buildRelation = (
     description: rel.description,
     technology: rel.technology,
     tags,
+    link: rel.url,
+    properties: toProperties(rel.properties, undefined, rel.perspectives),
   };
 };
 

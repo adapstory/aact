@@ -19,13 +19,53 @@ import type { LoadResult } from "../types";
 import { filterElements } from "./lib/filterElements";
 
 /**
- * plantuml-parser 0.4 не поддерживает $tags="..." named syntax — pre-transform
- * конвертит в positional строку. Это легаси-hack из v2: `$tags="X"` становится
- * `"X"` в позиции descr/etc. в зависимости от macro signature. Сохраняем для
- * compatibility с existing .puml fixtures.
+ * plantuml-parser 0.4 не поддерживает named-arg syntax `$tags="..."`. Мы
+ * перепаковываем такие named args в positional с unique marker prefix —
+ * loader потом извлекает их из любой positional slot без конфликта с
+ * real values в той же позиции.
+ *
+ * Old hack (just strip $tags=, leave bare value) ломался на реальных
+ * sprites: `Container(svc, "L", "Java", "D", "java-logo")` parser давал
+ * sprite="java-logo", и loader не отличал от sprite-как-tags fallback.
  */
-const preTransformDollarTags = (raw: string): string =>
-  raw.replaceAll(/, \$tags=(".+?")/g, ", $1").replaceAll('""', '" "');
+const TAGS_MARKER = "__aact_tags__:";
+const LINK_MARKER = "__aact_link__:";
+const SPRITE_MARKER = "__aact_sprite__:";
+
+const preTransformNamedArgs = (raw: string): string =>
+  raw
+    .replaceAll(/, \$tags="(.+?)"/g, `, "${TAGS_MARKER}$1"`)
+    .replaceAll(/, \$link="(.+?)"/g, `, "${LINK_MARKER}$1"`)
+    .replaceAll(/, \$sprite="(.+?)"/g, `, "${SPRITE_MARKER}$1"`)
+    .replaceAll('""', '" "');
+
+const stripMarker = (
+  value: string | undefined,
+  marker: string,
+): string | undefined =>
+  value && value.startsWith(marker) ? value.slice(marker.length) : undefined;
+
+/** Возвращает первое не-undefined значение из slot'ов после strip'а marker'а. */
+const extractMarked = (
+  marker: string,
+  ...slots: (string | undefined)[]
+): string | undefined => {
+  for (const slot of slots) {
+    const v = stripMarker(slot, marker);
+    if (v !== undefined) return v;
+  }
+  return undefined;
+};
+
+/** Возвращает slot value если в нём НЕТ ни одного из marker'ов, иначе undefined. */
+const cleanSlot = (
+  value: string | undefined,
+  ...markers: string[]
+): string | undefined => {
+  if (!value) return undefined;
+  if (markers.some((m) => value.startsWith(m))) return undefined;
+  return value;
+};
 
 /**
  * Rel_Back (обратное направление стрелки) семантически = Rel(to, from). Swap
@@ -43,6 +83,8 @@ const normalizeRelBack = (elements: UMLElement[]): void => {
   }
 };
 
+const ALL_MARKERS = [TAGS_MARKER, LINK_MARKER, SPRITE_MARKER];
+
 const buildContainer = (
   el: Stdlib_C4_Context | Stdlib_C4_Container_Component,
 ): Container => {
@@ -51,47 +93,98 @@ const buildContainer = (
   const external = macroKind?.external ?? false;
 
   // Container_Component variants имеют `techn` (4-й позиционный); Context
-  // (Person/System) — нет. TS narrowing через instanceof выбрал бы один,
-  // но проще проверить наличие поля.
-  const technology =
-    "techn" in el && typeof el.techn === "string" && el.techn.length > 0
-      ? el.techn
-      : undefined;
+  // (Person/System) — нет. instanceof narrow обходит через "techn" in el.
+  const rawTechn =
+    "techn" in el && typeof el.techn === "string" ? el.techn : undefined;
 
-  // plantuml-parser 0.4 не поддерживает $tags="X" named syntax — pre-transform
-  // конвертит в positional. На контейнерах с `Container(alias, label, $tags="X")`
-  // значение приземляется в slot sprite (position 5), не tags (position 6).
-  // Fallback: если tags пусты, а sprite выглядит как tag-list — читаем sprite
-  // как tags. Backward-compat с old aact-стиль writer'ом + user'ами писавшими
-  // `$tags=` без full positional pad.
-  const explicitTags = parseCsvTags(el.tags);
-  const spriteValue = el.sprite || "";
-  const usedSpriteAsTags = explicitTags.length === 0 && spriteValue.length > 0;
-  const tags = usedSpriteAsTags ? parseCsvTags(spriteValue) : explicitTags;
-  const sprite = usedSpriteAsTags ? undefined : spriteValue || undefined;
+  // Named args ($tags=, $link=, $sprite=) могут приземлиться в любой
+  // positional slot в зависимости от того, сколько positional уже
+  // заполнено. Извлекаем по marker'у независимо от позиции.
+  const taggedValue = extractMarked(
+    TAGS_MARKER,
+    rawTechn,
+    el.descr,
+    el.sprite,
+    el.tags,
+    el.link,
+  );
+  const linkValue = extractMarked(
+    LINK_MARKER,
+    rawTechn,
+    el.descr,
+    el.sprite,
+    el.tags,
+    el.link,
+  );
+  const spriteNamedValue = extractMarked(
+    SPRITE_MARKER,
+    rawTechn,
+    el.descr,
+    el.sprite,
+    el.tags,
+    el.link,
+  );
 
   return {
     name: el.alias,
     label: el.label,
     kind,
     external,
-    description: el.descr || "",
-    technology,
-    tags,
-    sprite,
+    description: cleanSlot(el.descr, ...ALL_MARKERS) ?? "",
+    technology: cleanSlot(rawTechn, ...ALL_MARKERS),
+    tags:
+      taggedValue === undefined
+        ? parseCsvTags(cleanSlot(el.tags, ...ALL_MARKERS))
+        : parseCsvTags(taggedValue),
+    sprite: spriteNamedValue ?? cleanSlot(el.sprite, ...ALL_MARKERS),
     relations: [],
-    link: el.link || undefined,
+    link: linkValue ?? cleanSlot(el.link, ...ALL_MARKERS),
   };
 };
 
-const buildRelation = (rel: Stdlib_C4_Dynamic_Rel): Relation => ({
-  to: rel.to,
-  description: rel.label || undefined,
-  technology: rel.techn || undefined,
-  tags: parseCsvTags(rel.descr || rel.tags),
-  sprite: rel.sprite || undefined,
-  link: rel.link || undefined,
-});
+const buildRelation = (rel: Stdlib_C4_Dynamic_Rel): Relation => {
+  // Same marker-strip logic — Rel signature: from, to, label, techn, descr,
+  // sprite, tags, link. Any named arg может оказаться в любой positional.
+  const taggedValue = extractMarked(
+    TAGS_MARKER,
+    rel.techn,
+    rel.descr,
+    rel.sprite,
+    rel.tags,
+    rel.link,
+  );
+  const linkValue = extractMarked(
+    LINK_MARKER,
+    rel.techn,
+    rel.descr,
+    rel.sprite,
+    rel.tags,
+    rel.link,
+  );
+  const spriteNamedValue = extractMarked(
+    SPRITE_MARKER,
+    rel.techn,
+    rel.descr,
+    rel.sprite,
+    rel.tags,
+    rel.link,
+  );
+
+  return {
+    to: rel.to,
+    description: cleanSlot(rel.label, ...ALL_MARKERS) || undefined,
+    technology: cleanSlot(rel.techn, ...ALL_MARKERS),
+    tags:
+      taggedValue === undefined
+        ? parseCsvTags(
+            cleanSlot(rel.descr, ...ALL_MARKERS) ||
+              cleanSlot(rel.tags, ...ALL_MARKERS),
+          )
+        : parseCsvTags(taggedValue),
+    sprite: spriteNamedValue ?? cleanSlot(rel.sprite, ...ALL_MARKERS),
+    link: linkValue ?? cleanSlot(rel.link, ...ALL_MARKERS),
+  };
+};
 
 const buildBoundary = (
   el: Stdlib_C4_Boundary,
@@ -128,7 +221,7 @@ const collectBoundaryChildren = (
 export const load = async (filePath: string): Promise<LoadResult> => {
   const filepath = path.resolve(filePath);
   const raw = await fs.readFile(filepath, "utf8");
-  const transformed = preTransformDollarTags(raw);
+  const transformed = preTransformNamedArgs(raw);
   const [{ elements: rawElements }] = parsePuml(transformed);
   const elements = filterElements(rawElements);
 
@@ -143,16 +236,34 @@ export const load = async (filePath: string): Promise<LoadResult> => {
     containerByAlias[el.alias] = buildContainer(el);
   }
 
-  // Pass 2: relations — push в existing containers' .relations
+  // Pass 2: relations — push в existing containers' .relations.
+  // BiRel(a, b) / BiRel_D/U/L/R / BiRel_Neighbor = directed Rel(a, b) +
+  // Rel(b, a). Loader expand'ит в две, чтобы downstream rules видели
+  // обе стороны графа симметрично (как Structurizr делает с
+  // implied relationships).
   for (const el of elements) {
     if (!(el instanceof Stdlib_C4_Dynamic_Rel)) continue;
-    const source = containerByAlias[el.from];
-    if (!source) continue; // dangling — validateModel surface'ит
-    const relation = buildRelation(el);
-    containerByAlias[el.from] = {
-      ...source,
-      relations: [...source.relations, relation],
-    };
+
+    const forwardSource = containerByAlias[el.from];
+    if (forwardSource) {
+      containerByAlias[el.from] = {
+        ...forwardSource,
+        relations: [...forwardSource.relations, buildRelation(el)],
+      };
+    }
+
+    if (el.type_.name.startsWith("BiRel")) {
+      const reverseSource = containerByAlias[el.to];
+      if (reverseSource) {
+        containerByAlias[el.to] = {
+          ...reverseSource,
+          relations: [
+            ...reverseSource.relations,
+            buildRelation({ ...el, from: el.to, to: el.from }),
+          ],
+        };
+      }
+    }
   }
 
   // Pass 3: boundaries + root detection

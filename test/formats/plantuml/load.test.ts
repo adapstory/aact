@@ -548,6 +548,153 @@ describe("PlantUML load — unit", () => {
   });
 });
 
+describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
+  let tmpDir: string;
+  beforeAll(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "aact-puml-f2-"));
+  });
+
+  const writeFixture = async (
+    name: string,
+    content: string,
+  ): Promise<string> => {
+    const file = path.join(tmpDir, name);
+    await writeFile(file, content, "utf8");
+    return file;
+  };
+
+  const loadFromContent = async (
+    name: string,
+    content: string,
+  ): Promise<Model> => {
+    const file = await writeFixture(name, content);
+    const result = await load(file);
+    return result.model;
+  };
+
+  it("preserves Container.link from $link= named arg", async () => {
+    const model = await loadFromContent(
+      "link.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(svc, "Svc", "Java", "Backend service", "img/svc.png", "core", "https://wiki.example.com/svc")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "svc")?.link).toBe(
+      "https://wiki.example.com/svc",
+    );
+  });
+
+  it("preserves Container.sprite from positional 5th arg", async () => {
+    const model = await loadFromContent(
+      "sprite.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(svc, "Svc", "Java", "Backend", "java-logo")',
+        "@enduml",
+      ].join("\n"),
+    );
+    // sprite present, tags empty → sprite preserved (not fallback'нут как tags)
+    expect(getContainer(model, "svc")?.sprite).toBe("java-logo");
+    expect(getContainer(model, "svc")?.tags).toEqual([]);
+  });
+
+  it("BiRel expands to two directed Rel — a→b AND b→a", async () => {
+    // C4-PlantUML stdlib: BiRel(a, b, label) семантически = Rel(a,b) + Rel(b,a).
+    // Loader должен expand'ить, чтобы downstream rules видели обе стороны графа.
+    const model = await loadFromContent(
+      "birel.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(svc_a, "A")',
+        'Container(svc_b, "B")',
+        'BiRel(svc_a, svc_b, "talks to")',
+        "@enduml",
+      ].join("\n"),
+    );
+    const a = getContainer(model, "svc_a")!;
+    const b = getContainer(model, "svc_b")!;
+    expect(a.relations).toHaveLength(1);
+    expect(a.relations[0].to).toBe("svc_b");
+    expect(b.relations).toHaveLength(1);
+    expect(b.relations[0].to).toBe("svc_a");
+    // Both relations carry the same attributes (label, technology, tags).
+    expect(a.relations[0].description).toBe("talks to");
+    expect(b.relations[0].description).toBe("talks to");
+  });
+
+  it.each(["BiRel_U", "BiRel_D", "BiRel_L", "BiRel_R", "BiRel_Neighbor"])(
+    "%s directional variant also expands to two relations",
+    async (macro) => {
+      const model = await loadFromContent(
+        `${macro.toLowerCase()}.puml`,
+        [
+          "@startuml",
+          "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+          'Container(svc_a, "A")',
+          'Container(svc_b, "B")',
+          `${macro}(svc_a, svc_b, "x")`,
+          "@enduml",
+        ].join("\n"),
+      );
+      expect(getContainer(model, "svc_a")?.relations[0].to).toBe("svc_b");
+      expect(getContainer(model, "svc_b")?.relations[0].to).toBe("svc_a");
+    },
+  );
+
+  it("Rel (non-BiRel) stays unidirectional", async () => {
+    const model = await loadFromContent(
+      "rel-unidir.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "x")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations).toHaveLength(1);
+    expect(getContainer(model, "b")?.relations).toHaveLength(0);
+  });
+
+  it("Relation.link preserved from $link= named arg", async () => {
+    const model = await loadFromContent(
+      "rel-link.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "calls", "REST", "details", "spr", "tag1", "https://api.docs/v1")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0].link).toBe(
+      "https://api.docs/v1",
+    );
+  });
+
+  it("Boundary.link preserved from $link= positional", async () => {
+    const model = await loadFromContent(
+      "boundary-link.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'System_Boundary(orders, "Orders", "tag1", "https://wiki/orders") {',
+        '  Container(api, "API")',
+        "}",
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(model.boundaries.orders?.link).toBe("https://wiki/orders");
+  });
+});
+
 describe("PlantUML load — fixture-coverage edge", () => {
   it("loading generated.puml fixture doesn't throw", async () => {
     await expect(
