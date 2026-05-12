@@ -2,14 +2,14 @@ import type { Format } from "../types";
 import { generate } from "./generate";
 
 /**
- * Kubernetes формат — generate only в v3.0. K8s manifests это deployment
- * artifact, не authoring source — Solution Architect не пишет k8s yamls
- * чтобы описать архитектуру. Reverse-engineering (k8s → Model) — niche use
- * case, может быть добавлен additive в v3.x как load capability.
+ * Kubernetes — generate only в v3.0. K8s manifests это deployment artifact,
+ * не authoring source. Reverse-engineering (k8s → Model) — niche use case,
+ * может быть добавлен в v3.x как `load` capability.
  *
- * Utility functions loadMicroserviceDeployConfigs / mapFromConfigs остаются
- * экспортированными для users-as-library, которые делают custom k8s analysis,
- * но через aact CLI как source не доступны.
+ * V2 utilities `loadDeployConfigs` / `mapFromConfigs` / `DeployConfig`
+ * helpers удалены — они моделировали env-var → relation heuristic, который
+ * не fit'ит generic C4 reverse engineering. Когда понадобится k8s load —
+ * будет proper Service/Deployment/NetworkPolicy → Model mapping.
  */
 export const kubernetesFormat: Format = {
   name: "kubernetes",
@@ -17,10 +17,5 @@ export const kubernetesFormat: Format = {
 };
 
 
-export type { DeployConfig, EnvValue, Section } from "./deployConfig";
+
 export {generate} from "./generate";
-export { loadMicroserviceDeployConfigs } from "./loadMicroserviceDeployConfigs";
-export {
-  type KubernetesMapOptions,
-  mapFromConfigs,
-} from "./mapContainersFromDeployConfigs";
