@@ -100,10 +100,29 @@ This is a beta release. Known gaps before stable 3.0.0:
 
 ### Known limitations
 
-- Structurizr component-level элементы не загружаются (opt-in в future minor).
-- System-level relations на internal SoftwareSystems silently дропаются.
-- Kubernetes format — generate only. Load (reverse-engineering) deferred к v3.x.
-- IaC formats (k8s, future Docker Compose) — heuristic mapping, не proper C4 sources.
+**Structurizr:**
+
+- Component-level элементы не загружаются (opt-in в future minor).
+- System-level relations на internal SoftwareSystems silently дропаются — internal system мапится в Boundary, у которого нет relations. Container-level и cross-system-external relations работают.
+- Dynamic view step ordering (Relation.order) — пока не извлекается из `views[].dynamic`.
+
+**PlantUML (plantuml-parser 0.4 limitations):**
+
+- `SetPropertyHeader` / `AddProperty` macros — parser не expose'ит, Container.properties для PUML always undefined.
+- `Boundary` description (6-й positional arg) — parser принимает только 4 positional, descr не доступен.
+- `$index=` для Dynamic diagrams — Relation.order undefined для PUML.
+- `Component_Boundary` macro — parser падает на нём (упоминается в filterElements list как dead branch).
+- File:line source locations — foundation в типах есть (Container.sourceLocation), но loader пока не заполняет. Planned v3.x.
+
+Каждый gap pinned тестом в `test/formats/plantuml/load.test.ts` под `KNOWN GAP:` describe block. Подъём этих limitations = v3.x parser strategy (chevrotain replacement of plantuml-parser).
+
+**Kubernetes:**
+
+- Generate only. Load (reverse-engineering) deferred к v3.x.
+
+**General IaC (k8s, future Docker Compose):**
+
+- Heuristic mapping (technology hints, image patterns), не proper C4 sources. Document какой semantic mapping корректен per-format.
 
 ### Migration tooling
 
