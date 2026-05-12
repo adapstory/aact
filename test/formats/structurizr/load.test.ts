@@ -808,6 +808,238 @@ describe("structurizr load — boundary metadata", () => {
   });
 });
 
+describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
+  it("Container.url → Container.link", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "c",
+                name: "Svc",
+                url: "https://wiki.example.com/svc",
+                relationships: [],
+              },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "c")?.link).toBe("https://wiki.example.com/svc");
+  });
+
+  it("Person.url → Person.link", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [],
+        people: [
+          {
+            id: "u",
+            name: "User",
+            url: "https://hr.example.com/u",
+            relationships: [],
+          },
+        ],
+      },
+    });
+    expect(getContainer(model, "u")?.link).toBe("https://hr.example.com/u");
+  });
+
+  it("Internal SoftwareSystem.url → Boundary.link", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "sys",
+            name: "Sys",
+            url: "https://wiki.example.com/sys",
+            containers: [],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(model.boundaries.sys?.link).toBe("https://wiki.example.com/sys");
+  });
+
+  it("External SoftwareSystem.url → Container.link", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "ext",
+            name: "Ext",
+            location: "External",
+            url: "https://api.external.com",
+            containers: [],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "ext")?.link).toBe("https://api.external.com");
+  });
+
+  it("Relation.url → Relation.link", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  {
+                    destinationId: "b",
+                    url: "https://api.example.com/v1",
+                  },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].link).toBe(
+      "https://api.example.com/v1",
+    );
+  });
+
+  it("Container.group → Container.properties.group", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "c",
+                name: "Svc",
+                group: "platform-team",
+                relationships: [],
+              },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "c")?.properties).toMatchObject({
+      group: "platform-team",
+    });
+  });
+
+  it("Container.perspectives → properties.perspective.<name>", async () => {
+    // Solution Architect use case — security/scalability views на одной модели.
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "c",
+                name: "Svc",
+                perspectives: {
+                  Security: {
+                    description: "Sensitive PII data",
+                    value: "high",
+                  },
+                  Performance: { description: "Read-heavy workload" },
+                },
+                relationships: [],
+              },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "c")?.properties).toMatchObject({
+      "perspective.Security": "Sensitive PII data",
+      "perspective.Security.value": "high",
+      "perspective.Performance": "Read-heavy workload",
+    });
+  });
+
+  it("Relation.properties → Relation.properties (full pass-through)", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  {
+                    destinationId: "b",
+                    properties: {
+                      sla: "99.9",
+                      protocol: "https",
+                    },
+                  },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].properties).toMatchObject({
+      sla: "99.9",
+      protocol: "https",
+    });
+  });
+
+  it("Relation.perspectives → Relation.properties.perspective.<name>", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  {
+                    destinationId: "b",
+                    perspectives: {
+                      Security: { description: "Uses TLS 1.3" },
+                    },
+                  },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].properties).toMatchObject({
+      "perspective.Security": "Uses TLS 1.3",
+    });
+  });
+});
+
 describe("structurizrDslSyntax helpers", () => {
   it("containerPattern returns DSL assignment prefix", () => {
     expect(structurizrDslSyntax.containerPattern("orders")).toBe(
