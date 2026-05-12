@@ -190,15 +190,25 @@ const buildBoundary = (
   el: Stdlib_C4_Boundary,
   childContainers: readonly string[],
   childBoundaries: readonly string[],
-): Boundary => ({
-  name: el.alias,
-  label: el.label,
-  kind: parseBoundaryMacro(el.type_.name),
-  tags: parseCsvTags(el.tags),
-  containerNames: childContainers,
-  boundaryNames: childBoundaries,
-  link: el.link || undefined,
-});
+): Boundary => {
+  // Same marker-strip как в buildContainer/buildRelation: $tags=/$link=
+  // могут приземлиться в любой positional slot (parser имеет tags+link).
+  const taggedValue = extractMarked(TAGS_MARKER, el.tags, el.link);
+  const linkValue = extractMarked(LINK_MARKER, el.tags, el.link);
+
+  return {
+    name: el.alias,
+    label: el.label,
+    kind: parseBoundaryMacro(el.type_.name),
+    tags:
+      taggedValue === undefined
+        ? parseCsvTags(cleanSlot(el.tags, ...ALL_MARKERS))
+        : parseCsvTags(taggedValue),
+    containerNames: childContainers,
+    boundaryNames: childBoundaries,
+    link: linkValue ?? cleanSlot(el.link, ...ALL_MARKERS),
+  };
+};
 
 const isC4Element = (
   el: UMLElement,
@@ -218,6 +228,56 @@ const collectBoundaryChildren = (
   return { containers, boundaries };
 };
 
+const pushRelation = (
+  acc: Record<string, Container>,
+  sourceName: string,
+  relation: Relation,
+): void => {
+  const source = acc[sourceName];
+  if (!source) return;
+  acc[sourceName] = {
+    ...source,
+    relations: [...source.relations, relation],
+  };
+};
+
+/**
+ * BiRel(a, b) / BiRel_D/U/L/R / BiRel_Neighbor — directed Rel(a, b) +
+ * Rel(b, a). Loader expand'ит в две, чтобы downstream rules видели
+ * обе стороны графа симметрично (как Structurizr делает с implied
+ * relationships).
+ */
+const populateRelations = (
+  elements: readonly UMLElement[],
+  acc: Record<string, Container>,
+): void => {
+  for (const el of elements) {
+    if (!(el instanceof Stdlib_C4_Dynamic_Rel)) continue;
+    pushRelation(acc, el.from, buildRelation(el));
+    if (el.type_.name.startsWith("BiRel")) {
+      pushRelation(
+        acc,
+        el.to,
+        buildRelation({ ...el, from: el.to, to: el.from }),
+      );
+    }
+  }
+};
+
+const collectChildBoundaryNames = (
+  boundaryElements: readonly Stdlib_C4_Boundary[],
+): Set<string> => {
+  const childOfBoundary = new Set<string>();
+  for (const b of boundaryElements) {
+    for (const child of b.elements) {
+      if (child instanceof Stdlib_C4_Boundary) {
+        childOfBoundary.add(child.alias);
+      }
+    }
+  }
+  return childOfBoundary;
+};
+
 export const load = async (filePath: string): Promise<LoadResult> => {
   const filepath = path.resolve(filePath);
   const raw = await fs.readFile(filepath, "utf8");
@@ -232,52 +292,17 @@ export const load = async (filePath: string): Promise<LoadResult> => {
     null,
   ) as Record<string, Container>;
   for (const el of elements) {
-    if (!isC4Element(el)) continue;
-    containerByAlias[el.alias] = buildContainer(el);
+    if (isC4Element(el)) containerByAlias[el.alias] = buildContainer(el);
   }
 
-  // Pass 2: relations — push в existing containers' .relations.
-  // BiRel(a, b) / BiRel_D/U/L/R / BiRel_Neighbor = directed Rel(a, b) +
-  // Rel(b, a). Loader expand'ит в две, чтобы downstream rules видели
-  // обе стороны графа симметрично (как Structurizr делает с
-  // implied relationships).
-  for (const el of elements) {
-    if (!(el instanceof Stdlib_C4_Dynamic_Rel)) continue;
-
-    const forwardSource = containerByAlias[el.from];
-    if (forwardSource) {
-      containerByAlias[el.from] = {
-        ...forwardSource,
-        relations: [...forwardSource.relations, buildRelation(el)],
-      };
-    }
-
-    if (el.type_.name.startsWith("BiRel")) {
-      const reverseSource = containerByAlias[el.to];
-      if (reverseSource) {
-        containerByAlias[el.to] = {
-          ...reverseSource,
-          relations: [
-            ...reverseSource.relations,
-            buildRelation({ ...el, from: el.to, to: el.from }),
-          ],
-        };
-      }
-    }
-  }
+  // Pass 2: relations (с BiRel expansion)
+  populateRelations(elements, containerByAlias);
 
   // Pass 3: boundaries + root detection
   const boundaryElements = elements.filter(
     (el): el is Stdlib_C4_Boundary => el instanceof Stdlib_C4_Boundary,
   );
-  const childOfBoundary = new Set<string>();
-  for (const b of boundaryElements) {
-    for (const child of b.elements) {
-      if (child instanceof Stdlib_C4_Boundary) {
-        childOfBoundary.add(child.alias);
-      }
-    }
-  }
+  const childOfBoundary = collectChildBoundaryNames(boundaryElements);
   const boundaries = boundaryElements.map((b) => {
     const { containers, boundaries: childBoundaries } =
       collectBoundaryChildren(b);

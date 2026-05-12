@@ -4,12 +4,16 @@
  */
 
 /**
- * Comma-separated tags из Structurizr / k8s / Compose. Trim'ит whitespace,
- * фильтрует пустые segments.
+ * Tags из любого формата:
+ *   Structurizr / k8s / Compose: comma-separated (`"tag1, tag2"`).
+ *   PlantUML C4-stdlib `$tags=`: plus-separated (`"tag1+tag2"`).
+ *
+ * Splits on either delimiter, trim'ит whitespace, фильтрует пустые segments.
+ * Один parser покрывает все форматы — pragma "один способ парсить tags".
  */
 export const parseCsvTags = (raw?: string): readonly string[] =>
   raw
-    ?.split(",")
+    ?.split(/[,+]/)
     .map((t) => t.trim())
     .filter(Boolean) ?? [];
 
