@@ -180,6 +180,66 @@ describe("PlantUML load — unit", () => {
     expect(getContainer(model, "user")?.kind).toBe("Person");
   });
 
+  it.each([
+    ["ContainerQueue", "ContainerQueue"],
+    ["Container_Ext", "Container"],
+    ["ContainerDb_Ext", "ContainerDb"],
+    ["ContainerQueue_Ext", "ContainerQueue"],
+    ["ComponentDb", "ComponentDb"],
+    ["ComponentQueue", "ComponentQueue"],
+    ["Component_Ext", "Component"],
+    ["ComponentDb_Ext", "ComponentDb"],
+    ["ComponentQueue_Ext", "ComponentQueue"],
+    ["Person_Ext", "Person"],
+    ["SystemDb", "System"],
+    ["SystemQueue", "System"],
+    ["SystemDb_Ext", "System"],
+    ["SystemQueue_Ext", "System"],
+  ])(
+    "filterElements recognises %s macro → kind=%s",
+    async (macro, expectedKind) => {
+      // Covers every entry in filterElements' CONTAINER_LIKE_NAMES /
+      // CONTEXT_NAMES sets. Without these tests, Stryker can mutate any
+      // string literal in those sets to "" and PUML containing that macro
+      // would still load (silently dropped) — bug masquerading as design.
+      const model = await loadFromContent(
+        `${macro.toLowerCase()}.puml`,
+        [
+          "@startuml",
+          "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+          `${macro}(elem, "Label")`,
+          "@enduml",
+        ].join("\n"),
+      );
+      expect(getContainer(model, "elem")?.kind).toBe(expectedKind);
+    },
+  );
+
+  it.each([
+    ["System_Boundary", "System"],
+    ["Container_Boundary", "Container"],
+    ["Enterprise_Boundary", "Enterprise"],
+    // Note: Component_Boundary в filterElements list, но plantuml-parser
+    // 0.4 его не парсит — dead branch. Дропнуть из набора при следующем
+    // upgrade плансера или явно ignore.
+  ])(
+    "filterElements recognises %s → boundary.kind=%s",
+    async (macro, expectedKind) => {
+      const model = await loadFromContent(
+        `${macro.toLowerCase()}.puml`,
+        [
+          "@startuml",
+          "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+          `${macro}(b1, "Boundary") {`,
+          `  Container(c, "C")`,
+          "}",
+          "@enduml",
+        ].join("\n"),
+      );
+      expect(model.boundaries.b1?.kind).toBe(expectedKind);
+    },
+  );
+
   it("parses relation tags from the descr/5th arg", async () => {
     const model = await loadFromContent(
       "rel-tags.puml",

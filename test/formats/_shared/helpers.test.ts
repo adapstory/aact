@@ -11,15 +11,28 @@ import {
 } from "../../../src/formats/_shared/tags";
 
 describe("c4Mapping", () => {
+  // Exhaustive — covers every entry в C4_KIND_MAP (18 macros). Kills
+  // ObjectLiteral / StringLiteral / BooleanLiteral mutants на каждой строке.
   it.each([
     ["Person", "Person", false],
     ["Person_Ext", "Person", true],
     ["System", "System", false],
+    ["SystemDb", "System", false],
+    ["SystemQueue", "System", false],
     ["System_Ext", "System", true],
+    ["SystemDb_Ext", "System", true],
+    ["SystemQueue_Ext", "System", true],
     ["Container", "Container", false],
     ["ContainerDb", "ContainerDb", false],
+    ["ContainerQueue", "ContainerQueue", false],
+    ["Container_Ext", "Container", true],
     ["ContainerDb_Ext", "ContainerDb", true],
+    ["ContainerQueue_Ext", "ContainerQueue", true],
     ["Component", "Component", false],
+    ["ComponentDb", "ComponentDb", false],
+    ["ComponentQueue", "ComponentQueue", false],
+    ["Component_Ext", "Component", true],
+    ["ComponentDb_Ext", "ComponentDb", true],
     ["ComponentQueue_Ext", "ComponentQueue", true],
   ])("parseC4MacroKind(%s) → kind=%s external=%s", (macro, kind, external) => {
     expect(parseC4MacroKind(macro)).toEqual({ kind, external });
