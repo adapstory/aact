@@ -208,3 +208,7 @@ package-lock.json
 # Stryker mutation reports
 reports/
 .stryker-tmp/
+
+# pnpm 11 auto-creates template если build-scripts не approved.
+# Approved deps уже сидят в package.json#pnpm.onlyBuiltDependencies.
+pnpm-workspace.yaml
