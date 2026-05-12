@@ -695,6 +695,89 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
   });
 });
 
+describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => {
+  let tmpDir: string;
+  beforeAll(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "aact-puml-drops-"));
+  });
+
+  const loadFromContent = async (
+    name: string,
+    content: string,
+  ): Promise<Model> => {
+    const file = path.join(tmpDir, name);
+    await writeFile(file, content, "utf8");
+    return (await load(file)).model;
+  };
+
+  /*
+   * Below — explicit pin'ы для known limitations. Если plantuml-parser
+   * получит native support (или мы добавим regex-scan), тесты упадут и
+   * это станет триггером для миграции. CHANGELOG должен документировать
+   * любое изменение поведения тут.
+   */
+
+  it("KNOWN GAP: PUML SetPropertyHeader/AddProperty не парсятся — Container.properties undefined", async () => {
+    const model = await loadFromContent(
+      "props.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'SetPropertyHeader("Header", "Value")',
+        'AddProperty("SLA", "99.9%")',
+        'AddProperty("Owner", "team-x")',
+        'Container(svc, "Svc")',
+        "@enduml",
+      ].join("\n"),
+    );
+    // Container loaded, но properties stay undefined (parser drops the
+    // SetPropertyHeader/AddProperty side-effects). Документировано.
+    expect(getContainer(model, "svc")).toBeDefined();
+    expect(getContainer(model, "svc")?.properties).toBeUndefined();
+  });
+
+  it("KNOWN GAP: Boundary description не expose'ится parser'ом — Boundary.description undefined", async () => {
+    // plantuml-parser 0.4 принимает только 4 positional для Boundary
+    // (alias, label, tags, link). Spec C4-PlantUML stdlib допускает 6
+    // positional с descr, но parser падает с PEG syntax error на 5-ом arg.
+    // Этот gap пинает текущее поведение — Boundary всегда без description.
+    const model = await loadFromContent(
+      "boundary-no-descr.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'System_Boundary(orders, "Orders") {',
+        '  Container(api, "API")',
+        "}",
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(model.boundaries.orders).toBeDefined();
+    expect(model.boundaries.orders?.description).toBeUndefined();
+  });
+
+  it("KNOWN GAP: $index= для Dynamic diagrams — Relation.order undefined", async () => {
+    const model = await loadFromContent(
+      "indexed.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "step 1", $index=1)',
+        'Rel(b, a, "step 2", $index=2)',
+        "@enduml",
+      ].join("\n"),
+    );
+    // Both relations loaded but order field stays undefined — Dynamic diagrams
+    // и step ordering — v3.x feature.
+    const a = getContainer(model, "a")!;
+    const b = getContainer(model, "b")!;
+    expect(a.relations[0]?.order).toBeUndefined();
+    expect(b.relations[0]?.order).toBeUndefined();
+  });
+});
+
 describe("PlantUML load — fixture-coverage edge", () => {
   it("loading generated.puml fixture doesn't throw", async () => {
     await expect(
