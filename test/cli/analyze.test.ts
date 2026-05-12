@@ -1,23 +1,15 @@
 import { loadConfig } from "c12";
 import consola from "consola";
 
-import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
-import type { ArchitectureModel, Container } from "../../src/model";
+import { loadModel } from "../../src/cli/loadModel";
+import { makeModel } from "../helpers/makeModel";
 
 vi.mock("c12", () => ({
   loadConfig: vi.fn(),
 }));
 
-vi.mock("../../src/loaders/plantuml/loadPlantumlElements", () => ({
-  loadPlantumlElements: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock("../../src/loaders/plantuml/mapContainersFromPlantumlElements", () => ({
-  mapContainersFromPlantumlElements: vi.fn(),
-}));
-
-vi.mock("../../src/loaders/structurizr/loadStructurizrElements", () => ({
-  loadStructurizrElements: vi.fn(),
+vi.mock("../../src/cli/loadModel", () => ({
+  loadModel: vi.fn(),
 }));
 
 vi.mock("consola", () => ({
@@ -28,35 +20,26 @@ vi.mock("consola", () => ({
 }));
 
 const mockLoadConfig = vi.mocked(loadConfig);
-const mockMapContainers = vi.mocked(mapContainersFromPlantumlElements);
+const mockLoadModel = vi.mocked(loadModel);
 
-const db: Container = {
-  name: "orders_db",
-  label: "DB",
-  type: "ContainerDb",
-  description: "",
-  relations: [],
-};
-
-const svcA: Container = {
-  name: "svc_a",
-  label: "Service A",
-  type: "Container",
-  description: "",
-  relations: [{ to: db, technology: "tcp" }],
-};
-
-const testModel = (): ArchitectureModel => ({
-  boundaries: [
-    {
-      name: "project",
-      label: "Project",
-      containers: [svcA, db],
-      boundaries: [],
-    },
-  ],
-  allContainers: [svcA, db],
-});
+const testModel = () =>
+  makeModel({
+    containers: [
+      { name: "orders_db", label: "DB", kind: "ContainerDb" },
+      {
+        name: "svc_a",
+        label: "Service A",
+        relations: [{ to: "orders_db", technology: "tcp" }],
+      },
+    ],
+    boundaries: [
+      {
+        name: "project",
+        label: "Project",
+        containerNames: ["svc_a", "orders_db"],
+      },
+    ],
+  });
 
 const setupConfig = (): void => {
   mockLoadConfig.mockResolvedValue({
@@ -82,16 +65,13 @@ describe("analyze command", () => {
   });
 
   it("throws when config source is missing", async () => {
-    mockLoadConfig.mockResolvedValue({
-      config: {},
-    });
-
+    mockLoadConfig.mockResolvedValue({ config: {} });
     await expect(runAnalyze()).rejects.toThrow();
   });
 
   it("outputs text metrics via consola", async () => {
     setupConfig();
-    mockMapContainers.mockReturnValue(testModel());
+    mockLoadModel.mockResolvedValue({ model: testModel(), issues: [] });
 
     await runAnalyze();
 
@@ -106,7 +86,7 @@ describe("analyze command", () => {
 
   it("outputs json format", async () => {
     setupConfig();
-    mockMapContainers.mockReturnValue(testModel());
+    mockLoadModel.mockResolvedValue({ model: testModel(), issues: [] });
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await runAnalyze({ format: "json" });
@@ -122,7 +102,7 @@ describe("analyze command", () => {
 
   it("unknown format falls back to text output", async () => {
     setupConfig();
-    mockMapContainers.mockReturnValue(testModel());
+    mockLoadModel.mockResolvedValue({ model: testModel(), issues: [] });
 
     await runAnalyze({ format: "unknown" });
 
@@ -133,31 +113,26 @@ describe("analyze command", () => {
   });
 
   it("logs coupling relations for boundaries", async () => {
-    const extSystem: Container = {
-      name: "ext",
-      label: "Ext",
-      type: "System_Ext",
-      description: "",
-      relations: [],
-    };
-    const svcWithCoupling: Container = {
-      name: "svc_coupling",
-      label: "Coupled Service",
-      type: "Container",
-      description: "",
-      relations: [{ to: extSystem, technology: "http" }],
-    };
     setupConfig();
-    mockMapContainers.mockReturnValue({
-      boundaries: [
-        {
-          name: "project",
-          label: "Project",
-          containers: [svcWithCoupling],
-          boundaries: [],
-        },
-      ],
-      allContainers: [svcWithCoupling, extSystem],
+    mockLoadModel.mockResolvedValue({
+      model: makeModel({
+        containers: [
+          { name: "ext", label: "Ext", kind: "System", external: true },
+          {
+            name: "svc_coupling",
+            label: "Coupled Service",
+            relations: [{ to: "ext", technology: "http" }],
+          },
+        ],
+        boundaries: [
+          {
+            name: "project",
+            label: "Project",
+            containerNames: ["svc_coupling"],
+          },
+        ],
+      }),
+      issues: [],
     });
 
     await runAnalyze();

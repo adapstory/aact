@@ -5,8 +5,8 @@ import consola from "consola";
 import type { MockedFunction } from "vitest";
 
 import { loadModel } from "../../src/cli/loadModel";
-import type { ArchitectureModel } from "../../src/model";
-import type { Container } from "../../src/model/container";
+import type { Model } from "../../src/model";
+import { makeModel } from "../helpers/makeModel";
 
 vi.mock("c12", () => ({
   loadConfig: vi.fn(),
@@ -37,16 +37,6 @@ const mockMkdir = vi.mocked(fs.mkdir) as unknown as MockedFunction<
 >;
 const mockLoadModel = vi.mocked(loadModel);
 
-const makeContainer = (
-  overrides: Partial<Container> & Pick<Container, "name">,
-): Container => ({
-  label: overrides.name,
-  type: "Container",
-  description: "",
-  relations: [],
-  ...overrides,
-});
-
 const setupConfig = (overrides?: {
   generate?: Record<string, unknown>;
   source?: Record<string, unknown>;
@@ -59,15 +49,8 @@ const setupConfig = (overrides?: {
   });
 };
 
-const setupModel = (
-  containers: Container[],
-  boundaries: ArchitectureModel["boundaries"] = [],
-): void => {
-  const model: ArchitectureModel = {
-    boundaries,
-    allContainers: containers,
-  };
-  mockLoadModel.mockResolvedValue(model);
+const setupModel = (model: Model): void => {
+  mockLoadModel.mockResolvedValue({ model, issues: [] });
 };
 
 const runGenerate = async (
@@ -89,9 +72,8 @@ describe("generate command", () => {
 
   describe("plantuml format (default)", () => {
     it("outputs plantuml to stdout by default", async () => {
-      const orders = makeContainer({ name: "orders" });
       setupConfig();
-      setupModel([orders]);
+      setupModel(makeModel({ containers: [{ name: "orders" }] }));
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate();
@@ -105,7 +87,7 @@ describe("generate command", () => {
 
     it("outputs plantuml when --format plantuml", async () => {
       setupConfig();
-      setupModel([makeContainer({ name: "svc" })]);
+      setupModel(makeModel({ containers: [{ name: "svc" }] }));
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate({ format: "plantuml" });
@@ -117,7 +99,7 @@ describe("generate command", () => {
 
     it("writes to file when --output is provided", async () => {
       setupConfig();
-      setupModel([makeContainer({ name: "svc" })]);
+      setupModel(makeModel({ containers: [{ name: "svc" }] }));
       mockWriteFile.mockResolvedValue();
 
       await runGenerate({ output: "out.puml" });
@@ -129,25 +111,19 @@ describe("generate command", () => {
       expect(consola.success).toHaveBeenCalled();
     });
 
-    it("passes boundaryLabel from config", async () => {
-      setupConfig({ generate: { boundaryLabel: "My Platform" } });
-      setupModel([makeContainer({ name: "svc" })]);
-      const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-      await runGenerate();
-
-      const output = spy.mock.calls[0][0] as string;
-      expect(output).toContain('Boundary(project, "My Platform")');
-    });
-
     it("renders relations in output", async () => {
-      const payments = makeContainer({ name: "payments" });
-      const orders = makeContainer({
-        name: "orders",
-        relations: [{ to: payments, technology: "REST" }],
-      });
       setupConfig();
-      setupModel([orders, payments]);
+      setupModel(
+        makeModel({
+          containers: [
+            {
+              name: "orders",
+              relations: [{ to: "payments", technology: "REST" }],
+            },
+            { name: "payments" },
+          ],
+        }),
+      );
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate();
@@ -158,7 +134,7 @@ describe("generate command", () => {
 
     it("loads model via loadModel", async () => {
       setupConfig();
-      setupModel([makeContainer({ name: "svc" })]);
+      setupModel(makeModel({ containers: [{ name: "svc" }] }));
       vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runGenerate();
@@ -170,12 +146,14 @@ describe("generate command", () => {
   describe("kubernetes format", () => {
     it("generates kubernetes YAML files to output dir", async () => {
       setupConfig();
-      const payments = makeContainer({ name: "payments" });
-      const orders = makeContainer({
-        name: "orders",
-        relations: [{ to: payments }],
-      });
-      setupModel([orders, payments]);
+      setupModel(
+        makeModel({
+          containers: [
+            { name: "orders", relations: [{ to: "payments" }] },
+            { name: "payments" },
+          ],
+        }),
+      );
       mockMkdir.mockResolvedValue();
       mockWriteFile.mockResolvedValue();
 
@@ -190,7 +168,11 @@ describe("generate command", () => {
 
     it("uses config kubernetes path as default output dir", async () => {
       setupConfig({ generate: { kubernetes: { path: "custom/k8s" } } });
-      setupModel([makeContainer({ name: "svc" })]);
+      setupModel(
+        makeModel({
+          containers: [{ name: "a" }, { name: "b" }],
+        }),
+      );
       mockMkdir.mockResolvedValue();
       mockWriteFile.mockResolvedValue();
 
@@ -201,46 +183,50 @@ describe("generate command", () => {
 
     it("uses default path when no config and no --output", async () => {
       setupConfig();
-      setupModel([makeContainer({ name: "svc" })]);
+      setupModel(
+        makeModel({
+          containers: [{ name: "a" }, { name: "b" }],
+        }),
+      );
       mockMkdir.mockResolvedValue();
       mockWriteFile.mockResolvedValue();
 
       await runGenerate({ format: "kubernetes" });
 
       expect(mockMkdir).toHaveBeenCalledWith(
-        "resources/kubernetes/microservices",
+        "fixtures/kubernetes/microservices",
         { recursive: true },
       );
     });
 
     it("throws when no source configured", async () => {
-      mockLoadConfig.mockResolvedValue({
-        config: {},
-      });
-
+      mockLoadConfig.mockResolvedValue({ config: {} });
       await expect(runGenerate({ format: "kubernetes" })).rejects.toThrow();
     });
 
     it("throws for unknown format", async () => {
       setupConfig();
-
+      setupModel(makeModel({}));
       await expect(runGenerate({ format: "unknown" })).rejects.toThrow(
-        "Unknown format: unknown",
+        /Unknown format/,
       );
     });
 
-    it("writes no files when model has no deployable containers", async () => {
+    it("warns when model has no deployable containers", async () => {
       setupConfig();
-      const db = makeContainer({ name: "orders_db", type: "ContainerDb" });
-      setupModel([db]);
+      setupModel(
+        makeModel({
+          containers: [{ name: "orders_db", kind: "ContainerDb" }],
+        }),
+      );
       mockMkdir.mockResolvedValue();
       mockWriteFile.mockResolvedValue();
 
       await runGenerate({ format: "kubernetes", output: "./k8s" });
 
       expect(mockWriteFile).not.toHaveBeenCalled();
-      expect(consola.success).toHaveBeenCalledWith(
-        expect.stringContaining("0 file(s)"),
+      expect(consola.warn).toHaveBeenCalledWith(
+        expect.stringContaining("no files"),
       );
     });
   });

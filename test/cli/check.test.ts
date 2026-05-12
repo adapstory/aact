@@ -3,9 +3,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import { loadConfig } from "c12";
 import consola from "consola";
 
-import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
-import { loadStructurizrElements } from "../../src/loaders/structurizr/loadStructurizrElements";
-import type { ArchitectureModel, Container } from "../../src/model";
+import { loadModel } from "../../src/cli/loadModel";
+import { plantumlSyntax } from "../../src/formats/plantuml/syntax";
+import { loadFormat } from "../../src/formats/registry";
+import { structurizrDslSyntax } from "../../src/formats/structurizr/syntax";
+import type { Format } from "../../src/formats/types";
+import type { Model } from "../../src/model";
+import type { ContainerSpec } from "../helpers/makeModel";
+import { makeModel } from "../helpers/makeModel";
 
 vi.mock("c12", () => ({
   loadConfig: vi.fn(),
@@ -16,16 +21,12 @@ vi.mock("node:fs/promises", () => ({
   writeFile: vi.fn(),
 }));
 
-vi.mock("../../src/loaders/plantuml/loadPlantumlElements", () => ({
-  loadPlantumlElements: vi.fn().mockResolvedValue([]),
+vi.mock("../../src/cli/loadModel", () => ({
+  loadModel: vi.fn(),
 }));
 
-vi.mock("../../src/loaders/plantuml/mapContainersFromPlantumlElements", () => ({
-  mapContainersFromPlantumlElements: vi.fn(),
-}));
-
-vi.mock("../../src/loaders/structurizr/loadStructurizrElements", () => ({
-  loadStructurizrElements: vi.fn(),
+vi.mock("../../src/formats/registry", () => ({
+  loadFormat: vi.fn(),
 }));
 
 vi.mock("consola", () => ({
@@ -39,77 +40,54 @@ vi.mock("consola", () => ({
 }));
 
 const mockLoadConfig = vi.mocked(loadConfig);
-const mockMapContainers = vi.mocked(mapContainersFromPlantumlElements);
-const mockLoadStructurizr = vi.mocked(loadStructurizrElements);
+const mockLoadModel = vi.mocked(loadModel);
+const mockLoadFormat = vi.mocked(loadFormat);
 const mockReadFile = vi.mocked(readFile);
 const mockWriteFile = vi.mocked(writeFile);
 
-const externalSystem: Container = {
-  name: "ext_system",
-  label: "External",
-  type: "System_Ext",
-  description: "",
-  relations: [],
-};
+const fakeFormat = (
+  name: string,
+  fixSyntax = plantumlSyntax,
+  load = vi.fn(),
+): Format => ({
+  name,
+  load,
+  fix: { syntax: fixSyntax },
+});
 
-const svcB: Container = {
-  name: "svc_b",
-  label: "Service B",
-  type: "Container",
-  description: "",
-  relations: [],
-};
+const cleanModel = (): Model =>
+  makeModel({
+    containers: [
+      { name: "svc_a", relations: [{ to: "svc_b", technology: "http" }] },
+      { name: "svc_b" },
+    ],
+    boundaries: [{ name: "project", containerNames: ["svc_a", "svc_b"] }],
+  });
 
-const cleanModel = (): ArchitectureModel => {
-  const svcA: Container = {
-    name: "svc_a",
-    label: "Service A",
-    type: "Container",
-    description: "",
-    relations: [{ to: svcB, technology: "http" }],
-  };
-  return {
+const violatingContainers: ContainerSpec[] = [
+  { name: "my_service", relations: [{ to: "ext_system" }] },
+  { name: "ext_system", kind: "System", external: true },
+];
+
+const violatingModel = (): Model =>
+  makeModel({
+    containers: violatingContainers,
     boundaries: [
       {
         name: "project",
-        label: "Project",
-        containers: [svcA, svcB],
-        boundaries: [],
+        containerNames: ["my_service", "ext_system"],
       },
     ],
-    allContainers: [svcA, svcB],
-  };
-};
+  });
 
-const violatingModel = (): ArchitectureModel => ({
-  boundaries: [
-    {
-      name: "project",
-      label: "Project",
-      containers: [
-        {
-          name: "my_service",
-          label: "My Service",
-          type: "Container",
-          description: "",
-          relations: [{ to: externalSystem }],
-        },
-        externalSystem,
-      ],
-      boundaries: [],
-    },
-  ],
-  allContainers: [
-    {
-      name: "my_service",
-      label: "My Service",
-      type: "Container",
-      description: "",
-      relations: [{ to: externalSystem }],
-    },
-    externalSystem,
-  ],
-});
+const cyclicModel = (): Model =>
+  makeModel({
+    containers: [
+      { name: "svc_a", relations: [{ to: "svc_b" }] },
+      { name: "svc_b", relations: [{ to: "svc_a" }] },
+    ],
+    boundaries: [{ name: "project", containerNames: ["svc_a", "svc_b"] }],
+  });
 
 const setupConfig = (overrides?: {
   rules?: Record<string, unknown>;
@@ -121,35 +99,6 @@ const setupConfig = (overrides?: {
       ...overrides,
     },
   });
-};
-
-const cyclicModel = (): ArchitectureModel => {
-  const svcB: Container = {
-    name: "svc_b",
-    label: "Service B",
-    type: "Container",
-    description: "",
-    relations: [],
-  };
-  const svcA: Container = {
-    name: "svc_a",
-    label: "Service A",
-    type: "Container",
-    description: "",
-    relations: [{ to: svcB }],
-  };
-  Object.assign(svcB, { relations: [{ to: svcA }] });
-  return {
-    boundaries: [
-      {
-        name: "project",
-        label: "Project",
-        containers: [svcA, svcB],
-        boundaries: [],
-      },
-    ],
-    allContainers: [svcA, svcB],
-  };
 };
 
 const runCheck = async (args: Record<string, unknown> = {}): Promise<void> => {
@@ -165,35 +114,38 @@ const runCheck = async (args: Record<string, unknown> = {}): Promise<void> => {
 describe("check command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLoadFormat.mockResolvedValue(fakeFormat("plantuml"));
   });
 
   it("throws when config source is missing", async () => {
-    mockLoadConfig.mockResolvedValue({
-      config: {},
-    });
-
+    mockLoadConfig.mockResolvedValue({ config: {} });
     await expect(runCheck()).rejects.toThrow();
   });
 
   it("passes when no violations found", async () => {
     setupConfig();
-    mockMapContainers.mockReturnValue(cleanModel());
+    mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await expect(runCheck({ format: "text" })).resolves.toBeUndefined();
     expect(spy).toHaveBeenCalled();
   });
 
-  it("throws when violations found", async () => {
+  it("exits with error code when violations found", async () => {
     setupConfig();
-    mockMapContainers.mockReturnValue(violatingModel());
+    mockLoadModel.mockResolvedValue({ model: violatingModel(), issues: [] });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined as never));
 
-    await expect(runCheck()).rejects.toThrow();
+    await runCheck();
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
   });
 
   it("outputs json format", async () => {
     setupConfig();
-    mockMapContainers.mockReturnValue(cleanModel());
+    mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await runCheck({ format: "json" });
@@ -206,18 +158,22 @@ describe("check command", () => {
 
   it("outputs github format annotations", async () => {
     setupConfig();
-    mockMapContainers.mockReturnValue(violatingModel());
+    mockLoadModel.mockResolvedValue({ model: violatingModel(), issues: [] });
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined as never));
 
-    await expect(runCheck({ format: "github" })).rejects.toThrow();
+    await runCheck({ format: "github" });
 
     const calls = spy.mock.calls.map((c) => c[0] as string);
     expect(calls.some((c) => c.startsWith("::error"))).toBe(true);
+    exitSpy.mockRestore();
   });
 
   it("respects rules config disabling acl", async () => {
     setupConfig({ rules: { acl: false } });
-    mockMapContainers.mockReturnValue(violatingModel());
+    mockLoadModel.mockResolvedValue({ model: violatingModel(), issues: [] });
 
     await expect(runCheck()).resolves.toBeUndefined();
   });
@@ -225,7 +181,7 @@ describe("check command", () => {
   describe("--fix", () => {
     it("reports no violations to fix when model is clean", async () => {
       setupConfig();
-      mockMapContainers.mockReturnValue(cleanModel());
+      mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
 
       await runCheck({ fix: true });
 
@@ -236,7 +192,7 @@ describe("check command", () => {
 
     it("shows edits without writing in dry-run mode", async () => {
       setupConfig();
-      mockMapContainers.mockReturnValue(violatingModel());
+      mockLoadModel.mockResolvedValue({ model: violatingModel(), issues: [] });
       const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runCheck({ fix: true, "dry-run": true });
@@ -247,10 +203,10 @@ describe("check command", () => {
 
     it("applies edits and writes source file", async () => {
       setupConfig();
-      const model = violatingModel();
-      // First call returns violating model, second call (re-check) returns clean
-      mockMapContainers.mockReturnValueOnce(model);
-      mockMapContainers.mockReturnValueOnce(cleanModel());
+      // First call returns violating, second call (re-check) returns clean
+      mockLoadModel
+        .mockResolvedValueOnce({ model: violatingModel(), issues: [] })
+        .mockResolvedValueOnce({ model: cleanModel(), issues: [] });
 
       const pumlSource = [
         'Container(my_service, "My Service")',
@@ -270,8 +226,9 @@ describe("check command", () => {
 
     it("shows summary after applying fixes", async () => {
       setupConfig();
-      mockMapContainers.mockReturnValueOnce(violatingModel());
-      mockMapContainers.mockReturnValueOnce(cleanModel());
+      mockLoadModel
+        .mockResolvedValueOnce({ model: violatingModel(), issues: [] })
+        .mockResolvedValueOnce({ model: cleanModel(), issues: [] });
 
       mockReadFile.mockResolvedValue(
         [
@@ -294,9 +251,9 @@ describe("check command", () => {
 
     it("reports remaining violations count after fix", async () => {
       setupConfig();
-      // re-check still returns violations
-      mockMapContainers.mockReturnValueOnce(violatingModel());
-      mockMapContainers.mockReturnValueOnce(violatingModel());
+      mockLoadModel
+        .mockResolvedValueOnce({ model: violatingModel(), issues: [] })
+        .mockResolvedValueOnce({ model: violatingModel(), issues: [] });
 
       mockReadFile.mockResolvedValue(
         [
@@ -314,27 +271,46 @@ describe("check command", () => {
       );
     });
 
-    it("throws when violations have no auto-fix available", async () => {
+    it("exits with error when violations have no auto-fix available", async () => {
       setupConfig({ rules: { acl: false } });
-      mockMapContainers.mockReturnValue(cyclicModel());
+      mockLoadModel.mockResolvedValue({ model: cyclicModel(), issues: [] });
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation((() => undefined as never));
 
-      await expect(runCheck({ fix: true })).rejects.toThrow();
+      await runCheck({ fix: true });
       expect(consola.info).toHaveBeenCalledWith(
         expect.stringContaining("No auto-fixes available"),
       );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
     });
 
     describe("structurizr source", () => {
-      it("warns and throws when writePath not configured", async () => {
+      it("warns and exits when writePath not configured", async () => {
         setupConfig({
           source: { type: "structurizr", path: "workspace.json" },
         });
-        mockLoadStructurizr.mockResolvedValue(violatingModel());
+        mockLoadFormat.mockResolvedValue(
+          fakeFormat("structurizr", structurizrDslSyntax),
+        );
+        mockLoadModel.mockResolvedValue({
+          model: violatingModel(),
+          issues: [],
+        });
+        const exitSpy = vi
+          .spyOn(process, "exit")
+          .mockImplementation(
+            (() => undefined as never),
+          );
 
-        await expect(runCheck({ fix: true })).rejects.toThrow();
+        await runCheck({ fix: true });
+
         expect(consola.warn).toHaveBeenCalledWith(
           expect.stringContaining("writePath"),
         );
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        exitSpy.mockRestore();
       });
 
       it("writes to writePath and warns to regenerate", async () => {
@@ -345,7 +321,13 @@ describe("check command", () => {
             writePath: "workspace.dsl",
           },
         });
-        mockLoadStructurizr.mockResolvedValue(violatingModel());
+        mockLoadFormat.mockResolvedValue(
+          fakeFormat("structurizr", structurizrDslSyntax),
+        );
+        mockLoadModel.mockResolvedValue({
+          model: violatingModel(),
+          issues: [],
+        });
 
         const dslSource = [
           'my_service = container "My Service"',

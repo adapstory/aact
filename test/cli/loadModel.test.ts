@@ -2,9 +2,9 @@ import consola from "consola";
 
 import { loadModel } from "../../src/cli/loadModel";
 import type { AactConfig } from "../../src/config";
-import { loadPlantumlElements } from "../../src/loaders/plantuml/loadPlantumlElements";
-import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
-import { loadStructurizrElements } from "../../src/loaders/structurizr/loadStructurizrElements";
+import { loadFormat } from "../../src/formats/registry";
+import type { Format } from "../../src/formats/types";
+import { makeModel } from "../helpers/makeModel";
 
 vi.mock("consola", () => ({
   default: {
@@ -14,19 +14,11 @@ vi.mock("consola", () => ({
   },
 }));
 
-vi.mock("../../src/loaders/plantuml/loadPlantumlElements", () => ({
-  loadPlantumlElements: vi.fn(),
-}));
-vi.mock("../../src/loaders/plantuml/mapContainersFromPlantumlElements", () => ({
-  mapContainersFromPlantumlElements: vi.fn(),
-}));
-vi.mock("../../src/loaders/structurizr/loadStructurizrElements", () => ({
-  loadStructurizrElements: vi.fn(),
+vi.mock("../../src/formats/registry", () => ({
+  loadFormat: vi.fn(),
 }));
 
-const mockLoadPuml = vi.mocked(loadPlantumlElements);
-const mockMapPuml = vi.mocked(mapContainersFromPlantumlElements);
-const mockLoadStruct = vi.mocked(loadStructurizrElements);
+const mockLoadFormat = vi.mocked(loadFormat);
 
 const plantumlConfig: AactConfig = {
   source: { type: "plantuml", path: "./architecture.puml" },
@@ -35,6 +27,11 @@ const plantumlConfig: AactConfig = {
 const structurizrConfig: AactConfig = {
   source: { type: "structurizr", path: "./workspace.json" },
 };
+
+const fakeFormat = (load: Format["load"]): Format => ({
+  name: "fake",
+  load,
+});
 
 const enoent = (): NodeJS.ErrnoException => {
   const err: NodeJS.ErrnoException = new Error("ENOENT: no such file");
@@ -47,28 +44,42 @@ describe("loadModel", () => {
     vi.clearAllMocks();
   });
 
-  it("delegates to plantuml loader for type=plantuml", async () => {
-    mockLoadPuml.mockResolvedValue([]);
-    mockMapPuml.mockReturnValue({ allContainers: [], boundaries: [] });
+  it("delegates to format.load when format supports load capability", async () => {
+    const empty = makeModel({});
+    const load = vi.fn().mockResolvedValue({ model: empty, issues: [] });
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
+
+    const result = await loadModel(plantumlConfig);
+
+    expect(mockLoadFormat).toHaveBeenCalledWith("plantuml");
+    expect(load).toHaveBeenCalledOnce();
+    expect(result.model).toBe(empty);
+  });
+
+  it("exits with error when format doesn't expose `load`", async () => {
+    // generate-only format (e.g. kubernetes) — loadModel must bail clearly.
+    mockLoadFormat.mockResolvedValue({ name: "kubernetes" });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined as never));
 
     await loadModel(plantumlConfig);
 
-    expect(mockLoadPuml).toHaveBeenCalledOnce();
-    expect(mockMapPuml).toHaveBeenCalledOnce();
+    expect(consola.error).toHaveBeenCalledWith(
+      expect.stringContaining("doesn't support load"),
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
   });
 
-  it("delegates to structurizr loader for type=structurizr", async () => {
-    mockLoadStruct.mockResolvedValue({ allContainers: [], boundaries: [] });
+  it("emits friendly error and exits when source file is missing (plantuml)", async () => {
+    const load = vi.fn().mockRejectedValue(enoent());
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined as never));
 
-    await loadModel(structurizrConfig);
-
-    expect(mockLoadStruct).toHaveBeenCalledOnce();
-  });
-
-  it("emits friendly error and exits when plantuml source file is missing", async () => {
-    mockLoadPuml.mockRejectedValue(enoent());
-
-    await expect(loadModel(plantumlConfig)).rejects.toThrow();
+    await loadModel(plantumlConfig);
 
     expect(consola.error).toHaveBeenCalledWith(
       expect.stringContaining("Architecture file not found"),
@@ -79,24 +90,36 @@ describe("loadModel", () => {
     expect(consola.info).toHaveBeenCalledWith(
       expect.stringContaining("aact.config.ts"),
     );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
   });
 
-  it("emits friendly error and exits when structurizr source file is missing", async () => {
-    mockLoadStruct.mockRejectedValue(enoent());
+  it("emits friendly error and exits when source file is missing (structurizr)", async () => {
+    const load = vi.fn().mockRejectedValue(enoent());
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined as never));
 
-    await expect(loadModel(structurizrConfig)).rejects.toThrow();
+    await loadModel(structurizrConfig);
 
     expect(consola.error).toHaveBeenCalledWith(
       expect.stringContaining("Architecture file not found"),
     );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
   });
 
   it("emits friendly error on invalid JSON for structurizr", async () => {
-    mockLoadStruct.mockRejectedValue(
-      new SyntaxError("Unexpected token } in JSON"),
-    );
+    const load = vi
+      .fn()
+      .mockRejectedValue(new SyntaxError("Unexpected token } in JSON"));
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined as never));
 
-    await expect(loadModel(structurizrConfig)).rejects.toThrow();
+    await loadModel(structurizrConfig);
 
     expect(consola.error).toHaveBeenCalledWith(
       expect.stringContaining("Cannot parse Structurizr workspace"),
@@ -104,24 +127,35 @@ describe("loadModel", () => {
     expect(consola.info).toHaveBeenCalledWith(
       expect.stringContaining("valid JSON"),
     );
+    exitSpy.mockRestore();
   });
 
   it("emits friendly error on missing model.softwareSystems for structurizr", async () => {
-    mockLoadStruct.mockRejectedValue(
-      new TypeError(
-        "Cannot read properties of undefined (reading 'softwareSystems')",
-      ),
-    );
+    const load = vi
+      .fn()
+      .mockRejectedValue(
+        new TypeError(
+          "Cannot read properties of undefined (reading 'softwareSystems')",
+        ),
+      );
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined as never));
 
-    await expect(loadModel(structurizrConfig)).rejects.toThrow();
+    await loadModel(structurizrConfig);
 
     expect(consola.error).toHaveBeenCalledWith(
       expect.stringContaining("Invalid Structurizr workspace"),
     );
+    exitSpy.mockRestore();
   });
 
   it("re-throws unexpected errors instead of swallowing them", async () => {
-    mockLoadPuml.mockRejectedValue(new Error("boom — totally unexpected"));
+    const load = vi
+      .fn()
+      .mockRejectedValue(new Error("boom — totally unexpected"));
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
 
     await expect(loadModel(plantumlConfig)).rejects.toThrow(
       "boom — totally unexpected",
