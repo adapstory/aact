@@ -4,53 +4,17 @@ import { defineCommand } from "citty";
 import consola from "consola";
 import path from "pathe";
 
-import type { AactConfig } from "../../config";
-import { generateKubernetes } from "../../generators/kubernetes";
-import { generatePlantumlFromModel } from "../../generators/plantumlFromModel";
-import type { ArchitectureModel } from "../../model";
+import { loadFormat } from "../../formats/registry";
+import { canGenerate } from "../../formats/types";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
-const runPlantuml = async (
-  model: ArchitectureModel,
-  config: AactConfig,
-  outputPath?: string,
-): Promise<void> => {
-  const puml = generatePlantumlFromModel(model, {
-    boundaryLabel: config.generate?.boundaryLabel,
-  });
-
-  if (outputPath) {
-    await fs.writeFile(outputPath, puml);
-    consola.success(`Written to ${outputPath}`);
-  } else {
-    console.log(puml);
-  }
-};
-
-const runKubernetes = async (
-  model: ArchitectureModel,
-  config: AactConfig,
-  outputDir?: string,
-): Promise<void> => {
-  const outputs = generateKubernetes(model);
-
-  const targetDir =
-    outputDir ??
-    config.generate?.kubernetes?.path ??
-    "resources/kubernetes/microservices";
-
-  await fs.mkdir(targetDir, { recursive: true });
-
-  await Promise.all(
-    outputs.map((output) =>
-      fs.writeFile(path.join(targetDir, output.fileName), output.content),
-    ),
-  );
-
-  consola.success(`Generated ${outputs.length} file(s) in ${targetDir}`);
-};
-
+/**
+ * Generate command — Model → format artefact. Использует format registry,
+ * формат self-describes capability через `canGenerate`. Output dispatch
+ * через unified `FormatOutput.files` — single-file (PlantUML/Mermaid) или
+ * multi-file (k8s manifests). Stdout если output не задан И один файл.
+ */
 export const generate = defineCommand({
   meta: { description: "Generate architecture artifacts" },
   args: {
@@ -60,30 +24,56 @@ export const generate = defineCommand({
     },
     output: {
       type: "string",
-      description: "Output path (file for plantuml, directory for kubernetes)",
+      description: "Output path (file for single output, directory for multi)",
     },
     format: {
       type: "string",
-      description: "Output format: plantuml, kubernetes",
+      description: "Target format name (plantuml, kubernetes, ...)",
     },
   },
   async run({ args }) {
     const config = await loadAndValidateConfig(args.config);
-    const model = await loadModel(config);
-    const format = args.format ?? "plantuml";
+    const { model } = await loadModel(config);
 
-    switch (format) {
-      case "plantuml": {
-        await runPlantuml(model, config, args.output);
-        break;
-      }
-      case "kubernetes": {
-        await runKubernetes(model, config, args.output);
-        break;
-      }
-      default: {
-        throw new Error(`Unknown format: ${format}`);
-      }
+    const formatName = args.format ?? "plantuml";
+    const format = await loadFormat(formatName);
+
+    if (!canGenerate(format)) {
+      throw new Error(`Format "${format.name}" doesn't support generate`);
     }
+
+    const output = format.generate(model);
+
+    if (output.files.length === 0) {
+      consola.warn("Generator produced no files");
+      return;
+    }
+
+    // Single-file output: write to args.output (file) или stdout.
+    if (output.files.length === 1) {
+      const file = output.files[0];
+      if (args.output) {
+        await fs.writeFile(args.output, file.content);
+        consola.success(`Written to ${args.output}`);
+      } else {
+        console.log(file.content);
+      }
+      return;
+    }
+
+    // Multi-file output: write each file под `args.output` directory.
+    const targetDir =
+      args.output ??
+      config.generate?.kubernetes?.path ??
+      "fixtures/kubernetes/microservices";
+
+    await fs.mkdir(targetDir, { recursive: true });
+    await Promise.all(
+      output.files.map((f) =>
+        fs.writeFile(path.join(targetDir, f.path), f.content),
+      ),
+    );
+
+    consola.success(`Generated ${output.files.length} file(s) in ${targetDir}`);
   },
 });

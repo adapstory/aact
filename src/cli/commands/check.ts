@@ -6,13 +6,15 @@ import { box, colors } from "consola/utils";
 import path from "pathe";
 
 import type { AactConfig } from "../../config";
-import { plantumlSyntax } from "../../loaders/plantuml/syntax";
-import { structurizrDslSyntax } from "../../loaders/structurizr/syntax";
-import type { ArchitectureModel } from "../../model";
-import type { FixResult, SourceSyntax } from "../../rules/fix";
-import { applyEdits } from "../../rules/fix";
+import { loadFormat } from "../../formats/registry";
+import type {FixCapability, SourceSyntax} from "../../formats/types";
+import {
+  canFix
+} from "../../formats/types";
+import type { Model } from "../../model";
+import { applyEdits } from "../../rules/lib/applyEdits";
 import { ruleRegistry } from "../../rules/registry";
-import type { Violation } from "../../rules/types";
+import type { FixResult, Violation } from "../../rules/types";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
@@ -22,14 +24,11 @@ const ruleMap = new Map(ruleRegistry.map((r) => [r.name, r]));
 const exitWithViolations = (): never => process.exit(1);
 
 interface RuleResult {
-  name: string;
-  violations: Violation[];
+  readonly name: string;
+  readonly violations: readonly Violation[];
 }
 
-const runRules = (
-  model: ArchitectureModel,
-  rules: AactConfig["rules"],
-): RuleResult[] => {
+const runRules = (model: Model, rules: AactConfig["rules"]): RuleResult[] => {
   const results: RuleResult[] = [];
 
   for (const rule of ruleRegistry) {
@@ -42,33 +41,27 @@ const runRules = (
   return results;
 };
 
-const getSyntax = (config: AactConfig): SourceSyntax | null => {
-  if (config.source.type === "plantuml") {
-    return plantumlSyntax;
+const resolveFixCapability = async (
+  config: AactConfig,
+): Promise<FixCapability | null> => {
+  const format = await loadFormat(config.source.type);
+  if (!canFix(format)) {
+    consola.warn(`Format "${format.name}" doesn't support --fix`);
+    return null;
   }
-  if (config.source.type === "structurizr") {
-    if (!config.source.writePath) {
-      consola.warn(
-        "To use --fix with structurizr, add source.writePath pointing to your workspace.dsl",
-      );
-      return null;
-    }
-    return structurizrDslSyntax;
+  if (config.source.type === "structurizr" && !config.source.writePath) {
+    consola.warn(
+      "To use --fix with structurizr, add source.writePath pointing to your workspace.dsl",
+    );
+    return null;
   }
-  /* c8 ignore next — defensive guard. Config validation restricts
-     `source.type` to "plantuml" | "structurizr"; both branches above
-     are covered. Reaching this `return null` requires unsafe casting
-     that bypasses the config schema. */
-  return null;
+  return format.fix;
 };
 
 // Fixes from all enabled rules are collected in registry order and applied
-// to the source as a single batch (see `writeFixes` below). The model is
-// not re-checked between rules, so two rules whose edits land on
-// overlapping lines may produce inconsistent output — `applyEdits` warns
-// on ambiguous patterns but does not abort. No priority/conflict model.
+// to the source as a single batch. Model is not re-checked between rules.
 const generateFixes = (
-  model: ArchitectureModel,
+  model: Model,
   results: RuleResult[],
   rules: AactConfig["rules"],
   syntax: SourceSyntax,
@@ -81,13 +74,15 @@ const generateFixes = (
     if (!ruleDef?.fix) continue;
     const configValue = rules?.[ruleDef.name as keyof typeof rules];
     const options = typeof configValue === "object" ? configValue : undefined;
-    fixes.push(...ruleDef.fix(model, result.violations, syntax, options));
+    fixes.push(
+      ...(ruleDef.fix?.(model, result.violations, syntax, options) ?? []),
+    );
   }
 
   return fixes;
 };
 
-const formatText = (results: RuleResult[]): void => {
+const formatText = (results: readonly RuleResult[]): void => {
   const failed = results.filter((r) => r.violations.length > 0);
   const passed = results.filter((r) => r.violations.length === 0);
 
@@ -114,8 +109,6 @@ const formatText = (results: RuleResult[]): void => {
   }
 
   const total = failed.reduce((n, r) => n + r.violations.length, 0);
-  // Final summary as a consola.box — visually separates the verdict from
-  // the per-rule details above. Title is colored by outcome.
   if (total === 0) {
     console.log(
       box(colors.green("No violations found."), {
@@ -152,7 +145,7 @@ const formatText = (results: RuleResult[]): void => {
   );
 };
 
-const formatJson = (results: RuleResult[]): void => {
+const formatJson = (results: readonly RuleResult[]): void => {
   const output = {
     results: results.map((r) => ({
       rule: r.name,
@@ -163,7 +156,7 @@ const formatJson = (results: RuleResult[]): void => {
   console.log(JSON.stringify(output, undefined, 2));
 };
 
-const formatGithub = (results: RuleResult[]): void => {
+const formatGithub = (results: readonly RuleResult[]): void => {
   for (const result of results) {
     for (const v of result.violations) {
       console.log(`::error title=${result.name}::${v.container}: ${v.message}`);
@@ -177,7 +170,7 @@ const prefixContent = (content: string, first: string, rest: string): string =>
     .map((line, i) => (i === 0 ? first + line : rest + line))
     .join("\n");
 
-const formatFixes = (fixes: FixResult[]): void => {
+const formatFixes = (fixes: readonly FixResult[]): void => {
   for (const fix of fixes) {
     const ruleTag = colors.bold(`[${fix.rule}]`);
     console.log(`  ${ruleTag}  ${fix.description}`);
@@ -217,7 +210,10 @@ const detectFormat = (format?: string): string => {
   return "text";
 };
 
-const formatResults = (results: RuleResult[], format: string): void => {
+const formatResults = (
+  results: readonly RuleResult[],
+  format: string,
+): void => {
   switch (format) {
     case "json": {
       formatJson(results);
@@ -235,7 +231,7 @@ const formatResults = (results: RuleResult[], format: string): void => {
 
 const writeFixes = async (
   config: AactConfig,
-  fixes: FixResult[],
+  fixes: readonly FixResult[],
 ): Promise<void> => {
   const writePath = path.resolve(config.source.writePath ?? config.source.path);
   let source = await readFile(writePath, "utf8");
@@ -253,7 +249,7 @@ const writeFixes = async (
       "DSL updated — regenerate workspace.json from workspace.dsl before re-checking",
     );
   } else {
-    const reModel = await loadModel(config);
+    const { model: reModel } = await loadModel(config);
     const reResults = runRules(reModel, config.rules);
     const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
     consola.success(
@@ -264,7 +260,7 @@ const writeFixes = async (
 };
 
 const handleFixMode = async (
-  model: ArchitectureModel,
+  model: Model,
   results: RuleResult[],
   config: AactConfig,
   dryRun: boolean,
@@ -275,10 +271,15 @@ const handleFixMode = async (
     return;
   }
 
-  const syntax = getSyntax(config);
-  if (!syntax) return exitWithViolations();
+  const fixCapability = await resolveFixCapability(config);
+  if (!fixCapability) return exitWithViolations();
 
-  const fixes = generateFixes(model, results, config.rules, syntax);
+  const fixes = generateFixes(
+    model,
+    results,
+    config.rules,
+    fixCapability.syntax,
+  );
   if (fixes.length === 0) {
     consola.info("No auto-fixes available for these violations");
     exitWithViolations();
@@ -296,14 +297,19 @@ const handleFixMode = async (
   }
 };
 
-const suggestFixes = (
-  model: ArchitectureModel,
-  results: RuleResult[],
+const suggestFixes = async (
+  model: Model,
+  results: readonly RuleResult[],
   config: AactConfig,
-): void => {
-  const syntax = getSyntax(config);
-  if (!syntax) return;
-  const fixes = generateFixes(model, results, config.rules, syntax);
+): Promise<void> => {
+  const fixCapability = await resolveFixCapability(config);
+  if (!fixCapability) return;
+  const fixes = generateFixes(
+    model,
+    [...results],
+    config.rules,
+    fixCapability.syntax,
+  );
   if (fixes.length > 0) {
     console.log(colors.bold("Suggested fixes:"));
     console.log();
@@ -333,9 +339,14 @@ export const check = defineCommand({
   },
   async run({ args }) {
     const config = await loadAndValidateConfig(args.config);
-    const model = await loadModel(config);
-    const results = runRules(model, config.rules);
+    const { model, issues } = await loadModel(config);
 
+    // Surface loader-time issues (dangling refs, duplicate names, etc.)
+    for (const issue of issues) {
+      consola.warn(`model: ${issue.kind}`, issue);
+    }
+
+    const results = runRules(model, config.rules);
     formatResults(results, detectFormat(args.format));
 
     const hasViolations = results.some((r) => r.violations.length > 0);
@@ -346,7 +357,7 @@ export const check = defineCommand({
     }
 
     if (hasViolations) {
-      suggestFixes(model, results, config);
+      await suggestFixes(model, results, config);
       exitWithViolations();
     }
   },

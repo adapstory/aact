@@ -1,10 +1,8 @@
+import type {Boundary, Container, Model, Relation} from "./model";
 import {
-  ArchitectureModel,
-  Boundary,
-  Container,
-  CONTAINER_DB_TYPE,
-  EXTERNAL_SYSTEM_TYPE,
-  Relation,
+  allContainers,
+  getBoundary,
+  getContainer
 } from "./model";
 
 export interface CouplingRelation {
@@ -20,6 +18,11 @@ export interface BoundaryAnalysis {
   couplingRelations: CouplingRelation[];
 }
 
+interface DatabasesInfo {
+  count: number;
+  consumes: number;
+}
+
 export interface AnalysisReport {
   elementsCount: number;
   syncApiCalls: number;
@@ -29,13 +32,8 @@ export interface AnalysisReport {
 }
 
 export interface AnalyzedArchitecture {
-  model: ArchitectureModel;
+  model: Model;
   report: AnalysisReport;
-}
-
-interface DatabasesInfo {
-  count: number;
-  consumes: number;
 }
 
 interface RelationWithSource {
@@ -44,15 +42,13 @@ interface RelationWithSource {
 }
 
 export interface AnalyzeOptions {
-  apiTechnologies?: string[];
-  externalType?: string;
-  dbType?: string;
+  apiTechnologies?: readonly string[];
 }
 
 const DEFAULT_API_TECHNOLOGIES = ["http", "grpc", "tcp"];
 
-const allRelations = (model: ArchitectureModel): RelationWithSource[] =>
-  model.allContainers.flatMap((container) =>
+const allRelations = (model: Model): RelationWithSource[] =>
+  allContainers(model).flatMap((container) =>
     container.relations.map((relation) => ({ from: container, relation })),
   );
 
@@ -67,22 +63,22 @@ const classifyRelation = (
 ): void => {
   if (!names.has(from.name)) return;
 
-  if (names.has(relation.to.name)) {
+  if (names.has(relation.to)) {
     result.cohesion++;
     return;
   }
 
-  const isInParentSibling = childNames?.has(relation.to.name) ?? false;
+  const isInParentSibling = childNames?.has(relation.to) ?? false;
 
   if (!parentBoundary || isInParentSibling) {
     result.coupling++;
-    result.couplingRelations.push({ from: from.name, to: relation.to.name });
+    result.couplingRelations.push({ from: from.name, to: relation.to });
     if (parentResult) parentResult.cohesion++;
   } else if (parentResult) {
     parentResult.coupling++;
     parentResult.couplingRelations.push({
       from: from.name,
-      to: relation.to.name,
+      to: relation.to,
     });
   }
 };
@@ -93,16 +89,18 @@ interface BoundaryLookups {
   parentBoundary: Boundary | undefined;
 }
 
-const buildBoundaryLookups = (
-  boundaries: Boundary[],
-): Map<string, BoundaryLookups> => {
+const buildBoundaryLookups = (model: Model): Map<string, BoundaryLookups> => {
+  const boundaries = Object.values(model.boundaries);
   const nameSets = new Map(
-    boundaries.map((b) => [b.name, new Set(b.containers.map((c) => c.name))]),
+    boundaries.map((b) => [b.name, new Set(b.containerNames)]),
   );
 
   const parentMap = new Map<string, Boundary>();
   for (const b of boundaries) {
-    for (const child of b.boundaries) parentMap.set(child.name, b);
+    for (const childName of b.boundaryNames) {
+      const child = getBoundary(model, childName);
+      if (child) parentMap.set(child.name, b);
+    }
   }
 
   const result = new Map<string, BoundaryLookups>();
@@ -111,8 +109,11 @@ const buildBoundaryLookups = (
     let childNames: Set<string> | undefined;
     if (parentBoundary) {
       childNames = new Set<string>();
-      for (const sibling of parentBoundary.boundaries) {
-        for (const c of sibling.containers) childNames.add(c.name);
+      for (const siblingName of parentBoundary.boundaryNames) {
+        const sibling = getBoundary(model, siblingName);
+        if (sibling) {
+          for (const cName of sibling.containerNames) childNames.add(cName);
+        }
       }
     }
     result.set(b.name, {
@@ -125,37 +126,36 @@ const buildBoundaryLookups = (
 };
 
 const isSyncApiCall = (
+  model: Model,
   it: RelationWithSource,
-  externalType: string,
-  apiTechnologies: string[],
+  apiTechnologies: readonly string[],
 ): boolean => {
-  if (it.relation.tags?.includes("async")) return false;
-  if (it.relation.to.type === externalType) return true;
+  if (it.relation.tags.includes("async")) return false;
+  const target = getContainer(model, it.relation.to);
+  if (target?.external === true && target.kind === "System") return true;
   return apiTechnologies.some((t) =>
     (it.relation.technology ?? "").toLowerCase().includes(t),
   );
 };
 
 const analyzeModel = (
-  model: ArchitectureModel,
+  model: Model,
   options?: AnalyzeOptions,
 ): AnalysisReport => {
   const apiTechnologies = options?.apiTechnologies ?? DEFAULT_API_TECHNOLOGIES;
-  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
-  const dbType = options?.dbType ?? CONTAINER_DB_TYPE;
   const relations = allRelations(model);
 
   const asyncApiCalls = relations.filter((it) =>
-    it.relation.tags?.includes("async"),
+    it.relation.tags.includes("async"),
   );
   const syncApiCalls = relations.filter((it) =>
-    isSyncApiCall(it, externalType, apiTechnologies),
+    isSyncApiCall(model, it, apiTechnologies),
   );
 
-  const lookups = buildBoundaryLookups(model.boundaries);
+  const lookups = buildBoundaryLookups(model);
 
   const boundaryResults = new Map<string, BoundaryAnalysis>();
-  for (const boundary of model.boundaries) {
+  for (const boundary of Object.values(model.boundaries)) {
     boundaryResults.set(boundary.name, {
       name: boundary.name,
       label: boundary.label,
@@ -165,7 +165,7 @@ const analyzeModel = (
     });
   }
 
-  for (const boundary of model.boundaries) {
+  for (const boundary of Object.values(model.boundaries)) {
     const { nameSet, childNames, parentBoundary } = lookups.get(boundary.name)!;
     const result = boundaryResults.get(boundary.name)!;
     const parentResult = parentBoundary
@@ -186,26 +186,25 @@ const analyzeModel = (
   }
 
   return {
-    elementsCount: model.allContainers.length,
+    elementsCount: allContainers(model).length,
     syncApiCalls: syncApiCalls.length,
     asyncApiCalls: asyncApiCalls.length,
-    databases: analyzeDatabases(model, dbType),
+    databases: analyzeDatabases(model),
     boundaries: [...boundaryResults.values()],
   };
 };
 
-const analyzeDatabases = (
-  model: ArchitectureModel,
-  dbType: string,
-): DatabasesInfo => {
+const analyzeDatabases = (model: Model): DatabasesInfo => {
   const dbNames = new Set(
-    model.allContainers.filter((it) => it.type === dbType).map((it) => it.name),
+    allContainers(model)
+      .filter((it) => it.kind === "ContainerDb")
+      .map((it) => it.name),
   );
 
   let consumes = 0;
-  for (const container of model.allContainers) {
+  for (const container of allContainers(model)) {
     for (const r of container.relations) {
-      if (dbNames.has(r.to.name)) consumes++;
+      if (dbNames.has(r.to)) consumes++;
     }
   }
 
@@ -216,11 +215,9 @@ const analyzeDatabases = (
 };
 
 export const analyzeArchitecture = (
-  model: ArchitectureModel,
+  model: Model,
   options?: AnalyzeOptions,
-): AnalyzedArchitecture => {
-  return {
-    model,
-    report: analyzeModel(model, options),
-  };
-};
+): AnalyzedArchitecture => ({
+  model,
+  report: analyzeModel(model, options),
+});

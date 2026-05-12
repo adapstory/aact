@@ -1,7 +1,7 @@
 import { defineCommand } from "citty";
 import consola from "consola";
 
-import { analyzeArchitecture } from "../../analyzer";
+import { analyzeArchitecture } from "../../analyze";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
 
@@ -19,7 +19,7 @@ export const analyze = defineCommand({
   },
   async run({ args }) {
     const config = await loadAndValidateConfig(args.config);
-    const model = await loadModel(config);
+    const { model } = await loadModel(config);
     const { report } = analyzeArchitecture(model);
 
     if (args.format === "json") {

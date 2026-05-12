@@ -38,6 +38,8 @@ export type FixFn<O = unknown> = (
 
 export interface RuleDefinition<O = unknown> {
   readonly name: string;
+  /** Human-readable description — для CLI `rules list`, docs, CHANGELOG. */
+  readonly description: string;
   readonly check: CheckFn<O>;
   readonly fix?: FixFn<O>;
 }

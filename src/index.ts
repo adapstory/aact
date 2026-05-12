@@ -1,4 +1,4 @@
-export * from "./analyzer";
+export * from "./analyze";
 export * from "./config";
 export { knownFormatNames, loadFormat } from "./formats/registry";
 export {

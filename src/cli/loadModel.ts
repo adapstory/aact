@@ -2,10 +2,9 @@ import consola from "consola";
 import path from "pathe";
 
 import type { AactConfig } from "../config";
-import { loadPlantumlElements } from "../loaders/plantuml/loadPlantumlElements";
-import { mapContainersFromPlantumlElements } from "../loaders/plantuml/mapContainersFromPlantumlElements";
-import { loadStructurizrElements } from "../loaders/structurizr/loadStructurizrElements";
-import type { ArchitectureModel } from "../model";
+import { loadFormat } from "../formats/registry";
+import type {LoadResult} from "../formats/types";
+import { canLoad  } from "../formats/types";
 
 const isFileNotFound = (
   err: unknown,
@@ -22,35 +21,27 @@ const exitWithError = (message: string, hint?: string): never => {
   return process.exit(1);
 };
 
-// Loader extension point: adding a new source format requires a case here
-// plus a discriminant in `AactConfig["source"]["type"]`. Asymmetric to
-// `ruleRegistry`, which is data-driven — consider promoting loaders to a
-// registry if a third format lands.
-export const loadModel = async (
-  config: AactConfig,
-): Promise<ArchitectureModel> => {
+/**
+ * Loads architecture model через format registry. Возвращает LoadResult с
+ * Model + diagnostic issues (dangling refs, duplicate names etc.) от
+ * validateModel + buildModel. CLI решает severity: fatal issues → exit,
+ * warnings → consola.warn.
+ *
+ * Adding new source format = добавить formats/<name>/ + строчку в
+ * formats/registry.ts. Никаких case'ов здесь.
+ */
+export const loadModel = async (config: AactConfig): Promise<LoadResult> => {
   const resolvedPath = path.resolve(config.source.path);
 
   try {
-    switch (config.source.type) {
-      case "plantuml": {
-        const elements = await loadPlantumlElements(resolvedPath);
-        return mapContainersFromPlantumlElements(elements);
-      }
-      case "structurizr": {
-        return await loadStructurizrElements(resolvedPath);
-      }
-      /* c8 ignore next 4 — `: never` exhaustive guard. Unreachable at the
-         type level: config validation already restricts `source.type` to the
-         discriminant union "plantuml" | "structurizr". The branch exists so
-         TypeScript fails the build if a new source type is added without a
-         case here. Testing it would require unsafe casting that doesn't
-         reflect real usage. */
-      default: {
-        const sourceType: never = config.source.type;
-        throw new Error(`Unsupported source type: ${String(sourceType)}`);
-      }
+    const format = await loadFormat(config.source.type);
+    if (!canLoad(format)) {
+      return exitWithError(
+        `Format "${format.name}" doesn't support load`,
+        "Specify a source-capable format (plantuml, structurizr).",
+      );
     }
+    return await format.load(resolvedPath);
   } catch (error) {
     if (isFileNotFound(error)) {
       return exitWithError(
