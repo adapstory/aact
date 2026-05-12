@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import eslintComments from "@eslint-community/eslint-plugin-eslint-comments/configs";
 import vitest from "@vitest/eslint-plugin";
+import boundaries from "eslint-plugin-boundaries";
 import citty from "eslint-plugin-citty";
 import importX from "eslint-plugin-import-x";
 import nodePlugin from "eslint-plugin-n";
@@ -69,6 +70,87 @@ export default tseslint.config(
       "import-x/consistent-type-specifier-style": ["error", "prefer-top-level"],
       "import-x/first": "error",
       "import-x/newline-after-import": "error",
+    },
+  },
+  // eslint-plugin-boundaries: enforces architectural layers. The point is
+  // "понятные слои для контрибьюторов" — структура из convention становится
+  // contract. Configured for CURRENT src/ (loaders + generators separate);
+  // will collapse to src/formats/<name>/ in v3 structural move.
+  // Uses v6 object-based selector syntax (boundaries/dependencies).
+  {
+    files: ["src/**/*.ts"],
+    plugins: { boundaries },
+    settings: {
+      "boundaries/elements": [
+        { type: "model", pattern: "src/model/**/*" },
+        { type: "loader", pattern: "src/loaders/**/*" },
+        { type: "generator", pattern: "src/generators/**/*" },
+        { type: "rule", pattern: "src/rules/**/*" },
+        { type: "analyzer", pattern: "src/analyzer.ts", mode: "file" },
+        { type: "cli", pattern: "src/cli/**/*" },
+        { type: "config", pattern: "src/config.ts", mode: "file" },
+        { type: "index", pattern: "src/index.ts", mode: "file" },
+      ],
+    },
+    rules: {
+      "boundaries/dependencies": [
+        "error",
+        {
+          default: "disallow",
+          rules: [
+            // model — корневой слой, ни от чего не зависит
+            { from: { type: "model" }, allow: [] },
+            // loaders + generators — только model
+            { from: { type: "loader" }, allow: [{ to: { type: "model" } }] },
+            { from: { type: "generator" }, allow: [{ to: { type: "model" } }] },
+            // rules — только model
+            { from: { type: "rule" }, allow: [{ to: { type: "model" } }] },
+            // analyzer — model + rules
+            {
+              from: { type: "analyzer" },
+              allow: [{ to: { type: ["model", "rule"] } }],
+            },
+            // config — standalone (valibot only)
+            { from: { type: "config" }, allow: [] },
+            // cli — может всё
+            {
+              from: { type: "cli" },
+              allow: [
+                {
+                  to: {
+                    type: [
+                      "model",
+                      "loader",
+                      "generator",
+                      "rule",
+                      "analyzer",
+                      "config",
+                    ],
+                  },
+                },
+              ],
+            },
+            // index — public API barrel, re-exports всё
+            {
+              from: { type: "index" },
+              allow: [
+                {
+                  to: {
+                    type: [
+                      "model",
+                      "loader",
+                      "generator",
+                      "rule",
+                      "analyzer",
+                      "config",
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
     },
   },
   {
