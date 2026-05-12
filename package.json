@@ -76,6 +76,7 @@
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^20.19.32",
     "@vitest/coverage-v8": "^4.1.6",
+    "changelogen": "^0.6.2",
     "eslint": "^9",
     "eslint-plugin-n": "^17",
     "eslint-plugin-simple-import-sort": "^12",
@@ -100,7 +101,6 @@
     "citty": "^0.2.2",
     "consola": "^3.4.2",
     "jiti": "^2.7.0",
-    "picocolors": "^1.1.1",
     "plantuml-parser": "0.4.0",
     "valibot": "^1.4.0",
     "yaml": "2.9.0"

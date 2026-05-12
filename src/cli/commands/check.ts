@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { defineCommand } from "citty";
 import consola from "consola";
-import pc from "picocolors";
+import { box, colors } from "consola/utils";
 
 import type { AactConfig } from "../../config";
 import { plantumlSyntax } from "../../loaders/plantuml/syntax";
@@ -94,36 +94,62 @@ const formatText = (results: RuleResult[]): void => {
   for (const result of failed) {
     const count = result.violations.length;
     const label = count === 1 ? "violation" : "violations";
-    const countLabel = pc.red(`${count} ${label}`);
-    console.log(`${pc.bold(pc.red(result.name))}  ${countLabel}`);
+    const countLabel = colors.red(`${count} ${label}`);
+    console.log(`${colors.bold(colors.red(result.name))}  ${countLabel}`);
 
     const maxLen = Math.max(
       ...result.violations.map((v) => v.container.length),
     );
     for (const v of result.violations) {
-      console.log(`  ${pc.bold(v.container.padEnd(maxLen))}  ${v.message}`);
+      console.log(`  ${colors.bold(v.container.padEnd(maxLen))}  ${v.message}`);
     }
     console.log();
   }
 
   if (passed.length > 0) {
     console.log(
-      `${pc.dim("Passed")}  ${passed.map((r) => pc.green(r.name)).join(pc.dim(" · "))}`,
+      `${colors.dim("Passed")}  ${passed.map((r) => colors.green(r.name)).join(colors.dim(" · "))}`,
     );
     console.log();
   }
 
   const total = failed.reduce((n, r) => n + r.violations.length, 0);
+  // Final summary as a consola.box — visually separates the verdict from
+  // the per-rule details above. Title is colored by outcome.
   if (total === 0) {
-    console.log(pc.green("No violations found."));
-  } else {
-    const rulesLabel = failed.length === 1 ? "rule" : "rules";
     console.log(
-      pc.red(
-        `Found ${total} ${total === 1 ? "violation" : "violations"} in ${failed.length} ${rulesLabel}`,
-      ) + pc.dim("  —  run with --fix to apply suggested fixes"),
+      box(colors.green("No violations found."), {
+        title: colors.green("✓ check"),
+        style: { borderColor: "green" },
+      }),
     );
+    return;
   }
+
+  const fixableRules = failed.filter(
+    (r) => ruleRegistry.find((rd) => rd.name === r.name)?.fix,
+  ).length;
+  const violationsLabel = total === 1 ? "violation" : "violations";
+  const rulesLabel = failed.length === 1 ? "rule" : "rules";
+  const fixableHas =
+    fixableRules === 1 ? "rule has auto-fix" : "rules have auto-fix";
+  const fixableLine =
+    fixableRules > 0
+      ? "\n" + colors.dim(`${fixableRules} ${fixableHas} — run with --fix`)
+      : "";
+  const headline =
+    colors.red(`${total} ${violationsLabel}`) +
+    " " +
+    colors.dim("in") +
+    " " +
+    colors.red(`${failed.length} ${rulesLabel}`) +
+    fixableLine;
+  console.log(
+    box(headline, {
+      title: colors.red("✗ check"),
+      style: { borderColor: "red" },
+    }),
+  );
 };
 
 const formatJson = (results: RuleResult[]): void => {
@@ -153,25 +179,29 @@ const prefixContent = (content: string, first: string, rest: string): string =>
 
 const formatFixes = (fixes: FixResult[]): void => {
   for (const fix of fixes) {
-    const ruleTag = pc.bold(`[${fix.rule}]`);
+    const ruleTag = colors.bold(`[${fix.rule}]`);
     console.log(`  ${ruleTag}  ${fix.description}`);
     for (const edit of fix.edits) {
       switch (edit.type) {
         case "remove": {
-          console.log(pc.red(prefixContent(edit.search, "    - ", "      ")));
+          console.log(
+            colors.red(prefixContent(edit.search, "    - ", "      ")),
+          );
           break;
         }
         case "replace": {
-          console.log(pc.red(prefixContent(edit.search, "    - ", "      ")));
           console.log(
-            pc.green(prefixContent(edit.content ?? "", "    + ", "      ")),
+            colors.red(prefixContent(edit.search, "    - ", "      ")),
+          );
+          console.log(
+            colors.green(prefixContent(edit.content ?? "", "    + ", "      ")),
           );
           break;
         }
         case "add": {
-          console.log(pc.dim(`    (after "${edit.search}")`));
+          console.log(colors.dim(`    (after "${edit.search}")`));
           console.log(
-            pc.green(prefixContent(edit.content ?? "", "    + ", "      ")),
+            colors.green(prefixContent(edit.content ?? "", "    + ", "      ")),
           );
           break;
         }
@@ -255,7 +285,7 @@ const handleFixMode = async (
   }
 
   console.log(
-    pc.bold(dryRun ? "Suggested fixes (dry run):" : "Applying fixes:"),
+    colors.bold(dryRun ? "Suggested fixes (dry run):" : "Applying fixes:"),
   );
   console.log();
   formatFixes(fixes);
@@ -275,7 +305,7 @@ const suggestFixes = (
   if (!syntax) return;
   const fixes = generateFixes(model, results, config.rules, syntax);
   if (fixes.length > 0) {
-    console.log(pc.bold("Suggested fixes:"));
+    console.log(colors.bold("Suggested fixes:"));
     console.log();
     formatFixes(fixes);
   }
