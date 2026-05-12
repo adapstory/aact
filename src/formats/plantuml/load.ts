@@ -1,14 +1,14 @@
 import fs from "node:fs/promises";
 
 import path from "pathe";
-import type {UMLElement} from "plantuml-parser";
+import type { UMLElement } from "plantuml-parser";
 import {
   Comment,
   parse as parsePuml,
   Stdlib_C4_Boundary,
   Stdlib_C4_Container_Component,
   Stdlib_C4_Context,
-  Stdlib_C4_Dynamic_Rel
+  Stdlib_C4_Dynamic_Rel,
 } from "plantuml-parser";
 
 import type { Boundary, Container, Relation } from "../../model";
@@ -58,6 +58,18 @@ const buildContainer = (
       ? el.techn
       : undefined;
 
+  // plantuml-parser 0.4 не поддерживает $tags="X" named syntax — pre-transform
+  // конвертит в positional. На контейнерах с `Container(alias, label, $tags="X")`
+  // значение приземляется в slot sprite (position 5), не tags (position 6).
+  // Fallback: если tags пусты, а sprite выглядит как tag-list — читаем sprite
+  // как tags. Backward-compat с old aact-стиль writer'ом + user'ами писавшими
+  // `$tags=` без full positional pad.
+  const explicitTags = parseCsvTags(el.tags);
+  const spriteValue = el.sprite || "";
+  const usedSpriteAsTags = explicitTags.length === 0 && spriteValue.length > 0;
+  const tags = usedSpriteAsTags ? parseCsvTags(spriteValue) : explicitTags;
+  const sprite = usedSpriteAsTags ? undefined : spriteValue || undefined;
+
   return {
     name: el.alias,
     label: el.label,
@@ -65,8 +77,8 @@ const buildContainer = (
     external,
     description: el.descr || "",
     technology,
-    tags: parseCsvTags(el.tags),
-    sprite: el.sprite || undefined,
+    tags,
+    sprite,
     relations: [],
     link: el.link || undefined,
   };
