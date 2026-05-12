@@ -41,8 +41,16 @@ afterEach(async () => {
   await fs.rm(workDir, { recursive: true, force: true });
 });
 
+// Neutralize GITHUB_ACTIONS in subprocess env: in CI the default check
+// format is "github" (silent on clean state — emits ::error:: only on
+// violations). These tests assert human-readable text output, so we
+// force the text path deterministically regardless of where they run.
 const runCli = (args: string[]) =>
-  execa("node", [CLI_PATH, ...args], { cwd: workDir, reject: false });
+  execa("node", [CLI_PATH, ...args], {
+    cwd: workDir,
+    reject: false,
+    env: { GITHUB_ACTIONS: "" },
+  });
 
 describe("aact init", () => {
   it("creates aact.config.ts and architecture.puml in cwd", async () => {
