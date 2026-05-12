@@ -1,47 +1,38 @@
-import type { ArchitectureModel } from "../../src/model";
-import type { NamingConvention } from "../../src/rules/namingUtils";
-import { detectNamingConvention, joinName } from "../../src/rules/namingUtils";
+import type { NamingConvention } from "../../../src/rules/lib/namingUtils";
+import {
+  detectNamingConvention,
+  joinName,
+} from "../../../src/rules/lib/namingUtils";
+import { makeModel } from "../../helpers/makeModel";
 
-const makeModel = (names: string[]): ArchitectureModel => ({
-  boundaries: [],
-  allContainers: names.map((name) => ({
-    name,
-    label: name,
-    type: "Container",
-    description: "",
-    relations: [],
-  })),
-});
+const modelOf = (names: string[]) =>
+  makeModel({ containers: names.map((name) => ({ name })) });
 
 describe("detectNamingConvention", () => {
   it("returns snake for empty model", () => {
-    expect(detectNamingConvention(makeModel([]))).toBe("snake");
+    expect(detectNamingConvention(modelOf([]))).toBe("snake");
   });
 
   it("detects snake_case", () => {
     expect(
-      detectNamingConvention(
-        makeModel(["orders_api", "orders_db", "user_svc"]),
-      ),
+      detectNamingConvention(modelOf(["orders_api", "orders_db", "user_svc"])),
     ).toBe("snake");
   });
 
   it("detects camelCase", () => {
     expect(
-      detectNamingConvention(makeModel(["ordersApi", "ordersDb", "userSvc"])),
+      detectNamingConvention(modelOf(["ordersApi", "ordersDb", "userSvc"])),
     ).toBe("camel");
   });
 
   it("detects kebab-case", () => {
     expect(
-      detectNamingConvention(
-        makeModel(["orders-api", "orders-db", "user-svc"]),
-      ),
+      detectNamingConvention(modelOf(["orders-api", "orders-db", "user-svc"])),
     ).toBe("kebab");
   });
 
   it("falls back to snake when mixed", () => {
-    expect(detectNamingConvention(makeModel(["orders_api", "ordersDb"]))).toBe(
+    expect(detectNamingConvention(modelOf(["orders_api", "ordersDb"]))).toBe(
       "snake",
     );
   });
@@ -50,7 +41,7 @@ describe("detectNamingConvention", () => {
     // Stryker mutated `withHyphen > withUnderscore` to `>=`. With >=,
     // a tied score (1=1) would return "kebab"; without, it falls through
     // to the camel check and finally snake.
-    expect(detectNamingConvention(makeModel(["a-b", "c_d"]))).toBe("snake");
+    expect(detectNamingConvention(modelOf(["a-b", "c_d"]))).toBe("snake");
   });
 
   it("returns camel when camelCase dominates and hyphen is rare (covers && vs ||)", () => {
@@ -60,7 +51,7 @@ describe("detectNamingConvention", () => {
     // Pin: 3 camel names + 1 hyphenated name + 0 underscores → camel.
     expect(
       detectNamingConvention(
-        makeModel(["orderApi", "orderDb", "userSvc", "a-b"]),
+        modelOf(["orderApi", "orderDb", "userSvc", "a-b"]),
       ),
     ).toBe("camel");
   });
@@ -69,13 +60,13 @@ describe("detectNamingConvention", () => {
     // Stryker mutated `withHyphen > withCamel` to `>=`. With >=, a tied
     // count (1 hyphen, 1 camel, 0 underscore) would return "kebab"; with
     // strict >, the kebab condition fails and camel wins.
-    expect(detectNamingConvention(makeModel(["fooBar", "a-b"]))).toBe("camel");
+    expect(detectNamingConvention(modelOf(["fooBar", "a-b"]))).toBe("camel");
   });
 
   it("returns snake when no naming style dominates (covers ConditionalExpression true)", () => {
     // Stryker mutated `if (...) return \"kebab\"` to `if (true)`. With true,
     // any non-empty input returns kebab. Pin: snake_case only → snake.
-    expect(detectNamingConvention(makeModel(["orders_api", "user_svc"]))).toBe(
+    expect(detectNamingConvention(modelOf(["orders_api", "user_svc"]))).toBe(
       "snake",
     );
   });

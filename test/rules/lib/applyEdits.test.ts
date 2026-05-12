@@ -1,6 +1,6 @@
 import consola from "consola";
 
-import { applyEdits } from "../../src/rules/fix";
+import { applyEdits } from "../../../src/rules/lib/applyEdits";
 
 describe("applyEdits", () => {
   const source = [

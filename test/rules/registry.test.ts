@@ -1,41 +1,34 @@
-import { checkAcl } from "../../src/rules/acl";
-import { checkAcyclic } from "../../src/rules/acyclic";
-import { checkApiGateway } from "../../src/rules/apiGateway";
-import { checkCohesion } from "../../src/rules/cohesion";
-import { checkCommonReuse } from "../../src/rules/commonReuse";
-import { checkCrud } from "../../src/rules/crud";
-import { checkDbPerService } from "../../src/rules/dbPerService";
-import { fixAcl } from "../../src/rules/fixAcl";
-import { fixCrud } from "../../src/rules/fixCrud";
-import { fixDbPerService } from "../../src/rules/fixDbPerService";
+import { aclRule } from "../../src/rules/acl";
+import { acyclicRule } from "../../src/rules/acyclic";
+import { apiGatewayRule } from "../../src/rules/apiGateway";
+import { cohesionRule } from "../../src/rules/cohesion";
+import { commonReuseRule } from "../../src/rules/commonReuse";
+import { crudRule } from "../../src/rules/crud";
+import { dbPerServiceRule } from "../../src/rules/dbPerService";
 import { ruleRegistry } from "../../src/rules/registry";
-import { checkStableDependencies } from "../../src/rules/stableDependencies";
+import { stableDependenciesRule } from "../../src/rules/stableDependencies";
+import { makeModel } from "../helpers/makeModel";
 
-// The registry is the canonical mapping the CLI iterates over for `check`
-// and `--fix`. A rename, a missing fix, or a wired-up wrong implementation
-// here silently breaks config: a rule disabled in `aact.config.ts` under
-// its old name keeps firing, or a fix never runs. Stryker showed 0% score
-// on this file because nothing was asserting the shape.
-
-const RULE_NAMES = [
-  "acl",
-  "acyclic",
-  "apiGateway",
-  "crud",
-  "dbPerService",
-  "cohesion",
-  "stableDependencies",
-  "commonReuse",
-] as const;
+// Registry is the canonical mapping the CLI iterates over for `check` и
+// `--fix`. Rename / missing fix / wrong wiring silently breaks user config.
 
 const RULES_WITH_FIX = new Set(["acl", "crud", "dbPerService"]);
 
+const EXPECTED_BY_NAME = {
+  acl: aclRule,
+  acyclic: acyclicRule,
+  apiGateway: apiGatewayRule,
+  crud: crudRule,
+  dbPerService: dbPerServiceRule,
+  cohesion: cohesionRule,
+  stableDependencies: stableDependenciesRule,
+  commonReuse: commonReuseRule,
+} as const;
+
 describe("ruleRegistry", () => {
   it("contains exactly the eight published rules", () => {
-    const actual = ruleRegistry
-      .map((r) => r.name)
-      .toSorted((a, b) => a.localeCompare(b));
-    const expected = [...RULE_NAMES].toSorted((a, b) => a.localeCompare(b));
+    const actual = ruleRegistry.map((r) => r.name).toSorted();
+    const expected = Object.keys(EXPECTED_BY_NAME).toSorted();
     expect(actual).toEqual(expected);
   });
 
@@ -51,39 +44,20 @@ describe("ruleRegistry", () => {
     }
   });
 
-  it("wires each entry to the correct underlying check", () => {
-    // Verify by reference equality on the closure boundary: the registry
-    // call should reach the imported `check*` function for the same name.
-    // We can't compare functions directly (the registry wraps them in
-    // arrow functions), so we assert that calling the registry entry on a
-    // known-empty model produces the same result as calling the underlying
-    // function directly.
-    const model = { allContainers: [], boundaries: [] };
-    const expected: Record<string, () => unknown> = {
-      acl: () => checkAcl(model.allContainers),
-      acyclic: () => checkAcyclic(model.allContainers),
-      apiGateway: () => checkApiGateway(model.allContainers),
-      crud: () => checkCrud(model.allContainers),
-      dbPerService: () => checkDbPerService(model.allContainers),
-      cohesion: () => checkCohesion(model),
-      stableDependencies: () => checkStableDependencies(model.allContainers),
-      commonReuse: () => checkCommonReuse(model),
-    };
+  it("wires each entry to its underlying RuleDefinition by reference", () => {
     for (const rule of ruleRegistry) {
-      const baseline = expected[rule.name]();
-      expect(rule.check(model)).toEqual(baseline);
+      expect(rule).toBe(
+        EXPECTED_BY_NAME[rule.name as keyof typeof EXPECTED_BY_NAME],
+      );
     }
   });
 
-  it("wires each fix entry to the correct underlying fixer", () => {
-    const fixerByName: Record<string, unknown> = {
-      acl: fixAcl,
-      crud: fixCrud,
-      dbPerService: fixDbPerService,
-    };
+  it("every rule's check returns an array on an empty model", () => {
+    // Smoke check: each registry entry can be invoked against a valid Model
+    // shape without throwing. Per-rule semantics are covered in rule tests.
+    const empty = makeModel({});
     for (const rule of ruleRegistry) {
-      if (!rule.fix) continue;
-      expect(rule.fix).toBe(fixerByName[rule.name]);
+      expect(rule.check(empty, {})).toEqual([]);
     }
   });
 });
