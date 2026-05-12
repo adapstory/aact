@@ -1,43 +1,58 @@
-import {
-  loadStructurizrElements,
-  mapContainersFromStructurizr,
-} from "../../src/loaders/structurizr";
-import { structurizrDslSyntax } from "../../src/loaders/structurizr/syntax";
-import { ArchitectureModel } from "../../src/model";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
-describe("Structurizr Loader", () => {
-  let model: ArchitectureModel;
+import path from "pathe";
+
+import { load } from "../../../src/formats/structurizr/load";
+import { structurizrDslSyntax } from "../../../src/formats/structurizr/syntax";
+import type { Model } from "../../../src/model";
+import { allContainers, getContainer } from "../../../src/model";
+
+let tmpDir: string;
+beforeAll(async () => {
+  tmpDir = await mkdtemp(path.join(tmpdir(), "aact-struct-"));
+});
+
+let counter = 0;
+const loadWorkspace = async (workspace: unknown): Promise<Model> => {
+  const file = path.join(tmpDir, `workspace-${counter++}.json`);
+  await writeFile(file, JSON.stringify(workspace), "utf8");
+  const result = await load(file);
+  return result.model;
+};
+
+describe("structurizr load — fixture", () => {
+  let model: Model;
 
   beforeAll(async () => {
-    model = await loadStructurizrElements(
-      "resources/architecture/workspace.json",
-    );
+    const result = await load("fixtures/architecture/workspace.json");
+    model = result.model;
   });
 
   it("loads containers from workspace.json", () => {
-    expect(model.allContainers.length).toBeGreaterThan(0);
+    expect(allContainers(model).length).toBeGreaterThan(0);
   });
 
-  it("identifies external systems", () => {
-    const externalSystems = model.allContainers.filter(
-      (c) => c.type === "System_Ext",
+  it("identifies external systems (kind=System + external=true)", () => {
+    const externalSystems = allContainers(model).filter(
+      (c) => c.kind === "System" && c.external,
     );
     expect(externalSystems.length).toBeGreaterThan(0);
   });
 
   it("identifies databases", () => {
-    const databases = model.allContainers.filter(
-      (c) => c.type === "ContainerDb",
+    const databases = allContainers(model).filter(
+      (c) => c.kind === "ContainerDb",
     );
     expect(databases.length).toBeGreaterThan(0);
   });
 
   it("loads boundaries", () => {
-    expect(model.boundaries.length).toBeGreaterThan(0);
+    expect(Object.values(model.boundaries).length).toBeGreaterThan(0);
   });
 
   it("builds relations", () => {
-    const relationsCount = model.allContainers.reduce(
+    const relationsCount = allContainers(model).reduce(
       (sum, c) => sum + c.relations.length,
       0,
     );
@@ -45,24 +60,21 @@ describe("Structurizr Loader", () => {
   });
 
   it("rejects with ENOENT for nonexistent file", async () => {
-    await expect(loadStructurizrElements("nonexistent.json")).rejects.toThrow(
-      /ENOENT/,
-    );
+    await expect(load("nonexistent.json")).rejects.toThrow(/ENOENT/);
   });
 });
 
-describe("mapContainersFromStructurizr (unit)", () => {
-  it("returns empty model for empty workspace", () => {
-    const result = mapContainersFromStructurizr({
+describe("structurizr load — DSL identifier", () => {
+  it("returns empty model for empty workspace", async () => {
+    const model = await loadWorkspace({
       model: { softwareSystems: [], people: [] },
     });
-
-    expect(result.allContainers).toHaveLength(0);
-    expect(result.boundaries).toHaveLength(0);
+    expect(allContainers(model)).toHaveLength(0);
+    expect(Object.values(model.boundaries)).toHaveLength(0);
   });
 
-  it("uses structurizr.dsl.identifier as the container name when present", () => {
-    const result = mapContainersFromStructurizr({
+  it("uses structurizr.dsl.identifier as the container name when present", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           {
@@ -82,12 +94,12 @@ describe("mapContainersFromStructurizr (unit)", () => {
         people: [],
       },
     });
-    expect(result.boundaries[0].name).toBe("my_system");
-    expect(result.boundaries[0].containers[0].name).toBe("my_svc");
+    expect(model.boundaries.my_system).toBeDefined();
+    expect(model.boundaries.my_system?.containerNames).toContain("my_svc");
   });
 
-  it("falls back to raw id when no DSL identifier property is set", () => {
-    const result = mapContainersFromStructurizr({
+  it("falls back to raw id when no DSL identifier property is set", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           { id: "sys_raw", name: "Sys", containers: [], relationships: [] },
@@ -95,11 +107,11 @@ describe("mapContainersFromStructurizr (unit)", () => {
         people: [],
       },
     });
-    expect(result.boundaries[0].name).toBe("sys_raw");
+    expect(model.boundaries.sys_raw).toBeDefined();
   });
 
-  it("sorts allContainers alphabetically by name", () => {
-    const result = mapContainersFromStructurizr({
+  it("model.containers Record is sorted alphabetically", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           {
@@ -115,254 +127,218 @@ describe("mapContainersFromStructurizr (unit)", () => {
         people: [],
       },
     });
-    const names = result.allContainers.map((c) => c.name);
-    expect(names).toEqual(["a", "m", "z"]);
+    expect(Object.keys(model.containers)).toEqual(["a", "m", "z"]);
+  });
+});
+
+describe("structurizr load — kind inference from technology", () => {
+  const dbContainer = (technology: string, name = "svc") => ({
+    model: {
+      softwareSystems: [
+        {
+          id: "1",
+          name: "Sys",
+          containers: [{ id: "c", name, technology, relationships: [] }],
+        },
+      ],
+      people: [],
+    },
   });
 
-  describe("isDatabase heuristic", () => {
-    const dbContainer = (technology: string, name = "svc") => ({
+  for (const tech of ["PostgreSQL", "MySQL", "Redis", "MongoDB"]) {
+    it(`marks ${tech}-tech container as ContainerDb`, async () => {
+      const model = await loadWorkspace(dbContainer(tech));
+      expect(getContainer(model, "c")?.kind).toBe("ContainerDb");
+    });
+  }
+
+  it("marks container with name ending in '_db' as ContainerDb", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           {
             id: "1",
             name: "Sys",
-            containers: [{ id: "c", name, technology, relationships: [] }],
+            containers: [{ id: "c", name: "orders_db", relationships: [] }],
           },
         ],
         people: [],
       },
     });
-
-    for (const tech of ["PostgreSQL", "MySQL", "Redis", "MongoDB"]) {
-      it(`marks ${tech}-tech container as ContainerDb`, () => {
-        const result = mapContainersFromStructurizr(dbContainer(tech));
-        expect(result.allContainers[0].type).toBe("ContainerDb");
-      });
-    }
-
-    it("marks container with name ending in '_db' as ContainerDb", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [{ id: "c", name: "orders_db", relationships: [] }],
-            },
-          ],
-          people: [],
-        },
-      });
-      expect(result.allContainers[0].type).toBe("ContainerDb");
-    });
-
-    it("marks container with name ending in 'database' as ContainerDb", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [
-                { id: "c", name: "orders database", relationships: [] },
-              ],
-            },
-          ],
-          people: [],
-        },
-      });
-      expect(result.allContainers[0].type).toBe("ContainerDb");
-    });
-
-    it("does NOT mark unrelated container as ContainerDb", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [
-                {
-                  id: "c",
-                  name: "orders_api",
-                  technology: "Spring",
-                  relationships: [],
-                },
-              ],
-            },
-          ],
-          people: [],
-        },
-      });
-      expect(result.allContainers[0].type).toBe("Container");
-    });
+    // Container.name = dslId(id) = "c"; label = "orders_db".
+    // inferKindFromTechnology checks label/name suffix.
+    expect(getContainer(model, "c")?.kind).toBe("ContainerDb");
   });
 
-  describe("enrichTags heuristic", () => {
-    const containerWith = (name: string, tags?: string) => ({
+  it("marks container with name ending in 'database' as ContainerDb", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "c",
+            name: "1",
+            containers: [
+              { id: "x", name: "orders database", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "x")?.kind).toBe("ContainerDb");
+  });
+
+  it("does NOT mark unrelated container as ContainerDb", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           {
             id: "1",
             name: "Sys",
-            containers: [{ id: "c", name, tags, relationships: [] }],
+            containers: [
+              {
+                id: "c",
+                name: "orders_api",
+                technology: "Spring",
+                relationships: [],
+              },
+            ],
           },
         ],
         people: [],
       },
     });
+    expect(getContainer(model, "c")?.kind).toBe("Container");
+  });
+});
 
-    it("adds 'repo' tag for names containing 'crud'", () => {
-      const result = mapContainersFromStructurizr(
-        containerWith("orders_crud_service"),
-      );
-      expect(result.allContainers[0].tags).toContain("repo");
-    });
-
-    it("adds 'acl' tag for names containing 'acl'", () => {
-      const result = mapContainersFromStructurizr(
-        containerWith("payments_acl"),
-      );
-      expect(result.allContainers[0].tags).toContain("acl");
-    });
-
-    it("preserves existing comma-separated tags and trims whitespace", () => {
-      const result = mapContainersFromStructurizr(
-        containerWith("svc", "tag1, tag2 , tag3"),
-      );
-      expect(result.allContainers[0].tags).toEqual(["tag1", "tag2", "tag3"]);
-    });
-
-    it("does NOT duplicate 'repo' if already present", () => {
-      const result = mapContainersFromStructurizr(
-        containerWith("crud_svc", "repo"),
-      );
-      const tags = result.allContainers[0].tags ?? [];
-      expect(tags.filter((t) => t === "repo")).toHaveLength(1);
-    });
-
-    it("filters out empty tags from the source list", () => {
-      const result = mapContainersFromStructurizr(
-        containerWith("svc", "a,,b,"),
-      );
-      expect(result.allContainers[0].tags).toEqual(["a", "b"]);
-    });
+describe("structurizr load — tags parsing", () => {
+  const containerWith = (name: string, tags?: string) => ({
+    model: {
+      softwareSystems: [
+        {
+          id: "1",
+          name: "Sys",
+          containers: [{ id: "c", name, tags, relationships: [] }],
+        },
+      ],
+      people: [],
+    },
   });
 
-  describe("addRelations", () => {
-    it("preserves technology when explicitly set", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [
-                {
-                  id: "a",
-                  name: "A",
-                  relationships: [
-                    {
-                      destinationId: "b",
-                      technology: "REST",
-                      description: "calls",
-                    },
-                  ],
-                },
-                { id: "b", name: "B", relationships: [] },
-              ],
-            },
-          ],
-          people: [],
-        },
-      });
-      const a = result.allContainers.find((c) => c.name === "a");
-      expect(a?.relations[0].technology).toBe("REST");
-    });
+  it("preserves explicit comma-separated tags trimmed", async () => {
+    const model = await loadWorkspace(
+      containerWith("svc", "tag1, tag2 , tag3"),
+    );
+    expect(getContainer(model, "c")?.tags).toEqual(["tag1", "tag2", "tag3"]);
+  });
 
-    it("falls back to description as technology when description has no spaces", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [
-                {
-                  id: "a",
-                  name: "A",
-                  relationships: [{ destinationId: "b", description: "kafka" }],
-                },
-                { id: "b", name: "B", relationships: [] },
-              ],
-            },
-          ],
-          people: [],
-        },
-      });
-      const a = result.allContainers.find((c) => c.name === "a");
-      expect(a?.relations[0].technology).toBe("kafka");
-    });
+  it("filters out empty tags from the source list", async () => {
+    const model = await loadWorkspace(containerWith("svc", "a,,b,"));
+    expect(getContainer(model, "c")?.tags).toEqual(["a", "b"]);
+  });
 
-    it("does NOT fall back to description when it has spaces (treat as human prose)", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [
-                {
-                  id: "a",
-                  name: "A",
-                  relationships: [
-                    { destinationId: "b", description: "calls service" },
-                  ],
-                },
-                { id: "b", name: "B", relationships: [] },
-              ],
-            },
-          ],
-          people: [],
-        },
-      });
-      const a = result.allContainers.find((c) => c.name === "a");
-      expect(a?.relations[0].technology).toBeUndefined();
-    });
+  it("v3 NO LONGER enriches tags from names (crud→repo, acl→acl)", async () => {
+    // v2 had enrichTagsFromNames heuristic — Solution Architects now tag
+    // explicitly. Container with label "orders_crud_service" must NOT get
+    // an auto-tag "repo".
+    const model = await loadWorkspace(containerWith("orders_crud_service"));
+    expect(getContainer(model, "c")?.tags).toEqual([]);
+  });
+});
 
-    it("appends 'async' tag when interactionStyle is Asynchronous", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [
-                {
-                  id: "a",
-                  name: "A",
-                  relationships: [
-                    {
-                      destinationId: "b",
-                      tags: "audit",
-                      interactionStyle: "Asynchronous",
-                    },
-                  ],
-                },
-                { id: "b", name: "B", relationships: [] },
-              ],
-            },
-          ],
-          people: [],
-        },
-      });
-      const a = result.allContainers.find((c) => c.name === "a");
-      // Both existing and async tags present
-      expect(a?.relations[0].tags).toEqual(["audit", "async"]);
+describe("structurizr load — relations", () => {
+  it("preserves technology when explicitly set", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  {
+                    destinationId: "b",
+                    technology: "REST",
+                    description: "calls",
+                  },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
     });
+    expect(getContainer(model, "a")?.relations[0].technology).toBe("REST");
+  });
 
-    it("silently drops relations to unknown destinationId", () => {
-      const result = mapContainersFromStructurizr({
+  it("appends 'async' tag when interactionStyle is Asynchronous", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  {
+                    destinationId: "b",
+                    tags: "audit",
+                    interactionStyle: "Asynchronous",
+                  },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].tags).toEqual([
+      "audit",
+      "async",
+    ]);
+  });
+
+  it("does NOT append 'async' when interactionStyle is Synchronous", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  { destinationId: "b", interactionStyle: "Synchronous" },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].tags).not.toContain("async");
+  });
+
+  it("dangling destinationId surfaces in issues (no throw)", async () => {
+    const file = path.join(tmpDir, "dangling.json");
+    await writeFile(
+      file,
+      JSON.stringify({
         model: {
           softwareSystems: [
             {
@@ -379,48 +355,45 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      });
-      expect(result.allContainers[0].relations).toHaveLength(0);
-    });
-
-    it("walks component-level relationships", () => {
-      const result = mapContainersFromStructurizr({
-        model: {
-          softwareSystems: [
-            {
-              id: "1",
-              name: "Sys",
-              containers: [
-                {
-                  id: "a",
-                  name: "A",
-                  components: [
-                    {
-                      id: "comp1",
-                      name: "Comp",
-                      relationships: [{ destinationId: "b" }],
-                    },
-                  ],
-                  relationships: [],
-                },
-                { id: "b", name: "B", relationships: [] },
-              ],
-            },
-          ],
-          people: [],
-        },
-      });
-      // Component relation is registered against `a` (the parent component
-      // is `comp1`, registered by id, but the test asserts components
-      // contribute to relations on the model — not by location, just by
-      // presence). This guards `addRelations` being called for components.
-      const result_b = result.allContainers.find((c) => c.name === "b");
-      expect(result_b).toBeDefined();
-    });
+      }),
+      "utf8",
+    );
+    const result = await load(file);
+    expect(allContainers(result.model)).toHaveLength(1);
   });
 
-  it("treats external location as System_Ext (covers location check)", () => {
-    const result = mapContainersFromStructurizr({
+  it("trims whitespace from relation tags", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "a",
+                name: "A",
+                relationships: [
+                  { destinationId: "b", tags: "  audit , urgent  " },
+                ],
+              },
+              { id: "b", name: "B", relationships: [] },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "a")?.relations[0].tags).toEqual([
+      "audit",
+      "urgent",
+    ]);
+  });
+});
+
+describe("structurizr load — external systems", () => {
+  it("treats `location: External` as kind=System + external=true", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           {
@@ -433,13 +406,57 @@ describe("mapContainersFromStructurizr (unit)", () => {
         people: [],
       },
     });
-    expect(result.allContainers[0].type).toBe("System_Ext");
+    const ext = getContainer(model, "ext");
+    expect(ext?.kind).toBe("System");
+    expect(ext?.external).toBe(true);
   });
 
-  it("description falls back to empty string when not provided", () => {
-    // Stryker mutated `cont.description ?? ""` → "Stryker was here!". Pin
-    // that missing description yields an empty string on the container.
-    const result = mapContainersFromStructurizr({
+  it("detects external system by tags containing 'External'", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          { id: "ext", name: "External", tags: "External", containers: [] },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "ext")?.external).toBe(true);
+  });
+
+  it("external system tags parse from comma-separated string", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "ext",
+            name: "External",
+            location: "External",
+            tags: "Critical, Vendor , ",
+            containers: [],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "ext")?.tags).toEqual(["Critical", "Vendor"]);
+  });
+
+  it("external system description falls back to empty string", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          { id: "ext", name: "Ext", location: "External", containers: [] },
+        ],
+        people: [],
+      },
+    });
+    expect(getContainer(model, "ext")?.description).toBe("");
+  });
+});
+
+describe("structurizr load — defaults & resilience", () => {
+  it("description falls back to empty string when not provided", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           {
@@ -451,50 +468,12 @@ describe("mapContainersFromStructurizr (unit)", () => {
         people: [],
       },
     });
-    expect(result.allContainers[0].description).toBe("");
+    expect(getContainer(model, "c")?.description).toBe("");
   });
 
-  it("external system tags are parsed from comma-separated string", () => {
-    // Pin the tag splitting/trim/filter chain for processExternalSystem.
-    const result = mapContainersFromStructurizr({
-      model: {
-        softwareSystems: [
-          {
-            id: "ext",
-            name: "External",
-            location: "External",
-            tags: "Critical, Vendor , ", // mixed whitespace + trailing empty
-            containers: [],
-          },
-        ],
-        people: [],
-      },
-    });
-    const ext = result.allContainers.find((c) => c.name === "ext");
-    expect(ext?.tags).toEqual(["Critical", "Vendor"]);
-  });
-
-  it("external system description falls back to empty string", () => {
-    const result = mapContainersFromStructurizr({
-      model: {
-        softwareSystems: [
-          { id: "ext", name: "Ext", location: "External", containers: [] },
-        ],
-        people: [],
-      },
-    });
-    const ext = result.allContainers.find((c) => c.name === "ext");
-    expect(ext?.description).toBe("");
-  });
-
-  it("iterates over components without throwing (covers `for (const comp of ...)` block)", () => {
-    // Components aren't currently pushed to `containers` (only containers
-    // and people are). The components loop calls `addRelations` for each,
-    // but since components aren't in `allElements`, the relation is
-    // dropped silently. Pin: the function runs without throwing on a
-    // model that includes components.
-    expect(() =>
-      mapContainersFromStructurizr({
+  it("does NOT throw on components (v3 silently drops them)", async () => {
+    await expect(
+      loadWorkspace({
         model: {
           softwareSystems: [
             {
@@ -520,120 +499,74 @@ describe("mapContainersFromStructurizr (unit)", () => {
           people: [],
         },
       }),
-    ).not.toThrow();
+    ).resolves.toBeDefined();
   });
 
-  it("handles a system with undefined containers (covers `containers ?? []` fallback)", () => {
-    // Stryker mutated `?? []` fallback to `?? [sentinel]` on the loop
-    // arrays. With the sentinel, iteration runs over garbage and may push
-    // stray "undefined"-named containers into the model.
-    const result = mapContainersFromStructurizr({
+  it("handles a system with undefined containers", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [{ id: "sys1", name: "Sys" }],
         people: [],
       },
     });
-    // Only the system itself was produced — no inner containers from
-    // sys1's undefined `containers` field.
-    expect(result.boundaries[0].containers).toEqual([]);
+    expect(model.boundaries.sys1?.containerNames).toEqual([]);
   });
 
-  it("handles workspace with no `people` field (covers people ?? [])", () => {
-    const result = mapContainersFromStructurizr({
-      model: {
-        softwareSystems: [],
-      },
+  it("handles workspace with no `people` field", async () => {
+    const model = await loadWorkspace({
+      model: { softwareSystems: [] },
     });
-    expect(result.allContainers).toHaveLength(0);
+    expect(allContainers(model)).toHaveLength(0);
   });
 
-  it("handles workspace with no `softwareSystems` field (covers softwareSystems ?? [])", () => {
-    const result = mapContainersFromStructurizr({
-      model: { people: [] },
-    });
-    expect(result.allContainers).toHaveLength(0);
-    expect(result.boundaries).toHaveLength(0);
+  it("handles workspace with no `softwareSystems` field", async () => {
+    const model = await loadWorkspace({ model: { people: [] } });
+    expect(allContainers(model)).toHaveLength(0);
+    expect(Object.values(model.boundaries)).toHaveLength(0);
   });
+});
 
-  it("does NOT add async tag when interactionStyle is not Asynchronous (covers ConditionalExpression)", () => {
-    // Stryker mutated `if (rel.interactionStyle === \"Asynchronous\")` to `true`.
-    // Pin: a Synchronous-styled relation has no `async` tag.
-    const result = mapContainersFromStructurizr({
-      model: {
-        softwareSystems: [
-          {
-            id: "1",
-            name: "Sys",
-            containers: [
-              {
-                id: "a",
-                name: "A",
-                relationships: [
-                  { destinationId: "b", interactionStyle: "Synchronous" },
-                ],
-              },
-              { id: "b", name: "B", relationships: [] },
-            ],
-          },
-        ],
-        people: [],
-      },
-    });
-    const a = result.allContainers.find((c) => c.name === "a");
-    expect(a?.relations[0].tags ?? []).not.toContain("async");
-  });
-
-  it("filters out empty tags from a person's tag string (covers .filter(Boolean))", () => {
-    const result = mapContainersFromStructurizr({
+describe("structurizr load — people", () => {
+  it("filters out empty tags from a person's tag string", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [],
         people: [
           {
             id: "p1",
             name: "User",
-            tags: "vip,,admin,", // empty parts on both ends and middle
+            tags: "vip,,admin,",
             relationships: [],
           },
         ],
       },
     });
-    const user = result.allContainers.find((c) => c.name === "p1");
-    expect(user?.tags).toEqual(["vip", "admin"]);
+    expect(getContainer(model, "p1")?.tags).toEqual(["vip", "admin"]);
   });
 
-  it("trims whitespace from relation tags split (covers .map(t => t.trim()))", () => {
-    // Stryker mutated the `.map(t => t.trim())` callback to `t` (no trim).
-    // Pin: spaces around tags don't survive into the model.
-    const result = mapContainersFromStructurizr({
+  it("processes people as kind=Person", async () => {
+    const model = await loadWorkspace({
       model: {
-        softwareSystems: [
+        softwareSystems: [],
+        people: [
           {
-            id: "1",
-            name: "Sys",
-            containers: [
-              {
-                id: "a",
-                name: "A",
-                relationships: [
-                  { destinationId: "b", tags: "  audit , urgent  " },
-                ],
-              },
-              { id: "b", name: "B", relationships: [] },
-            ],
+            id: "p1",
+            name: "Operator",
+            description: "Ops user",
+            tags: "internal,admin",
+            relationships: [],
           },
         ],
-        people: [],
       },
     });
-    const a = result.allContainers.find((c) => c.name === "a");
-    expect(a?.relations[0].tags).toEqual(["audit", "urgent"]);
+    const person = getContainer(model, "p1");
+    expect(person?.kind).toBe("Person");
+    expect(person?.description).toBe("Ops user");
+    expect(person?.tags).toEqual(["internal", "admin"]);
   });
 
-  it("iterates over people relationships in the addRelations pass", () => {
-    // L235 BlockStatement: the people-relationship loop. With `{}` body,
-    // people's relations aren't registered. Pin: a person → container
-    // relation materialises.
-    const result = mapContainersFromStructurizr({
+  it("registers person → container relationship", async () => {
+    const model = await loadWorkspace({
       model: {
         softwareSystems: [
           {
@@ -651,84 +584,8 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
       },
     });
-    const user = result.allContainers.find((c) => c.name === "user");
-    expect(user?.relations[0]?.to.name).toBe("svc");
-  });
-
-  it("processes people with type Person", () => {
-    const result = mapContainersFromStructurizr({
-      model: {
-        softwareSystems: [],
-        people: [
-          {
-            id: "p1",
-            name: "Operator",
-            description: "Ops user",
-            tags: "internal,admin",
-            relationships: [],
-          },
-        ],
-      },
-    });
-    const person = result.allContainers.find((c) => c.name === "p1");
-    expect(person?.type).toBe("Person");
-    expect(person?.description).toBe("Ops user");
-    expect(person?.tags).toEqual(["internal", "admin"]);
-  });
-
-  it("tags async relations with 'async'", () => {
-    const workspace = {
-      model: {
-        softwareSystems: [
-          {
-            id: "sys_a",
-            name: "System A",
-            containers: [
-              {
-                id: "svc_a",
-                name: "Service A",
-                relationships: [
-                  {
-                    destinationId: "svc_b",
-                    interactionStyle: "Asynchronous",
-                  },
-                ],
-              },
-              {
-                id: "svc_b",
-                name: "Service B",
-                relationships: [],
-              },
-            ],
-          },
-        ],
-        people: [],
-      },
-    };
-
-    const result = mapContainersFromStructurizr(workspace);
-    const svcA = result.allContainers.find((c) => c.name === "svc_a");
-    expect(svcA?.relations[0].tags).toContain("async");
-  });
-
-  it("detects external system by tags when location is not set", () => {
-    const workspace = {
-      model: {
-        softwareSystems: [
-          {
-            id: "ext",
-            name: "External",
-            tags: "External",
-            containers: [],
-          },
-        ],
-        people: [],
-      },
-    };
-
-    const result = mapContainersFromStructurizr(workspace);
-    const ext = result.allContainers.find((c) => c.name === "ext");
-    expect(ext?.type).toBe("System_Ext");
+    // Relation target = dslId of destinationId = "svc" (raw id, no DSL property).
+    expect(getContainer(model, "user")?.relations[0].to).toBe("svc");
   });
 });
 

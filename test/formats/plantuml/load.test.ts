@@ -1,57 +1,53 @@
-import {
-  loadPlantumlElements,
-  mapContainersFromPlantumlElements,
-} from "../../src/loaders/plantuml";
-import { plantumlSyntax } from "../../src/loaders/plantuml/syntax";
-import { ArchitectureModel } from "../../src/model";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
-describe("PlantUML Loader", () => {
-  let model: ArchitectureModel;
+import path from "pathe";
+
+import { load } from "../../../src/formats/plantuml/load";
+import { plantumlSyntax } from "../../../src/formats/plantuml/syntax";
+import type { Model } from "../../../src/model";
+import { allContainers, getContainer } from "../../../src/model";
+
+describe("PlantUML load — fixture", () => {
+  let model: Model;
 
   beforeAll(async () => {
-    const pumlElements = await loadPlantumlElements(
-      "resources/architecture/boundaries.puml",
-    );
-    model = mapContainersFromPlantumlElements(pumlElements);
+    const result = await load("fixtures/architecture/boundaries.puml");
+    model = result.model;
   });
 
   it("loads containers", () => {
-    expect(model.allContainers.length).toBeGreaterThan(0);
+    expect(allContainers(model).length).toBeGreaterThan(0);
   });
 
   it("loads boundaries", () => {
-    expect(model.boundaries.length).toBeGreaterThan(0);
+    expect(Object.values(model.boundaries).length).toBeGreaterThan(0);
   });
 
   it("builds relations between containers", () => {
-    const relationsCount = model.allContainers.reduce(
+    const relationsCount = allContainers(model).reduce(
       (sum, c) => sum + c.relations.length,
       0,
     );
     expect(relationsCount).toBeGreaterThan(0);
   });
 
-  it("assigns boundary containers correctly", () => {
-    for (const boundary of model.boundaries) {
+  it("assigns boundary children correctly", () => {
+    for (const boundary of Object.values(model.boundaries)) {
       expect(
-        boundary.containers.length + boundary.boundaries.length,
+        boundary.containerNames.length + boundary.boundaryNames.length,
       ).toBeGreaterThan(0);
     }
   });
 
   it("rejects with ENOENT for nonexistent file", async () => {
-    await expect(loadPlantumlElements("nonexistent.puml")).rejects.toThrow(
-      /ENOENT/,
-    );
+    await expect(load("nonexistent.puml")).rejects.toThrow(/ENOENT/);
   });
 });
 
-describe("loadPlantumlElements (unit)", () => {
+describe("PlantUML load — unit", () => {
   let tmpDir: string;
   beforeAll(async () => {
-    const { mkdtemp } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const path = await import("node:path");
     tmpDir = await mkdtemp(path.join(tmpdir(), "aact-puml-"));
   });
 
@@ -59,15 +55,22 @@ describe("loadPlantumlElements (unit)", () => {
     name: string,
     content: string,
   ): Promise<string> => {
-    const { writeFile } = await import("node:fs/promises");
-    const path = await import("node:path");
     const file = path.join(tmpDir, name);
     await writeFile(file, content, "utf8");
     return file;
   };
 
-  it("strips the $tags= prefix from the preprocessed source (regex pin)", async () => {
-    const file = await writeFixture(
+  const loadFromContent = async (
+    name: string,
+    content: string,
+  ): Promise<Model> => {
+    const file = await writeFixture(name, content);
+    const result = await load(file);
+    return result.model;
+  };
+
+  it("strips the $tags= prefix and surfaces as Container.tags", async () => {
+    const model = await loadFromContent(
       "tags.puml",
       [
         "@startuml",
@@ -76,15 +79,11 @@ describe("loadPlantumlElements (unit)", () => {
         "@enduml",
       ].join("\n"),
     );
-    const elements = await loadPlantumlElements(file);
-    const model = mapContainersFromPlantumlElements(elements);
-    // The preprocessor turns `$tags="acl"` into `"acl"`, which the C4
-    // macro reads as a sprite — surfaced on Container.tags as ["acl"].
-    expect(model.allContainers[0].tags).toEqual(["acl"]);
+    expect(getContainer(model, "svc")?.tags).toEqual(["acl"]);
   });
 
   it("swaps from/to for Rel_Back relations", async () => {
-    const file = await writeFixture(
+    const model = await loadFromContent(
       "rel-back.puml",
       [
         "@startuml",
@@ -96,14 +95,11 @@ describe("loadPlantumlElements (unit)", () => {
         "@enduml",
       ].join("\n"),
     );
-    const elements = await loadPlantumlElements(file);
-    const model = mapContainersFromPlantumlElements(elements);
-    const b = model.allContainers.find((c) => c.name === "b");
-    expect(b?.relations[0].to.name).toBe("a");
+    expect(getContainer(model, "b")?.relations[0].to).toBe("a");
   });
 
   it("leaves non-Rel_Back relations untouched", async () => {
-    const file = await writeFixture(
+    const model = await loadFromContent(
       "rel.puml",
       [
         "@startuml",
@@ -114,44 +110,11 @@ describe("loadPlantumlElements (unit)", () => {
         "@enduml",
       ].join("\n"),
     );
-    const elements = await loadPlantumlElements(file);
-    const model = mapContainersFromPlantumlElements(elements);
-    const a = model.allContainers.find((c) => c.name === "a");
-    expect(a?.relations[0].to.name).toBe("b");
-  });
-});
-
-describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
-  let tmpDir: string;
-  beforeAll(async () => {
-    const { mkdtemp } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const path = await import("node:path");
-    tmpDir = await mkdtemp(path.join(tmpdir(), "aact-puml-e2e-"));
+    expect(getContainer(model, "a")?.relations[0].to).toBe("b");
   });
 
-  const writeFixture = async (
-    name: string,
-    content: string,
-  ): Promise<string> => {
-    const { writeFile } = await import("node:fs/promises");
-    const path = await import("node:path");
-    const file = path.join(tmpDir, name);
-    await writeFile(file, content, "utf8");
-    return file;
-  };
-
-  const loadModel = async (
-    name: string,
-    content: string,
-  ): Promise<ArchitectureModel> => {
-    const file = await writeFixture(name, content);
-    const elements = await loadPlantumlElements(file);
-    return mapContainersFromPlantumlElements(elements);
-  };
-
-  it("recognises ContainerDb type from PUML", async () => {
-    const model = await loadModel(
+  it("recognises ContainerDb kind from PUML", async () => {
+    const model = await loadFromContent(
       "db.puml",
       [
         "@startuml",
@@ -160,11 +123,11 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(model.allContainers[0].type).toBe("ContainerDb");
+    expect(getContainer(model, "orders_db")?.kind).toBe("ContainerDb");
   });
 
-  it("recognises System_Ext type from PUML", async () => {
-    const model = await loadModel(
+  it("recognises System_Ext as kind=System + external=true", async () => {
+    const model = await loadFromContent(
       "ext.puml",
       [
         "@startuml",
@@ -173,11 +136,13 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(model.allContainers[0].type).toBe("System_Ext");
+    const ext = getContainer(model, "ext");
+    expect(ext?.kind).toBe("System");
+    expect(ext?.external).toBe(true);
   });
 
-  it("recognises Component type from PUML", async () => {
-    const model = await loadModel(
+  it("recognises Component kind from PUML", async () => {
+    const model = await loadFromContent(
       "comp.puml",
       [
         "@startuml",
@@ -186,28 +151,55 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(model.allContainers[0].type).toBe("Component");
+    expect(getContainer(model, "parser")?.kind).toBe("Component");
   });
 
-  it("parses relation tags from the 5th arg (descr, comma-separated, trimmed)", async () => {
-    const model = await loadModel(
-      "tags.puml",
+  it("renders System kind from PUML", async () => {
+    const model = await loadFromContent(
+      "system.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'System(core, "Core System")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "core")?.kind).toBe("System");
+  });
+
+  it("renders Person kind from PUML", async () => {
+    const model = await loadFromContent(
+      "person.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Person(user, "End User")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "user")?.kind).toBe("Person");
+  });
+
+  it("parses relation tags from the descr/5th arg", async () => {
+    const model = await loadFromContent(
+      "rel-tags.puml",
       [
         "@startuml",
         "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
         'Container(a, "A")',
         'Container(b, "B")',
-        // Rel(from, to, label, technology, descr) — descr is parsed as tags.
         'Rel(a, b, "label", "REST", "async, audit")',
         "@enduml",
       ].join("\n"),
     );
-    const a = model.allContainers.find((c) => c.name === "a")!;
-    expect(a.relations[0].tags).toEqual(["async", "audit"]);
+    expect(getContainer(model, "a")?.relations[0].tags).toEqual([
+      "async",
+      "audit",
+    ]);
   });
 
   it("parses relation technology from the 4th arg", async () => {
-    const model = await loadModel(
+    const model = await loadFromContent(
       "tech.puml",
       [
         "@startuml",
@@ -218,12 +210,11 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    const a = model.allContainers.find((c) => c.name === "a")!;
-    expect(a.relations[0].technology).toBe("REST");
+    expect(getContainer(model, "a")?.relations[0].technology).toBe("REST");
   });
 
   it("each new container starts with an empty relations array", async () => {
-    const model = await loadModel(
+    const model = await loadFromContent(
       "empty-rel.puml",
       [
         "@startuml",
@@ -232,11 +223,11 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(model.allContainers[0].relations).toEqual([]);
+    expect(getContainer(model, "a")?.relations).toEqual([]);
   });
 
-  it("sorts allContainers alphabetically by name", async () => {
-    const model = await loadModel(
+  it("model.containers Record is sorted alphabetically (buildModel guarantee)", async () => {
+    const model = await loadFromContent(
       "sort.puml",
       [
         "@startuml",
@@ -247,15 +238,11 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(model.allContainers.map((c) => c.name)).toEqual([
-      "a_svc",
-      "m_svc",
-      "z_svc",
-    ]);
+    expect(Object.keys(model.containers)).toEqual(["a_svc", "m_svc", "z_svc"]);
   });
 
   it("includes only declared containers in a boundary, not unrelated ones", async () => {
-    const model = await loadModel(
+    const model = await loadFromContent(
       "boundary.puml",
       [
         "@startuml",
@@ -267,13 +254,13 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    const orders = model.boundaries.find((b) => b.name === "orders")!;
-    expect(orders.containers.map((c) => c.name)).toEqual(["orders_api"]);
-    expect(orders.containers.some((c) => c.name === "outside")).toBe(false);
+    const orders = model.boundaries.orders;
+    expect(orders.containerNames).toEqual(["orders_api"]);
+    expect(orders.containerNames).not.toContain("outside");
   });
 
-  it("nests boundaries — child boundaries are registered as children of parent", async () => {
-    const model = await loadModel(
+  it("nests boundaries — child boundary names land under parent.boundaryNames", async () => {
+    const model = await loadFromContent(
       "nested.puml",
       [
         "@startuml",
@@ -286,16 +273,11 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    const platform = model.boundaries.find((b) => b.name === "platform")!;
-    expect(platform.boundaries.map((b) => b.name)).toContain("orders");
+    expect(model.boundaries.platform?.boundaryNames).toContain("orders");
   });
 
-  it("Stdlib_C4_Container_Component instances feed only the container pass, not the relation pass", async () => {
-    // Pin L48 `if (element instanceof Stdlib_C4_Container_Component) continue;`.
-    // With the mutation `false`, containers would be processed in the
-    // relation loop too — could push spurious self-relations. Assert
-    // each container has empty relations when no Rel() is declared.
-    const model = await loadModel(
+  it("does NOT push spurious self-relations for isolated containers (no Rel)", async () => {
+    const model = await loadFromContent(
       "isolated.puml",
       [
         "@startuml",
@@ -305,69 +287,35 @@ describe("loadPlantumlElements + map: end-to-end fixture coverage", () => {
         "@enduml",
       ].join("\n"),
     );
-    for (const c of model.allContainers) {
+    for (const c of allContainers(model)) {
       expect(c.relations).toEqual([]);
     }
   });
 
-  it("renders System type from PUML", async () => {
-    const model = await loadModel(
-      "system.puml",
-      [
-        "@startuml",
-        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
-        'System(core, "Core System")',
-        "@enduml",
-      ].join("\n"),
-    );
-    expect(model.allContainers.find((c) => c.name === "core")?.type).toBe(
-      "System",
-    );
-  });
-
-  it("renders Person type from PUML", async () => {
-    const model = await loadModel(
-      "person.puml",
-      [
-        "@startuml",
-        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
-        'Person(user, "End User")',
-        "@enduml",
-      ].join("\n"),
-    );
-    expect(model.allContainers.find((c) => c.name === "user")?.type).toBe(
-      "Person",
-    );
-  });
-
-  it("silently skips Rel() that references unknown containers (covers !containerFrom/!containerTo)", async () => {
-    // mapContainersFromPlantumlElements L16, L18: `if (!containerFrom) return;`
-    // and `if (!containerTo) return;`. Without those, push throws on
-    // undefined. Pin: a Rel() with non-existent endpoints leaves the
-    // model intact, no extra relations, no throw.
-    const model = await loadModel(
+  it("dangling Rel() with unknown source/target surfaces via issues (no throw)", async () => {
+    const file = await writeFixture(
       "missing.puml",
       [
         "@startuml",
         "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
         'Container(a, "A")',
-        'Rel(ghost_from, ghost_to, "")',
+        'Rel(a, ghost_to, "")',
         "@enduml",
       ].join("\n"),
     );
-    expect(model.allContainers).toHaveLength(1);
-    expect(model.allContainers[0].relations).toEqual([]);
+    const result = await load(file);
+    expect(allContainers(result.model)).toHaveLength(1);
+    // The dangling target name appears in validation issues — loader survives.
+    const dangling = result.issues.find((i) => i.kind === "dangling-relation");
+    expect(dangling).toBeDefined();
   });
 });
 
-describe("mapContainersFromPlantumlElements (unit)", () => {
-  it("skips relation to unknown container without throwing", async () => {
-    // generated.puml has containers with known relations
-    const elements = await loadPlantumlElements(
-      "resources/architecture/generated.puml",
-    );
-    // If any relation targets a missing container, mapContainers should not throw
-    expect(() => mapContainersFromPlantumlElements(elements)).not.toThrow();
+describe("PlantUML load — fixture-coverage edge", () => {
+  it("loading generated.puml fixture doesn't throw", async () => {
+    await expect(
+      load("fixtures/architecture/generated.puml"),
+    ).resolves.toBeDefined();
   });
 });
 
