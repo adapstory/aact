@@ -1,3 +1,11 @@
+import consola from "consola";
+
+import { loadModel } from "../../src/cli/loadModel";
+import type { AactConfig } from "../../src/config";
+import { loadPlantumlElements } from "../../src/loaders/plantuml/loadPlantumlElements";
+import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
+import { loadStructurizrElements } from "../../src/loaders/structurizr/loadStructurizrElements";
+
 vi.mock("consola", () => ({
   default: {
     error: vi.fn(),
@@ -15,14 +23,6 @@ vi.mock("../../src/loaders/plantuml/mapContainersFromPlantumlElements", () => ({
 vi.mock("../../src/loaders/structurizr/loadStructurizrElements", () => ({
   loadStructurizrElements: vi.fn(),
 }));
-
-import consola from "consola";
-
-import { loadModel } from "../../src/cli/loadModel";
-import type { AactConfig } from "../../src/config";
-import { loadPlantumlElements } from "../../src/loaders/plantuml/loadPlantumlElements";
-import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
-import { loadStructurizrElements } from "../../src/loaders/structurizr/loadStructurizrElements";
 
 const mockLoadPuml = vi.mocked(loadPlantumlElements);
 const mockMapPuml = vi.mocked(mapContainersFromPlantumlElements);

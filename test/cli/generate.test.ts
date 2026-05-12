@@ -1,5 +1,10 @@
+import fs from "node:fs/promises";
+
+import { loadConfig } from "c12";
+import consola from "consola";
 import type { MockedFunction } from "vitest";
 
+import { loadModel } from "../../src/cli/loadModel";
 import type { ArchitectureModel } from "../../src/model";
 import type { Container } from "../../src/model/container";
 
@@ -24,13 +29,6 @@ vi.mock("node:fs/promises", () => ({
     mkdir: vi.fn(),
   },
 }));
-
-import fs from "node:fs/promises";
-
-import { loadConfig } from "c12";
-import consola from "consola";
-
-import { loadModel } from "../../src/cli/loadModel";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockWriteFile = vi.mocked(fs.writeFile);

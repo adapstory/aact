@@ -12,14 +12,14 @@ import type { ArchitectureModel } from "../../model";
 import type { FixResult, SourceSyntax } from "../../rules/fix";
 import { applyEdits } from "../../rules/fix";
 import { ruleRegistry } from "../../rules/registry";
+import type { Violation } from "../../rules/types";
+import { loadAndValidateConfig } from "../loadConfig";
+import { loadModel } from "../loadModel";
 
 const ruleMap = new Map(ruleRegistry.map((r) => [r.name, r]));
 
 // eslint-disable-next-line n/no-process-exit
 const exitWithViolations = (): never => process.exit(1);
-import type { Violation } from "../../rules/types";
-import { loadAndValidateConfig } from "../loadConfig";
-import { loadModel } from "../loadModel";
 
 interface RuleResult {
   name: string;

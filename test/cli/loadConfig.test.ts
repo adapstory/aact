@@ -1,10 +1,10 @@
-vi.mock("c12", () => ({
-  loadConfig: vi.fn(),
-}));
-
 import { loadConfig } from "c12";
 
 import { loadAndValidateConfig } from "../../src/cli/loadConfig";
+
+vi.mock("c12", () => ({
+  loadConfig: vi.fn(),
+}));
 
 const mockLoadConfig = vi.mocked(loadConfig);
 

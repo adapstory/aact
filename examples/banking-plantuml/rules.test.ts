@@ -36,6 +36,9 @@ describe("Rules demo on C4L2.puml", () => {
 
   it("API Gateway — external calls go through gateway", () => {
     const violations = checkApiGateway(containers);
+    // Informational: list violations for inspection. Banking fixture
+    // intentionally has gateway gaps to demo the rule's output.
+    expect(violations).toBeDefined();
     for (const v of violations) {
       console.log(`${v.container}: ${v.message}`);
     }
@@ -43,6 +46,7 @@ describe("Rules demo on C4L2.puml", () => {
 
   it("Stable Dependencies — dependencies point toward stability", () => {
     const violations = checkStableDependencies(containers);
+    expect(violations).toBeDefined();
     for (const v of violations) {
       console.log(`${v.container}: ${v.message}`);
     }

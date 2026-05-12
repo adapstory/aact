@@ -1,3 +1,7 @@
+import { loadConfig } from "c12";
+import consola from "consola";
+
+import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
 import type { ArchitectureModel, Container } from "../../src/model";
 
 vi.mock("c12", () => ({
@@ -22,11 +26,6 @@ vi.mock("consola", () => ({
     log: vi.fn(),
   },
 }));
-
-import { loadConfig } from "c12";
-import consola from "consola";
-
-import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockMapContainers = vi.mocked(mapContainersFromPlantumlElements);

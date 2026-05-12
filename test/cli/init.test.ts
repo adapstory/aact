@@ -1,3 +1,7 @@
+import fs from "node:fs/promises";
+
+import consola from "consola";
+
 vi.mock("consola", () => ({
   default: {
     success: vi.fn(),
@@ -12,10 +16,6 @@ vi.mock("node:fs/promises", () => ({
     writeFile: vi.fn(),
   },
 }));
-
-import fs from "node:fs/promises";
-
-import consola from "consola";
 
 const mockAccess = vi.mocked(fs.access);
 const mockWriteFile = vi.mocked(fs.writeFile);

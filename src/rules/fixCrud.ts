@@ -8,11 +8,8 @@ import {
 } from "./boundaryUtils";
 import type { CrudOptions } from "./crud";
 import type { FixResult, SourceSyntax } from "./fix";
-import {
-  detectNamingConvention,
-  joinName,
-  type NamingConvention,
-} from "./namingUtils";
+import type { NamingConvention } from "./namingUtils";
+import { detectNamingConvention, joinName } from "./namingUtils";
 import type { Violation } from "./types";
 
 const stripDbWord = (name: string): string => {

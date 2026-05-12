@@ -1,3 +1,10 @@
+import { readFile, writeFile } from "node:fs/promises";
+
+import { loadConfig } from "c12";
+import consola from "consola";
+
+import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
+import { loadStructurizrElements } from "../../src/loaders/structurizr/loadStructurizrElements";
 import type { ArchitectureModel, Container } from "../../src/model";
 
 vi.mock("c12", () => ({
@@ -30,14 +37,6 @@ vi.mock("consola", () => ({
     warn: vi.fn(),
   },
 }));
-
-import { readFile, writeFile } from "node:fs/promises";
-
-import { loadConfig } from "c12";
-import consola from "consola";
-
-import { mapContainersFromPlantumlElements } from "../../src/loaders/plantuml/mapContainersFromPlantumlElements";
-import { loadStructurizrElements } from "../../src/loaders/structurizr/loadStructurizrElements";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockMapContainers = vi.mocked(mapContainersFromPlantumlElements);
