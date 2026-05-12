@@ -37,19 +37,18 @@ export default {
   // gives an honest score.
   coverageAnalysis: "all",
 
-  // Mutation scope covers the user-facing data path: load source → build
-  // internal model → fix or render. A regression in any of these breaks
-  // user files (fix) or downstream tooling (generators) or the entire
-  // analysis (loaders).
+  // Mutation scope покрывает весь user-facing data path: load source →
+  // build/validate model → check/fix/analyze. Regression в любом из этих
+  // звеньев ломает user files (fix), downstream tooling (generate),
+  // analysis (analyze) или silently-misses violations (rules / model).
   mutate: [
     "src/rules/**/*.ts",
-    "src/generators/**/*.ts",
-    "src/loaders/**/*.ts",
+    "src/formats/**/*.ts",
+    "src/model/**/*.ts",
+    "src/analyze.ts",
     "!src/**/*.test.ts",
     "!src/**/index.ts",
     "!src/**/types.ts",
-    "!src/loaders/structurizr/dslTypes.ts",
-    "!src/loaders/plantuml/c4Types.ts",
   ],
 
   reporters: ["progress", "clear-text", "html", "json"],
