@@ -631,10 +631,8 @@ describe("structurizr load — properties forwarding", () => {
                 name: "Svc",
                 properties: {
                   good: "value",
-                  // @ts-expect-error — testing runtime filter
-                  numeric: 42,
-                  // @ts-expect-error — testing runtime filter
-                  nested: { key: "val" },
+                  numeric: 42, // runtime filter drops non-strings
+                  nested: { key: "val" }, // same
                 },
                 relationships: [],
               },
@@ -675,8 +673,7 @@ describe("structurizr load — properties forwarding", () => {
                 id: "c",
                 name: "Svc",
                 properties: {
-                  // @ts-expect-error — all values non-string
-                  bad: 42,
+                  bad: 42, // non-string, gets filtered → entries empty
                 },
                 relationships: [],
               },

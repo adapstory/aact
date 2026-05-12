@@ -27,6 +27,7 @@ vi.mock("../../src/cli/loadModel", () => ({
 
 vi.mock("../../src/formats/registry", () => ({
   loadFormat: vi.fn(),
+  knownFormatNames: () => ["plantuml", "structurizr", "kubernetes"],
 }));
 
 vi.mock("consola", () => ({
@@ -136,7 +137,7 @@ describe("check command", () => {
     mockLoadModel.mockResolvedValue({ model: violatingModel(), issues: [] });
     const exitSpy = vi
       .spyOn(process, "exit")
-      .mockImplementation((() => undefined as never));
+      .mockImplementation(() => undefined as never);
 
     await runCheck();
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -162,7 +163,7 @@ describe("check command", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
       .spyOn(process, "exit")
-      .mockImplementation((() => undefined as never));
+      .mockImplementation(() => undefined as never);
 
     await runCheck({ format: "github" });
 
@@ -276,7 +277,7 @@ describe("check command", () => {
       mockLoadModel.mockResolvedValue({ model: cyclicModel(), issues: [] });
       const exitSpy = vi
         .spyOn(process, "exit")
-        .mockImplementation((() => undefined as never));
+        .mockImplementation(() => undefined as never);
 
       await runCheck({ fix: true });
       expect(consola.info).toHaveBeenCalledWith(
@@ -300,9 +301,7 @@ describe("check command", () => {
         });
         const exitSpy = vi
           .spyOn(process, "exit")
-          .mockImplementation(
-            (() => undefined as never),
-          );
+          .mockImplementation(() => undefined as never);
 
         await runCheck({ fix: true });
 

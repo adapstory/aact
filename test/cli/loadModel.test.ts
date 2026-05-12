@@ -16,6 +16,7 @@ vi.mock("consola", () => ({
 
 vi.mock("../../src/formats/registry", () => ({
   loadFormat: vi.fn(),
+  knownFormatNames: () => ["plantuml", "structurizr", "kubernetes"],
 }));
 
 const mockLoadFormat = vi.mocked(loadFormat);
@@ -61,7 +62,7 @@ describe("loadModel", () => {
     mockLoadFormat.mockResolvedValue({ name: "kubernetes" });
     const exitSpy = vi
       .spyOn(process, "exit")
-      .mockImplementation((() => undefined as never));
+      .mockImplementation(() => undefined as never);
 
     await loadModel(plantumlConfig);
 
@@ -77,7 +78,7 @@ describe("loadModel", () => {
     mockLoadFormat.mockResolvedValue(fakeFormat(load));
     const exitSpy = vi
       .spyOn(process, "exit")
-      .mockImplementation((() => undefined as never));
+      .mockImplementation(() => undefined as never);
 
     await loadModel(plantumlConfig);
 
@@ -99,7 +100,7 @@ describe("loadModel", () => {
     mockLoadFormat.mockResolvedValue(fakeFormat(load));
     const exitSpy = vi
       .spyOn(process, "exit")
-      .mockImplementation((() => undefined as never));
+      .mockImplementation(() => undefined as never);
 
     await loadModel(structurizrConfig);
 
@@ -117,7 +118,7 @@ describe("loadModel", () => {
     mockLoadFormat.mockResolvedValue(fakeFormat(load));
     const exitSpy = vi
       .spyOn(process, "exit")
-      .mockImplementation((() => undefined as never));
+      .mockImplementation(() => undefined as never);
 
     await loadModel(structurizrConfig);
 
@@ -141,7 +142,7 @@ describe("loadModel", () => {
     mockLoadFormat.mockResolvedValue(fakeFormat(load));
     const exitSpy = vi
       .spyOn(process, "exit")
-      .mockImplementation((() => undefined as never));
+      .mockImplementation(() => undefined as never);
 
     await loadModel(structurizrConfig);
 

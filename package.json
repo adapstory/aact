@@ -37,7 +37,7 @@
     "type": "git",
     "url": "git+https://github.com/Byndyusoft/aact.git"
   },
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@11.1.1",
   "sideEffects": false,
   "files": [
     "dist"
@@ -52,6 +52,7 @@
     "test:e2e": "vitest run --project e2e",
     "test:coverage": "vitest run --coverage",
     "test:mutation": "stryker run",
+    "typecheck": "tsc --noEmit",
     "changelog": "changelogen",
     "release": "changelogen --release --push",
     "knip": "knip",
@@ -115,5 +116,11 @@
     "plantuml-parser": "0.4.0",
     "valibot": "^1.4.0",
     "yaml": "2.9.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "unrs-resolver"
+    ]
   }
 }
