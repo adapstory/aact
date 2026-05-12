@@ -66,3 +66,24 @@ const BOUNDARY_KIND_MAP: Readonly<Record<string, BoundaryKind>> = Object.freeze(
  */
 export const parseBoundaryMacro = (macroName: string): BoundaryKind =>
   BOUNDARY_KIND_MAP[macroName] ?? "System";
+
+/**
+ * Reverse mapping для generate-side: (kind, external) → C4 macro name.
+ * Используется PlantUML/Mermaid generator'ами для round-trip. Identity
+ * для kinds без Db/Queue subtypes (Person/Component используют base name).
+ */
+export const c4MacroName = (kind: ContainerKind, external: boolean): string => {
+  if (kind === "Person") return external ? "Person_Ext" : "Person";
+  if (kind === "System") return external ? "System_Ext" : "System";
+  return external ? `${kind}_Ext` : kind;
+};
+
+/**
+ * Reverse mapping: BoundaryKind → boundary macro name.
+ */
+export const boundaryMacroName = (kind: BoundaryKind): string => {
+  if (kind === "System") return "System_Boundary";
+  if (kind === "Container") return "Container_Boundary";
+  if (kind === "Component") return "Component_Boundary";
+  return "Enterprise_Boundary";
+};

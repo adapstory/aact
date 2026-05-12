@@ -1,73 +1,79 @@
+import type {UMLElement} from "plantuml-parser";
 import {
   Comment,
   Relationship,
   Stdlib_C4_Boundary,
   Stdlib_C4_Container_Component,
   Stdlib_C4_Context,
-  Stdlib_C4_Dynamic_Rel,
-  UMLElement,
+  Stdlib_C4_Dynamic_Rel
 } from "plantuml-parser";
 
-import {
-  PLANTUML_BOUNDARY,
-  PLANTUML_COMPONENT,
-  PLANTUML_CONTAINER,
-  PLANTUML_CONTAINER_BOUNDARY,
-  PLANTUML_CONTAINER_DB,
-  PLANTUML_PERSON,
-  PLANTUML_SYSTEM,
-  PLANTUML_SYSTEM_BOUNDARY,
-  PLANTUML_SYSTEM_EXT,
-} from "../c4Types";
+// C4 macro names мы знаем из _shared/c4Mapping — но фильтр работает на raw
+// type_.name строках, до маппинга. Inline strings проще чем re-export.
+const CONTAINER_LIKE_NAMES: ReadonlySet<string> = new Set([
+  "Container",
+  "ContainerDb",
+  "ContainerQueue",
+  "Container_Ext",
+  "ContainerDb_Ext",
+  "ContainerQueue_Ext",
+  "Component",
+  "ComponentDb",
+  "ComponentQueue",
+  "Component_Ext",
+  "ComponentDb_Ext",
+  "ComponentQueue_Ext",
+]);
+
+const CONTEXT_NAMES: ReadonlySet<string> = new Set([
+  "Person",
+  "Person_Ext",
+  "System",
+  "SystemDb",
+  "SystemQueue",
+  "System_Ext",
+  "SystemDb_Ext",
+  "SystemQueue_Ext",
+]);
+
+const BOUNDARY_NAMES: ReadonlySet<string> = new Set([
+  "Boundary",
+  "System_Boundary",
+  "Container_Boundary",
+  "Component_Boundary",
+  "Enterprise_Boundary",
+]);
 
 export const filterElements = (elements: UMLElement[]): UMLElement[] => {
-  // Initial empty result and the Comment-skip guard are both
-  // observationally equivalent to mutate — the result is built up by the
-  // subsequent pushes and the Comment branch falls through anyway since
-  // Comments don't match any of the type checks.
   // Stryker disable next-line ArrayDeclaration
   const result: UMLElement[] = [];
 
   for (const element of elements) {
     // Stryker disable next-line ConditionalExpression
     if (element instanceof Comment) continue;
+
+    const typeName = (
+      element as Stdlib_C4_Container_Component | Stdlib_C4_Context
+    ).type_?.name;
+
     if (
-      (element as Stdlib_C4_Container_Component).type_.name ===
-        PLANTUML_CONTAINER ||
-      (element as Stdlib_C4_Container_Component).type_.name ===
-        PLANTUML_CONTAINER_DB ||
-      (element as Stdlib_C4_Container_Component).type_.name ===
-        PLANTUML_COMPONENT ||
-      (element as Stdlib_C4_Context).type_.name === PLANTUML_SYSTEM_EXT ||
-      (element as Stdlib_C4_Context).type_.name === PLANTUML_SYSTEM ||
-      (element as Stdlib_C4_Context).type_.name === PLANTUML_PERSON ||
+      (element instanceof Stdlib_C4_Container_Component &&
+        CONTAINER_LIKE_NAMES.has(typeName)) ||
+      (element instanceof Stdlib_C4_Context && CONTEXT_NAMES.has(typeName)) ||
       element instanceof Stdlib_C4_Dynamic_Rel ||
       element instanceof Relationship
     ) {
       result.push(element);
     }
 
-    const elementAsBoundary = element as Stdlib_C4_Boundary;
-    if (
-      [
-        PLANTUML_SYSTEM_BOUNDARY,
-        PLANTUML_CONTAINER_BOUNDARY,
-        PLANTUML_BOUNDARY,
-      ].includes(elementAsBoundary.type_.name)
-    ) {
-      result.push(elementAsBoundary);
-      const resultFromBoundary = filterElements(elementAsBoundary.elements);
-      result.push(...resultFromBoundary);
+    if (element instanceof Stdlib_C4_Boundary && BOUNDARY_NAMES.has(typeName)) {
+      result.push(element, ...filterElements(element.elements));
     }
 
-    // plantuml-parser occasionally emits nested arrays of elements as
-    // a single element; we flatten them recursively. There is no fixture
-    // in the project that triggers this path, so the mutator survival is
-    // expected — kept as defensive scaffolding.
+    // plantuml-parser occasionally emits nested arrays — flatten defensively.
     // Stryker disable next-line all
     if (Array.isArray(element)) {
-      const resultFromArray = filterElements(element);
-      result.push(...resultFromArray);
+      result.push(...filterElements(element));
     }
   }
 

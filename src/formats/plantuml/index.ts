@@ -1,3 +1,18 @@
-export * from "./c4Types";
-export * from "./loadPlantumlElements";
-export * from "./mapContainersFromPlantumlElements";
+import type { Format } from "../types";
+import { generate } from "./generate";
+import { load } from "./load";
+import { plantumlSyntax } from "./syntax";
+
+export const plantumlFormat: Format = {
+  name: "plantuml",
+  defaultPattern: "*.puml",
+  load,
+  generate,
+  fix: { syntax: plantumlSyntax },
+};
+
+
+
+export {generate} from "./generate";
+export {load} from "./load";
+export {plantumlSyntax} from "./syntax";

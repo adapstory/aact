@@ -1,4 +1,4 @@
-import type { SourceSyntax } from "../../rules/fix";
+import type { SourceSyntax } from "../types";
 
 export const plantumlSyntax: SourceSyntax = {
   containerPattern: (name) => `(${name},`,
