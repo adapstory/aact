@@ -7,7 +7,7 @@
  * Comma-separated tags из Structurizr / k8s / Compose. Trim'ит whitespace,
  * фильтрует пустые segments.
  */
-export const parseCsvTags = (raw: string | undefined): readonly string[] =>
+export const parseCsvTags = (raw?: string): readonly string[] =>
   raw
     ?.split(",")
     .map((t) => t.trim())
