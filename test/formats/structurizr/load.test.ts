@@ -55,7 +55,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
   it("returns empty model for empty workspace", () => {
     const result = mapContainersFromStructurizr({
       model: { softwareSystems: [], people: [] },
-    } as never);
+    });
 
     expect(result.allContainers).toHaveLength(0);
     expect(result.boundaries).toHaveLength(0);
@@ -81,7 +81,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     expect(result.boundaries[0].name).toBe("my_system");
     expect(result.boundaries[0].containers[0].name).toBe("my_svc");
   });
@@ -94,7 +94,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     expect(result.boundaries[0].name).toBe("sys_raw");
   });
 
@@ -114,7 +114,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     const names = result.allContainers.map((c) => c.name);
     expect(names).toEqual(["a", "m", "z"]);
   });
@@ -135,7 +135,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
 
     for (const tech of ["PostgreSQL", "MySQL", "Redis", "MongoDB"]) {
       it(`marks ${tech}-tech container as ContainerDb`, () => {
-        const result = mapContainersFromStructurizr(dbContainer(tech) as never);
+        const result = mapContainersFromStructurizr(dbContainer(tech));
         expect(result.allContainers[0].type).toBe("ContainerDb");
       });
     }
@@ -152,7 +152,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       expect(result.allContainers[0].type).toBe("ContainerDb");
     });
 
@@ -170,7 +170,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       expect(result.allContainers[0].type).toBe("ContainerDb");
     });
 
@@ -193,7 +193,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       expect(result.allContainers[0].type).toBe("Container");
     });
   });
@@ -214,28 +214,28 @@ describe("mapContainersFromStructurizr (unit)", () => {
 
     it("adds 'repo' tag for names containing 'crud'", () => {
       const result = mapContainersFromStructurizr(
-        containerWith("orders_crud_service") as never,
+        containerWith("orders_crud_service"),
       );
       expect(result.allContainers[0].tags).toContain("repo");
     });
 
     it("adds 'acl' tag for names containing 'acl'", () => {
       const result = mapContainersFromStructurizr(
-        containerWith("payments_acl") as never,
+        containerWith("payments_acl"),
       );
       expect(result.allContainers[0].tags).toContain("acl");
     });
 
     it("preserves existing comma-separated tags and trims whitespace", () => {
       const result = mapContainersFromStructurizr(
-        containerWith("svc", "tag1, tag2 , tag3") as never,
+        containerWith("svc", "tag1, tag2 , tag3"),
       );
       expect(result.allContainers[0].tags).toEqual(["tag1", "tag2", "tag3"]);
     });
 
     it("does NOT duplicate 'repo' if already present", () => {
       const result = mapContainersFromStructurizr(
-        containerWith("crud_svc", "repo") as never,
+        containerWith("crud_svc", "repo"),
       );
       const tags = result.allContainers[0].tags ?? [];
       expect(tags.filter((t) => t === "repo")).toHaveLength(1);
@@ -243,7 +243,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
 
     it("filters out empty tags from the source list", () => {
       const result = mapContainersFromStructurizr(
-        containerWith("svc", "a,,b,") as never,
+        containerWith("svc", "a,,b,"),
       );
       expect(result.allContainers[0].tags).toEqual(["a", "b"]);
     });
@@ -275,7 +275,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       const a = result.allContainers.find((c) => c.name === "a");
       expect(a?.relations[0].technology).toBe("REST");
     });
@@ -299,7 +299,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       const a = result.allContainers.find((c) => c.name === "a");
       expect(a?.relations[0].technology).toBe("kafka");
     });
@@ -325,7 +325,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       const a = result.allContainers.find((c) => c.name === "a");
       expect(a?.relations[0].technology).toBeUndefined();
     });
@@ -355,7 +355,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       const a = result.allContainers.find((c) => c.name === "a");
       // Both existing and async tags present
       expect(a?.relations[0].tags).toEqual(["audit", "async"]);
@@ -379,7 +379,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       expect(result.allContainers[0].relations).toHaveLength(0);
     });
 
@@ -409,7 +409,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never);
+      });
       // Component relation is registered against `a` (the parent component
       // is `comp1`, registered by id, but the test asserts components
       // contribute to relations on the model — not by location, just by
@@ -432,7 +432,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     expect(result.allContainers[0].type).toBe("System_Ext");
   });
 
@@ -450,7 +450,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     expect(result.allContainers[0].description).toBe("");
   });
 
@@ -469,7 +469,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     const ext = result.allContainers.find((c) => c.name === "ext");
     expect(ext?.tags).toEqual(["Critical", "Vendor"]);
   });
@@ -482,7 +482,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     const ext = result.allContainers.find((c) => c.name === "ext");
     expect(ext?.description).toBe("");
   });
@@ -519,7 +519,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           ],
           people: [],
         },
-      } as never),
+      }),
     ).not.toThrow();
   });
 
@@ -532,7 +532,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         softwareSystems: [{ id: "sys1", name: "Sys" }],
         people: [],
       },
-    } as never);
+    });
     // Only the system itself was produced — no inner containers from
     // sys1's undefined `containers` field.
     expect(result.boundaries[0].containers).toEqual([]);
@@ -543,14 +543,14 @@ describe("mapContainersFromStructurizr (unit)", () => {
       model: {
         softwareSystems: [],
       },
-    } as never);
+    });
     expect(result.allContainers).toHaveLength(0);
   });
 
   it("handles workspace with no `softwareSystems` field (covers softwareSystems ?? [])", () => {
     const result = mapContainersFromStructurizr({
       model: { people: [] },
-    } as never);
+    });
     expect(result.allContainers).toHaveLength(0);
     expect(result.boundaries).toHaveLength(0);
   });
@@ -578,7 +578,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     const a = result.allContainers.find((c) => c.name === "a");
     expect(a?.relations[0].tags ?? []).not.toContain("async");
   });
@@ -596,7 +596,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           },
         ],
       },
-    } as never);
+    });
     const user = result.allContainers.find((c) => c.name === "p1");
     expect(user?.tags).toEqual(["vip", "admin"]);
   });
@@ -624,7 +624,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
         ],
         people: [],
       },
-    } as never);
+    });
     const a = result.allContainers.find((c) => c.name === "a");
     expect(a?.relations[0].tags).toEqual(["audit", "urgent"]);
   });
@@ -650,7 +650,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           },
         ],
       },
-    } as never);
+    });
     const user = result.allContainers.find((c) => c.name === "user");
     expect(user?.relations[0]?.to.name).toBe("svc");
   });
@@ -669,7 +669,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
           },
         ],
       },
-    } as never);
+    });
     const person = result.allContainers.find((c) => c.name === "p1");
     expect(person?.type).toBe("Person");
     expect(person?.description).toBe("Ops user");
@@ -706,7 +706,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
       },
     };
 
-    const result = mapContainersFromStructurizr(workspace as never);
+    const result = mapContainersFromStructurizr(workspace);
     const svcA = result.allContainers.find((c) => c.name === "svc_a");
     expect(svcA?.relations[0].tags).toContain("async");
   });
@@ -726,7 +726,7 @@ describe("mapContainersFromStructurizr (unit)", () => {
       },
     };
 
-    const result = mapContainersFromStructurizr(workspace as never);
+    const result = mapContainersFromStructurizr(workspace);
     const ext = result.allContainers.find((c) => c.name === "ext");
     expect(ext?.type).toBe("System_Ext");
   });
