@@ -1,22 +1,11 @@
 import YAML from "yaml";
 
-import type { ArchitectureModel } from "../model";
-import {
-  CONTAINER_DB_TYPE,
-  CONTAINER_TYPE,
-  EXTERNAL_SYSTEM_TYPE,
-} from "../model";
-import type { Container } from "../model/container";
-import type { Relation } from "../model/relation";
+import type { Container, Model, Relation } from "../../model";
+import type { FormatOutput } from "../types";
 
 export interface KubernetesGenerateOptions {
-  defaultPort?: number;
-  dbConnectionTemplate?: string;
-}
-
-export interface KubernetesOutput {
-  fileName: string;
-  content: string;
+  readonly defaultPort?: number;
+  readonly dbConnectionTemplate?: string;
 }
 
 const toKebab = (name: string): string => name.replaceAll("_", "-");
@@ -26,14 +15,15 @@ const toEnvKey = (name: string): string =>
 
 const buildEnvVar = (
   relation: Relation,
+  targetKind: Container["kind"] | undefined,
+  targetExternal: boolean | undefined,
   sourceKebab: string,
   options: { defaultPort: number; dbConnectionTemplate: string },
 ): { key: string; value: string } | undefined => {
-  const targetType = relation.to.type;
-  const targetKebab = toKebab(relation.to.name);
+  const targetKebab = toKebab(relation.to);
   const targetUpper = toEnvKey(targetKebab);
 
-  if (targetType === CONTAINER_DB_TYPE) {
+  if (targetKind === "ContainerDb") {
     const value = options.dbConnectionTemplate.replaceAll(
       "{name}",
       sourceKebab,
@@ -41,17 +31,19 @@ const buildEnvVar = (
     return { key: "PG_CONNECTION_STRING", value };
   }
 
-  if (relation.tags?.includes("async")) {
+  if (relation.tags.includes("async")) {
     const value = relation.technology ?? targetKebab;
     return { key: `KAFKA_${targetUpper}_TOPIC`, value };
   }
 
-  if (targetType === EXTERNAL_SYSTEM_TYPE) {
+  // External system — внешний URL
+  if (targetExternal === true) {
     const value = relation.technology ?? `https://${targetKebab}`;
     return { key: `${targetUpper}_BASE_URL`, value };
   }
 
-  if (targetType === CONTAINER_TYPE) {
+  // Internal container — internal cluster URL
+  if (targetKind === "Container") {
     const value =
       relation.technology ?? `http://${targetKebab}:${options.defaultPort}`;
     return { key: `${targetUpper}_BASE_URL`, value };
@@ -60,10 +52,18 @@ const buildEnvVar = (
   return undefined;
 };
 
-export const generateKubernetes = (
-  model: ArchitectureModel,
+/**
+ * Model → k8s deployment YAML files (one per Container kind:Container).
+ * Heuristic mapping: env vars from relations using technology hints.
+ *
+ * Document caveat (см. README): k8s — deployment artifact, не C4 source.
+ * Generate производит approximation manifests для review; users typically
+ * имеют свой Helm/Kustomize setup и используют output как hint.
+ */
+export const generate = (
+  model: Model,
   options?: KubernetesGenerateOptions,
-): KubernetesOutput[] => {
+): FormatOutput => {
   const defaultPort = options?.defaultPort ?? 8080;
   const dbConnectionTemplate =
     options?.dbConnectionTemplate ??
@@ -71,29 +71,31 @@ export const generateKubernetes = (
 
   const resolvedOptions = { defaultPort, dbConnectionTemplate };
 
-  // Whitelist: only Container-typed elements become deployment YAML.
-  // Anything else from the C4 model (System, Component, Person, DB,
-  // ExternalSystem) is not a deployable unit. Treat untyped elements as
-  // Container so loaders that omit the field keep working.
-  const containers = model.allContainers.filter(
-    (c: Container) => (c.type ?? CONTAINER_TYPE) === CONTAINER_TYPE,
+  // Only Container kind elements become deployment YAML.
+  // Person/System/Component не deployable units в этом контексте.
+  const containers = Object.values(model.containers).filter(
+    (c) => c.kind === "Container",
   );
 
-  return containers.map((container: Container) => {
+  const files = containers.map((container) => {
     const kebabName = toKebab(container.name);
 
     const envEntries: { key: string; value: string }[] = [];
     for (const relation of container.relations) {
-      const entry = buildEnvVar(relation, kebabName, resolvedOptions);
-      if (entry) {
-        envEntries.push(entry);
-      }
+      const target = model.containers[relation.to];
+      const entry = buildEnvVar(
+        relation,
+        target?.kind,
+        target?.external,
+        kebabName,
+        resolvedOptions,
+      );
+      if (entry) envEntries.push(entry);
     }
 
     envEntries.sort((a, b) => a.key.localeCompare(b.key));
 
     const doc: Record<string, unknown> = { name: kebabName };
-
     if (envEntries.length > 0) {
       const environment: Record<string, { default: string }> = {};
       for (const { key, value } of envEntries) {
@@ -103,8 +105,10 @@ export const generateKubernetes = (
     }
 
     return {
-      fileName: `${kebabName}.yml`,
+      path: `${kebabName}.yml`,
       content: YAML.stringify(doc),
     };
   });
+
+  return { files };
 };

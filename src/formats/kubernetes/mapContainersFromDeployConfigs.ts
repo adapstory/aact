@@ -1,5 +1,4 @@
-import { Section } from "../../model";
-import { DeployConfig } from "./index";
+import type { DeployConfig, Section } from "./deployConfig";
 
 export interface KubernetesMapOptions {
   envWhitelist?: (string | RegExp)[];
