@@ -80,104 +80,102 @@ export default tseslint.config(
     files: ["src/**/*.ts"],
     plugins: { boundaries },
     settings: {
+      // TypeScript resolver — без него boundaries не может resolve relative
+      // imports (`../rules` → `src/rules/index.ts`) → правило silently skip'ит.
+      // Pattern из официальных docs: https://www.jsboundaries.dev/docs/guides/typescript-support/
+      "import/resolver": {
+        typescript: { alwaysTryTypes: true },
+      },
       "boundaries/elements": [
-        { type: "model", pattern: "src/model/**/*" },
-        {
-          type: "format-shared",
-          pattern: "src/formats/_shared/**/*",
-        },
+        { type: "model", pattern: "src/model" },
+        { type: "format-shared", pattern: "src/formats/_shared" },
         {
           type: "format",
-          pattern: "src/formats/!(_shared|types|registry)*/**/*",
+          pattern: "src/formats/(plantuml|structurizr|kubernetes)",
+          capture: ["formatName"],
         },
         {
           type: "format-core",
-          pattern: "src/formats/{types,registry}.ts",
+          pattern: "src/formats/(types|registry).ts",
           mode: "file",
         },
-        { type: "rule", pattern: "src/rules/**/*" },
-        { type: "analyzer", pattern: "src/analyzer.ts", mode: "file" },
-        { type: "cli", pattern: "src/cli/**/*" },
+        { type: "rule", pattern: "src/rules" },
+        { type: "analyze", pattern: "src/analyze.ts", mode: "file" },
+        { type: "cli", pattern: "src/cli" },
         { type: "config", pattern: "src/config.ts", mode: "file" },
         { type: "index", pattern: "src/index.ts", mode: "file" },
       ],
     },
     rules: {
+      "boundaries/no-unknown-files": "error",
       "boundaries/dependencies": [
         "error",
         {
           default: "disallow",
           rules: [
-            // model — корневой, ни от чего не зависит
-            { from: { type: "model" }, allow: [] },
             // format-shared — только model
             {
               from: { type: "format-shared" },
-              allow: [{ to: { type: "model" } }],
+              allow: { to: { type: "model" } },
             },
-            // format-core (types.ts, registry.ts) — model + lazy refs на формaты допустимы
+            // format-core (types.ts, registry.ts) — model + format + self
+            // (registry.ts импортит Format type из types.ts)
             {
               from: { type: "format-core" },
-              allow: [{ to: { type: ["model", "format"] } }],
+              allow: { to: { type: ["model", "format", "format-core"] } },
             },
             // format implementations — model, format-shared, format-core
             {
               from: { type: "format" },
-              allow: [
-                {
-                  to: { type: ["model", "format-shared", "format-core"] },
-                },
-              ],
+              allow: {
+                to: { type: ["model", "format-shared", "format-core"] },
+              },
             },
             // rules — model + format-core (для SourceSyntax типа)
             {
               from: { type: "rule" },
-              allow: [{ to: { type: ["model", "format-core"] } }],
+              allow: { to: { type: ["model", "format-core"] } },
             },
-            // analyzer — model + rules
+            // analyze — model + rules
             {
-              from: { type: "analyzer" },
-              allow: [{ to: { type: ["model", "rule"] } }],
+              from: { type: "analyze" },
+              allow: { to: { type: ["model", "rule"] } },
             },
-            // config — standalone
-            { from: { type: "config" }, allow: [] },
-            // cli — может всё
+            // cli — может всё кроме index'а
             {
               from: { type: "cli" },
-              allow: [
-                {
-                  to: {
-                    type: [
-                      "model",
-                      "format",
-                      "format-core",
-                      "format-shared",
-                      "rule",
-                      "analyzer",
-                      "config",
-                    ],
-                  },
+              allow: {
+                to: {
+                  type: [
+                    "model",
+                    "format",
+                    "format-core",
+                    "format-shared",
+                    "rule",
+                    "analyze",
+                    "config",
+                  ],
                 },
-              ],
+              },
             },
             // index — public API barrel
             {
               from: { type: "index" },
-              allow: [
-                {
-                  to: {
-                    type: [
-                      "model",
-                      "format",
-                      "format-core",
-                      "rule",
-                      "analyzer",
-                      "config",
-                    ],
-                  },
+              allow: {
+                to: {
+                  type: [
+                    "model",
+                    "format",
+                    "format-core",
+                    "rule",
+                    "analyze",
+                    "config",
+                  ],
                 },
-              ],
+              },
             },
+            // model и config — `default: disallow` сам запрещает любые
+            // outbound imports (root layer / standalone). Не нужно явных rules.
           ],
         },
       ],
