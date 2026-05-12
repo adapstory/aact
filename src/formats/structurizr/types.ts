@@ -10,7 +10,7 @@ export interface StructurizrWorkspace {
   model: StructurizrModel;
 }
 
-export interface StructurizrModel {
+interface StructurizrModel {
   enterprise?: { name: string };
   people?: StructurizrPerson[];
   softwareSystems?: StructurizrSoftwareSystem[];
@@ -52,7 +52,7 @@ export interface StructurizrContainer {
   relationships?: StructurizrRelationship[];
 }
 
-export interface StructurizrComponent {
+interface StructurizrComponent {
   id: string;
   name: string;
   description?: string;

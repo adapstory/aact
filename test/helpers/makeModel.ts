@@ -1,7 +1,11 @@
-import type {Boundary, BoundaryKind, Container, ContainerKind, Model} from "../../src/model";
-import {
-  buildModel
+import type {
+  Boundary,
+  BoundaryKind,
+  Container,
+  ContainerKind,
+  Model,
 } from "../../src/model";
+import { buildModel } from "../../src/model";
 
 export interface ContainerSpec {
   readonly name: string;
@@ -35,7 +39,7 @@ export interface BoundarySpec {
   readonly boundaryNames?: readonly string[];
 }
 
-export const makeContainer = (spec: ContainerSpec): Container => ({
+const makeContainer = (spec: ContainerSpec): Container => ({
   name: spec.name,
   label: spec.label ?? spec.name,
   kind: spec.kind ?? "Container",
@@ -55,7 +59,7 @@ export const makeContainer = (spec: ContainerSpec): Container => ({
   properties: spec.properties,
 });
 
-export const makeBoundary = (spec: BoundarySpec): Boundary => ({
+const makeBoundary = (spec: BoundarySpec): Boundary => ({
   name: spec.name,
   label: spec.label ?? spec.name,
   kind: spec.kind ?? "System",

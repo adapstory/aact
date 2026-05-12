@@ -32,7 +32,7 @@ export interface FixCapability {
  * per service) — несколько. Один shape, CLI iterate'ит без discriminated
  * dispatch'а.
  */
-export interface GeneratedFile {
+interface GeneratedFile {
   readonly path: string;
   readonly content: string;
 }

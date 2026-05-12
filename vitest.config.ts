@@ -53,12 +53,9 @@ export default defineConfig({
         // Type-only files
         "src/**/*.d.ts",
         "src/**/types.ts",
-        "src/loaders/structurizr/dslTypes.ts",
-        "src/loaders/plantuml/c4Types.ts",
-        "src/model/containerTypes.ts",
       ],
       reportsDirectory: "coverage",
-      // Threshold floors — OSS-realistic (industry norm 70-90% for mature
+      // Threshold floors — OSS-realistic (industry norm 70-90% для mature
       // projects per Node.js Reference Architecture). Catches регрессии
       // > ~3% без env-variance flakes между local/CI. Locally coverage
       // обычно держится 97-99%, в CI чуть ниже из-за env-dependent
