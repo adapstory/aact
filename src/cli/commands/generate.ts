@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 
 import { defineCommand } from "citty";
 import consola from "consola";
+import path from "pathe";
 
 import type { AactConfig } from "../../config";
 import { generateKubernetes } from "../../generators/kubernetes";

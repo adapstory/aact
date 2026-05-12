@@ -1,9 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 
 import { defineCommand } from "citty";
 import consola from "consola";
 import { box, colors } from "consola/utils";
+import path from "pathe";
 
 import type { AactConfig } from "../../config";
 import { plantumlSyntax } from "../../loaders/plantuml/syntax";

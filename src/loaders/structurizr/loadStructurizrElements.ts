@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
-import path from "node:path";
+
+import path from "pathe";
 
 import {
   ArchitectureModel,

@@ -109,6 +109,7 @@
     "citty": "^0.2.2",
     "consola": "^3.4.2",
     "jiti": "^2.7.0",
+    "pathe": "^2.0.3",
     "plantuml-parser": "0.4.0",
     "valibot": "^1.4.0",
     "yaml": "2.9.0"

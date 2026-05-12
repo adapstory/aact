@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 
+import path from "pathe";
 import YAML from "yaml";
 
 import { DeployConfig } from "./deployConfig";

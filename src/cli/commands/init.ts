@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 
 import { defineCommand } from "citty";
 import consola from "consola";
+import path from "pathe";
 
 // Type-only import keeps the template runnable via `npx aact check` without
 // a local `npm install aact` — jiti/c12 erase `import type` at parse time.

@@ -1,6 +1,5 @@
-import path from "node:path";
-
 import consola from "consola";
+import path from "pathe";
 
 import type { AactConfig } from "../config";
 import { loadPlantumlElements } from "../loaders/plantuml/loadPlantumlElements";
