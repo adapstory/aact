@@ -72,19 +72,29 @@ export default tseslint.config(
       "import-x/newline-after-import": "error",
     },
   },
-  // eslint-plugin-boundaries: enforces architectural layers. The point is
-  // "понятные слои для контрибьюторов" — структура из convention становится
-  // contract. Configured for CURRENT src/ (loaders + generators separate);
-  // will collapse to src/formats/<name>/ in v3 structural move.
-  // Uses v6 object-based selector syntax (boundaries/dependencies).
+  // eslint-plugin-boundaries: enforces architectural layers. Структура из
+  // convention становится contract — случайный нарушение слоёв = CI red.
+  // Layers: model (root) → format-shared → format → rule → analyzer → cli.
+  // Configured for src/formats/<name>/ структуру (после v3 структурного move'а).
   {
     files: ["src/**/*.ts"],
     plugins: { boundaries },
     settings: {
       "boundaries/elements": [
         { type: "model", pattern: "src/model/**/*" },
-        { type: "loader", pattern: "src/loaders/**/*" },
-        { type: "generator", pattern: "src/generators/**/*" },
+        {
+          type: "format-shared",
+          pattern: "src/formats/_shared/**/*",
+        },
+        {
+          type: "format",
+          pattern: "src/formats/!(_shared|types|registry)*/**/*",
+        },
+        {
+          type: "format-core",
+          pattern: "src/formats/{types,registry}.ts",
+          mode: "file",
+        },
         { type: "rule", pattern: "src/rules/**/*" },
         { type: "analyzer", pattern: "src/analyzer.ts", mode: "file" },
         { type: "cli", pattern: "src/cli/**/*" },
@@ -98,19 +108,38 @@ export default tseslint.config(
         {
           default: "disallow",
           rules: [
-            // model — корневой слой, ни от чего не зависит
+            // model — корневой, ни от чего не зависит
             { from: { type: "model" }, allow: [] },
-            // loaders + generators — только model
-            { from: { type: "loader" }, allow: [{ to: { type: "model" } }] },
-            { from: { type: "generator" }, allow: [{ to: { type: "model" } }] },
-            // rules — только model
-            { from: { type: "rule" }, allow: [{ to: { type: "model" } }] },
+            // format-shared — только model
+            {
+              from: { type: "format-shared" },
+              allow: [{ to: { type: "model" } }],
+            },
+            // format-core (types.ts, registry.ts) — model + lazy refs на формaты допустимы
+            {
+              from: { type: "format-core" },
+              allow: [{ to: { type: ["model", "format"] } }],
+            },
+            // format implementations — model, format-shared, format-core
+            {
+              from: { type: "format" },
+              allow: [
+                {
+                  to: { type: ["model", "format-shared", "format-core"] },
+                },
+              ],
+            },
+            // rules — model + format-core (для SourceSyntax типа)
+            {
+              from: { type: "rule" },
+              allow: [{ to: { type: ["model", "format-core"] } }],
+            },
             // analyzer — model + rules
             {
               from: { type: "analyzer" },
               allow: [{ to: { type: ["model", "rule"] } }],
             },
-            // config — standalone (valibot only)
+            // config — standalone
             { from: { type: "config" }, allow: [] },
             // cli — может всё
             {
@@ -120,8 +149,9 @@ export default tseslint.config(
                   to: {
                     type: [
                       "model",
-                      "loader",
-                      "generator",
+                      "format",
+                      "format-core",
+                      "format-shared",
                       "rule",
                       "analyzer",
                       "config",
@@ -130,7 +160,7 @@ export default tseslint.config(
                 },
               ],
             },
-            // index — public API barrel, re-exports всё
+            // index — public API barrel
             {
               from: { type: "index" },
               allow: [
@@ -138,8 +168,8 @@ export default tseslint.config(
                   to: {
                     type: [
                       "model",
-                      "loader",
-                      "generator",
+                      "format",
+                      "format-core",
                       "rule",
                       "analyzer",
                       "config",
