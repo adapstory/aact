@@ -1,14 +1,15 @@
-import type { ArchitectureModel } from "../model";
+import type {Model} from "../../model";
+import { allContainers  } from "../../model";
 
 export type NamingConvention = "snake" | "camel" | "kebab";
 
-export const detectNamingConvention = (
-  model: ArchitectureModel,
-): NamingConvention => {
-  const names = model.allContainers.map((c) => c.name);
-  // Empty-input early return — equivalent to falling through (all three
-  // counts are 0 → final fallback returns "snake" anyway). Kept for
-  // intent clarity.
+/**
+ * Определяет dominant naming convention в model'е (по именам контейнеров).
+ * Fix-функции используют для генерации новых имён в том же стиле, что
+ * существующие. Empty model → "snake" fallback.
+ */
+export const detectNamingConvention = (model: Model): NamingConvention => {
+  const names = allContainers(model).map((c) => c.name);
   // Stryker disable next-line ConditionalExpression
   if (names.length === 0) return "snake";
 

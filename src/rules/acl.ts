@@ -1,35 +1,98 @@
-import { Container, EXTERNAL_SYSTEM_TYPE } from "../model";
-import { Violation } from "./types";
+import consola from "consola";
 
-export type { Violation } from "./types";
+import type {Model} from "../model";
+import { allContainers,  targetOf } from "../model";
+import { detectNamingConvention, joinName } from "./lib/namingUtils";
+import type { RuleDefinition, Violation } from "./types";
 
 export interface AclOptions {
-  tag?: string;
-  externalType?: string;
+  /** Tag, который маркирует ACL-контейнер. Default "acl". */
+  readonly tag?: string;
 }
 
-export const checkAcl = (
-  containers: Container[],
-  options?: AclOptions,
-): Violation[] => {
-  const tag = options?.tag ?? "acl";
-  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
-  const violations: Violation[] = [];
+/**
+ * Anti-corruption Layer: контейнер, который зовёт внешние системы, должен
+ * быть тэгирован как ACL.
+ *
+ * v3: внешние системы определяются через `target.external === true`
+ * (orthogonal flag), не через kind == "System_Ext".
+ */
+export const aclRule: RuleDefinition<AclOptions> = {
+  name: "acl",
+  description:
+    "Containers calling external systems must be tagged as ACL (Anti-corruption Layer)",
 
-  for (const container of containers) {
-    const externalRelations = container.relations.filter(
-      (r) => r.to.type === externalType,
-    );
+  check(model, options) {
+    const tag = options?.tag ?? "acl";
+    const violations: Violation[] = [];
 
-    if (!container.tags?.includes(tag) && externalRelations.length > 0) {
-      const names = externalRelations.map((r) => r.to.name).join(", ");
-      const label = externalRelations.length === 1 ? "system" : "systems";
-      violations.push({
-        container: container.name,
-        message: `calls external ${label} ${names} without an ACL layer`,
+    for (const container of allContainers(model)) {
+      const externalRelations = container.relations.filter(
+        (r) => targetOf(model, r)?.external === true,
+      );
+
+      if (!container.tags.includes(tag) && externalRelations.length > 0) {
+        const names = externalRelations.map((r) => r.to).join(", ");
+        const label = externalRelations.length === 1 ? "system" : "systems";
+        violations.push({
+          container: container.name,
+          message: `calls external ${label} ${names} without an ACL layer`,
+        });
+      }
+    }
+
+    return violations;
+  },
+
+  fix(model: Model, violations, syntax, options) {
+    const tag = options?.tag ?? "acl";
+    const convention = detectNamingConvention(model);
+    const results = [];
+
+    for (const violation of violations) {
+      const container = model.containers[violation.container];
+      if (!container) continue;
+
+      const externalRels = container.relations.filter(
+        (r) => targetOf(model, r)?.external === true,
+      );
+      if (externalRels.length === 0) continue;
+
+      const aclName = joinName(container.name, "acl", convention);
+      if (aclName in model.containers) {
+        consola.warn(
+          `fix acl: skipping ${container.name} — ${aclName} already exists`,
+        );
+        continue;
+      }
+
+      results.push({
+        rule: "acl",
+        description: `Add ACL layer for ${container.name}`,
+        edits: [
+          {
+            type: "add" as const,
+            search: syntax.containerPattern(container.name),
+            content: syntax.containerDecl(
+              aclName,
+              `${container.label} ACL`,
+              tag,
+            ),
+          },
+          {
+            type: "add" as const,
+            search: syntax.containerPattern(aclName),
+            content: syntax.relationDecl(container.name, aclName),
+          },
+          ...externalRels.map((rel) => ({
+            type: "replace" as const,
+            search: syntax.relationPattern(container.name, rel.to),
+            content: syntax.relationDecl(aclName, rel.to, rel.technology),
+          })),
+        ],
       });
     }
-  }
 
-  return violations;
+    return results;
+  },
 };

@@ -1,50 +1,51 @@
-import {
-  ArchitectureModel,
-  Boundary,
-  CONTAINER_TYPE,
-  EXTERNAL_SYSTEM_TYPE,
-} from "../model";
-import { Violation } from "./types";
+import type {Boundary, Model} from "../model";
+import {  getBoundary, getContainer  } from "../model";
+import type { RuleDefinition, Violation } from "./types";
 
-export interface CohesionOptions {
-  externalType?: string;
-  internalType?: string;
-}
+/**
+ * Common Closure Principle: контейнеры одного boundary должны быть более
+ * связаны между собой (cohesion) чем с внешними (coupling). Иначе
+ * boundary плохо определён.
+ *
+ * v3: external определяется через `target.external === true` (orthogonal flag).
+ */
 
-const getBoundaryCohesion = (
-  boundary: Boundary,
-  externalType: string,
-  internalType: string,
-): number => {
-  const names = new Set(boundary.containers.map((c) => c.name));
+const getBoundaryCohesion = (model: Model, boundary: Boundary): number => {
+  const names = new Set(boundary.containerNames);
   let result = 0;
-  for (const container of boundary.containers) {
-    result += container.relations.filter((r) => names.has(r.to.name)).length;
+  for (const containerName of boundary.containerNames) {
+    const container = getContainer(model, containerName);
+    if (!container) continue;
+    result += container.relations.filter((r) => names.has(r.to)).length;
   }
-  for (const innerBoundary of boundary.boundaries) {
-    result += getBoundaryCoupling(innerBoundary, externalType, internalType);
+  for (const innerName of boundary.boundaryNames) {
+    const inner = getBoundary(model, innerName);
+    if (inner) result += getBoundaryCoupling(model, inner);
   }
   return result;
 };
 
-const getBoundaryCoupling = (
-  boundary: Boundary,
-  externalType: string,
-  internalType: string,
-): number => {
-  const names = new Set(boundary.containers.map((c) => c.name));
+const getBoundaryCoupling = (model: Model, boundary: Boundary): number => {
+  const names = new Set(boundary.containerNames);
   let result = 0;
 
-  for (const container of boundary.containers) {
-    result += container.relations.filter(
-      (r) => r.to.type === internalType && !names.has(r.to.name),
-    ).length;
+  for (const containerName of boundary.containerNames) {
+    const container = getContainer(model, containerName);
+    if (!container) continue;
+    result += container.relations.filter((r) => {
+      const target = getContainer(model, r.to);
+      return target && !target.external && !names.has(r.to);
+    }).length;
   }
 
-  for (const innerBoundary of boundary.boundaries) {
-    for (const container of innerBoundary.containers) {
+  for (const innerName of boundary.boundaryNames) {
+    const inner = getBoundary(model, innerName);
+    if (!inner) continue;
+    for (const containerName of inner.containerNames) {
+      const container = getContainer(model, containerName);
+      if (!container) continue;
       result += container.relations.filter(
-        (r) => r.to.type === externalType,
+        (r) => getContainer(model, r.to)?.external === true,
       ).length;
     }
   }
@@ -52,39 +53,42 @@ const getBoundaryCoupling = (
   return result;
 };
 
-export const checkCohesion = (
-  model: ArchitectureModel,
-  options?: CohesionOptions,
-): Violation[] => {
-  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
-  const internalType = options?.internalType ?? CONTAINER_TYPE;
-  const violations: Violation[] = [];
+export const cohesionRule: RuleDefinition = {
+  name: "cohesion",
+  description:
+    "Each boundary should be more cohesive than coupled; parent boundaries less cohesive than inner ones",
 
-  for (const boundary of model.boundaries) {
-    const cohesion = getBoundaryCohesion(boundary, externalType, internalType);
-    const coupling = getBoundaryCoupling(boundary, externalType, internalType);
+  check(model) {
+    const violations: Violation[] = [];
 
-    if (cohesion <= coupling) {
-      violations.push({
-        container: boundary.name,
-        message: `coupling (${coupling}) ≥ cohesion (${cohesion}) — more cross-boundary dependencies than internal connections`,
-      });
-    }
+    for (const boundary of Object.values(model.boundaries)) {
+      const cohesion = getBoundaryCohesion(model, boundary);
+      const coupling = getBoundaryCoupling(model, boundary);
 
-    if (boundary.boundaries.length > 0) {
-      const innerCohesionSum = boundary.boundaries.reduce(
-        (sum, current) =>
-          sum + getBoundaryCohesion(current, externalType, internalType),
-        0,
-      );
-      if (cohesion >= innerCohesionSum) {
+      if (cohesion <= coupling) {
         violations.push({
           container: boundary.name,
-          message: `parent cohesion (${cohesion}) ≥ sum of inner cohesions (${innerCohesionSum}) — parent boundary should be less cohesive than its sub-boundaries`,
+          message: `coupling (${coupling}) ≥ cohesion (${cohesion}) — more cross-boundary dependencies than internal connections`,
         });
       }
-    }
-  }
 
-  return violations;
+      if (boundary.boundaryNames.length > 0) {
+        const innerCohesionSum = boundary.boundaryNames.reduce<number>(
+          (sum, innerName) => {
+            const inner = getBoundary(model, innerName);
+            return sum + (inner ? getBoundaryCohesion(model, inner) : 0);
+          },
+          0,
+        );
+        if (cohesion >= innerCohesionSum) {
+          violations.push({
+            container: boundary.name,
+            message: `parent cohesion (${cohesion}) ≥ sum of inner cohesions (${innerCohesionSum}) — parent boundary should be less cohesive than its sub-boundaries`,
+          });
+        }
+      }
+    }
+
+    return violations;
+  },
 };

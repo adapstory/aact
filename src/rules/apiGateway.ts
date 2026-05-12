@@ -1,36 +1,43 @@
-import { Container, EXTERNAL_SYSTEM_TYPE } from "../model";
-import { Violation } from "./types";
+import { allContainers, targetOf } from "../model";
+import type { RuleDefinition, Violation } from "./types";
 
 export interface ApiGatewayOptions {
-  aclTag?: string;
-  externalType?: string;
-  gatewayPattern?: RegExp;
+  /** Tag, который маркирует ACL-контейнер. Default "acl". */
+  readonly aclTag?: string;
+  /** Regex для определения "это gateway technology". Default /gateway/i. */
+  readonly gatewayPattern?: RegExp;
 }
 
-export const checkApiGateway = (
-  containers: Container[],
-  options?: ApiGatewayOptions,
-): Violation[] => {
-  const aclTag = options?.aclTag ?? "acl";
-  const externalType = options?.externalType ?? EXTERNAL_SYSTEM_TYPE;
-  const gatewayPattern = options?.gatewayPattern ?? /gateway/i;
-  const violations: Violation[] = [];
+/**
+ * API Gateway pattern: ACL-контейнеры, зовущие внешние системы, должны
+ * проходить через API Gateway (technology содержит "gateway").
+ */
+export const apiGatewayRule: RuleDefinition<ApiGatewayOptions> = {
+  name: "apiGateway",
+  description:
+    "ACL containers calling external systems must route through an API Gateway",
 
-  for (const container of containers) {
-    if (!container.tags?.includes(aclTag)) continue;
+  check(model, options) {
+    const aclTag = options?.aclTag ?? "acl";
+    const gatewayPattern = options?.gatewayPattern ?? /gateway/i;
+    const violations: Violation[] = [];
 
-    for (const rel of container.relations) {
-      if (rel.to.type !== externalType) continue;
+    for (const container of allContainers(model)) {
+      if (!container.tags.includes(aclTag)) continue;
 
-      const techs = rel.technology?.split(", ") ?? [];
-      if (!techs.some((t) => gatewayPattern.test(t))) {
-        violations.push({
-          container: container.name,
-          message: `calls external "${rel.to.name}" without going through an API Gateway`,
-        });
+      for (const rel of container.relations) {
+        if (targetOf(model, rel)?.external !== true) continue;
+
+        const techs = rel.technology?.split(", ") ?? [];
+        if (!techs.some((t) => gatewayPattern.test(t))) {
+          violations.push({
+            container: container.name,
+            message: `calls external "${rel.to}" without going through an API Gateway`,
+          });
+        }
       }
     }
-  }
 
-  return violations;
+    return violations;
+  },
 };

@@ -1,20 +1,25 @@
-import type { ArchitectureModel, Boundary } from "../model";
-import type { Violation } from "./types";
+import type {Boundary, Model} from "../model";
+import { allContainers   } from "../model";
+import type { RuleDefinition, Violation } from "./types";
 
-const buildBoundaryLookup = (
-  model: ArchitectureModel,
-): Map<string, Boundary> => {
+/**
+ * Common Reuse Principle: если consumer использует часть public surface
+ * другого boundary, он должен использовать всё. "Используешь часть —
+ * используй полностью, или не используй вообще."
+ */
+
+const buildBoundaryLookup = (model: Model): Map<string, Boundary> => {
   const map = new Map<string, Boundary>();
-  for (const boundary of model.boundaries) {
-    for (const c of boundary.containers) {
-      map.set(c.name, boundary);
+  for (const boundary of Object.values(model.boundaries)) {
+    for (const containerName of boundary.containerNames) {
+      map.set(containerName, boundary);
     }
   }
   return map;
 };
 
 const collectPublicAndUsage = (
-  model: ArchitectureModel,
+  model: Model,
   boundaryOf: Map<string, Boundary>,
 ): {
   publicOf: Map<Boundary, Set<string>>;
@@ -23,12 +28,12 @@ const collectPublicAndUsage = (
   const publicOf = new Map<Boundary, Set<string>>();
   const used = new Map<string, Set<string>>();
 
-  for (const source of model.allContainers) {
+  for (const source of allContainers(model)) {
     const srcBoundary = boundaryOf.get(source.name);
     if (!srcBoundary) continue;
 
     for (const rel of source.relations) {
-      const tgtBoundary = boundaryOf.get(rel.to.name);
+      const tgtBoundary = boundaryOf.get(rel.to);
       if (!tgtBoundary || tgtBoundary === srcBoundary) continue;
 
       let pub = publicOf.get(tgtBoundary);
@@ -36,7 +41,7 @@ const collectPublicAndUsage = (
         pub = new Set();
         publicOf.set(tgtBoundary, pub);
       }
-      pub.add(rel.to.name);
+      pub.add(rel.to);
 
       const key = `${srcBoundary.name}\0${tgtBoundary.name}`;
       let u = used.get(key);
@@ -44,35 +49,41 @@ const collectPublicAndUsage = (
         u = new Set();
         used.set(key, u);
       }
-      u.add(rel.to.name);
+      u.add(rel.to);
     }
   }
 
   return { publicOf, used };
 };
 
-export const checkCommonReuse = (model: ArchitectureModel): Violation[] => {
-  const boundaryOf = buildBoundaryLookup(model);
-  const { publicOf, used } = collectPublicAndUsage(model, boundaryOf);
-  const violations: Violation[] = [];
+export const commonReuseRule: RuleDefinition = {
+  name: "commonReuse",
+  description:
+    "Consumers using part of a boundary's public surface should use all of it",
 
-  for (const [provider, pubNames] of publicOf) {
-    if (pubNames.size < 2) continue;
+  check(model) {
+    const boundaryOf = buildBoundaryLookup(model);
+    const { publicOf, used } = collectPublicAndUsage(model, boundaryOf);
+    const violations: Violation[] = [];
 
-    for (const consumer of model.boundaries) {
-      if (consumer === provider) continue;
+    for (const [provider, pubNames] of publicOf) {
+      if (pubNames.size < 2) continue;
 
-      const key = `${consumer.name}\0${provider.name}`;
-      const usedNames = used.get(key);
-      if (!usedNames || usedNames.size >= pubNames.size) continue;
+      for (const consumer of Object.values(model.boundaries)) {
+        if (consumer === provider) continue;
 
-      const missing = [...pubNames].filter((n) => !usedNames.has(n));
-      violations.push({
-        container: consumer.name,
-        message: `uses ${[...usedNames].join(", ")} of "${provider.name}" but not ${missing.join(", ")} — all public services of a context should be used together`,
-      });
+        const key = `${consumer.name}\0${provider.name}`;
+        const usedNames = used.get(key);
+        if (!usedNames || usedNames.size >= pubNames.size) continue;
+
+        const missing = [...pubNames].filter((n) => !usedNames.has(n));
+        violations.push({
+          container: consumer.name,
+          message: `uses ${[...usedNames].join(", ")} of "${provider.name}" but not ${missing.join(", ")} — all public services of a context should be used together`,
+        });
+      }
     }
-  }
 
-  return violations;
+    return violations;
+  },
 };

@@ -1,55 +1,60 @@
 import consola from "consola";
 
-import type { ArchitectureModel, Boundary, Container } from "../model";
+import type {Boundary, Container, Model} from "../../model";
+import {
+  allContainers,
+  getContainer
+} from "../../model";
 
+/**
+ * Maps container name → boundary that contains it. Используется fix-функциями
+ * для определения cross-boundary access patterns.
+ */
 export const buildContainerBoundaryMap = (
-  model: ArchitectureModel,
+  model: Model,
 ): Map<string, Boundary> => {
   const map = new Map<string, Boundary>();
-  for (const boundary of model.boundaries) {
-    for (const container of boundary.containers) {
-      map.set(container.name, boundary);
+  for (const boundary of Object.values(model.boundaries)) {
+    for (const containerName of boundary.containerNames) {
+      map.set(containerName, boundary);
     }
   }
   return map;
 };
 
 /**
- * Finds the best "public API" container in a boundary to serve as redirect
- * target for cross-boundary accessors. Prefers containers with the most
- * incoming relations from outside the boundary (highest in-degree).
+ * Находит "public API" container в boundary — predicate for redirect target.
+ * Prefers containers с highest in-degree (incoming relations from outside).
+ * Excludes DBs и repo-tagged containers (они internal).
  */
 export const findPublicApiCandidate = (
   targetBoundary: Boundary,
-  dbType: string,
-  ownerTags: string[],
-  model: ArchitectureModel,
+  ownerTags: readonly string[],
+  model: Model,
   containerBoundaryMap: Map<string, Boundary>,
 ): Container | undefined => {
-  const candidates = targetBoundary.containers.filter(
-    (c) => c.type !== dbType && !ownerTags.some((t) => c.tags?.includes(t)),
-  );
+  const candidates = targetBoundary.containerNames
+    .map((name) => getContainer(model, name))
+    .filter((c): c is Container => c !== undefined)
+    .filter(
+      (c) =>
+        c.kind !== "ContainerDb" && !ownerTags.some((t) => c.tags.includes(t)),
+    );
 
-  // Both early returns are observationally equivalent: with 0 candidates
-  // the toSorted/[0] result is undefined, and with 1 candidate the only
-  // candidate wins regardless of in-degree calculation. Kept for clarity.
   // Stryker disable next-line ConditionalExpression
   if (candidates.length === 0) return undefined;
   // Stryker disable next-line ConditionalExpression
   if (candidates.length === 1) return candidates[0];
 
   const candidateNames = new Set(candidates.map((c) => c.name));
-  // Initialising the map with explicit 0s vs leaving it empty is
-  // observationally equivalent — the comparator uses `?? 0` to default
-  // missing keys to zero before subtraction.
   // Stryker disable next-line ArrayDeclaration
   const inDegree = new Map<string, number>(candidates.map((c) => [c.name, 0]));
 
-  for (const container of model.allContainers) {
+  for (const container of allContainers(model)) {
     if (containerBoundaryMap.get(container.name) === targetBoundary) continue;
     for (const rel of container.relations) {
-      if (candidateNames.has(rel.to.name)) {
-        inDegree.set(rel.to.name, (inDegree.get(rel.to.name) ?? 0) + 1);
+      if (candidateNames.has(rel.to)) {
+        inDegree.set(rel.to, (inDegree.get(rel.to) ?? 0) + 1);
       }
     }
   }
@@ -60,17 +65,16 @@ export const findPublicApiCandidate = (
 };
 
 /**
- * Resolves the redirect target for an accessor trying to reach a DB.
- * Same boundary → owner (repo). Cross-boundary → public API of target boundary.
- * Returns undefined if no valid target can be determined.
+ * Resolves redirect target для accessor → DB. Same boundary → owner (repo).
+ * Cross-boundary → public API of target boundary. Returns undefined если
+ * no valid target — consola.warn для manual review.
  */
 export const resolveRedirectTarget = (
   accessor: Container,
   db: Container,
   owner: Container,
-  dbType: string,
-  ownerTags: string[],
-  model: ArchitectureModel,
+  ownerTags: readonly string[],
+  model: Model,
   containerBoundaryMap: Map<string, Boundary>,
   ruleName: string,
 ): Container | undefined => {
@@ -86,7 +90,6 @@ export const resolveRedirectTarget = (
 
   const publicApi = findPublicApiCandidate(
     dbBoundary,
-    dbType,
     ownerTags,
     model,
     containerBoundaryMap,
