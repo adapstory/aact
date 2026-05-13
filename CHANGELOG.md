@@ -1,209 +1,248 @@
 # Changelog
 
-## v3.0.0-beta.2 — CustomRules extension (beta)
+All notable changes to `aact` are documented here. Format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-**Beta release.** Adds CLI extension point — projects могут писать project-specific
-checks без форка aact. Same `RuleDefinition` shape что built-ins; eat-our-own-dogfood.
-
-### Why this release
-
-Built-in правила (8 штук) покрывают общий C4 / Solution Architecture слой, но
-каждый проект имеет свои internal conventions — naming, compliance, BC-boundaries,
-plugin manifests etc. Без extension path users вынуждены форкать repo и rebase'ить
-на каждое обновление. Эта версия закрывает gap минимальным API:
-
-- **`customRules: RuleDefinition[]` в `aact.config.ts`** — primary extension path
-- **Programmatic API** для embedded use cases (AI agent skills, custom pipelines)
-- **NO plugin abstraction** — deferred до реального demand на npm-shareable bundles
+## v3.0.0-beta.2 — 2026-05-13
 
 ### Added
 
-- `customRules` field в `AactConfigSchema` — array of `RuleDefinition` objects
-  registered alongside built-ins. Auto-enabled (не нужно дублировать в `rules{}`).
-- `defineRule(rule)` helper — identity function с `<const T extends RuleDefinition>`
-  generic, preserves literal `name` для downstream type propagation.
-- `defineConfig` теперь generic — `<const C extends readonly RuleDefinition[]>` —
-  captures customRules array. Через mapped type `CustomRulesConfig<C>` literal
-  rule names и их `Parameters<check>[1]` (options type) propagate'ятся в `rules{}`,
-  давая IDE autocomplete + type validation на `rules: { customRuleName: { ←tab } }`
-  идентичный built-in syntax'у.
-- `aact rule list` CLI command — показывает effective rule set с source labels
-  (built-in / custom), descriptions, enable/disable status. JSON output via `--json`.
-- `examples/custom-rules/` — полный example с двумя custom rules
-  (`noDeprecatedTag`, `repoNamingConvention`), aact.config.ts, .puml source,
-  и unit tests. Демонстрирует typed options через inline `check(model, options?: Opts)`
-  signature pattern.
-- E2E coverage: inline custom rule в config, disable через `rules.<name>: false`,
-  conflict с built-in name, unknown rule warning, `aact rule list` output shapes.
+- `customRules: RuleDefinition[]` config field for project-specific rules.
+  Auto-enabled; disable via `rules: { name: false }`; pass options via
+  `rules: { name: { ... } }` — identical syntax to built-ins.
+- `defineRule()` helper preserves the rule's literal `name` for
+  TypeScript inference.
+- `aact rule list` command. Shows the effective rule set with source
+  labels (built-in / custom) and enabled state. Add `--json` for tooling.
+- `examples/custom-rules/` — end-to-end example with two custom rules.
 
 ### Changed
 
-- `config.rules` schema — `v.strictObject(...)` → `v.looseObject(...)`. Built-in
-  rule names остаются typed (autocomplete + strict option validation), но extra
-  keys (для custom rule names) теперь принимаются. Typo'ы surface как runtime
-  warning `Unknown rule "X" in config.rules — ignored`, не как parse error.
-- `RuleDefinition.check` / `.fix` объявлены как **methods** (не arrow properties)
-  — bivariant под strictFunctionTypes, чтобы typed `RuleDefinition<MyOptions>`
-  упаковывался в `RuleDefinition[]` arrays (customRules, registry) без cast'ов.
-- `src/rules/registry.ts` — убраны `as RuleDefinition` casts на built-ins благодаря
-  bivariant methods. Cleaner.
+- `defineConfig` is generic over its `customRules`. TypeScript now
+  autocompletes custom rule names and option shapes in `rules{}`, the
+  same as built-in rules.
+- `config.rules` accepts unknown keys; typos surface as a runtime warning
+  instead of a parse error.
+- `RuleDefinition.check` / `.fix` are declared as methods so typed rules
+  fit `RuleDefinition[]` arrays without casts.
 
 ### Conflict policy
 
-Activation error (не silent override) когда:
-
-- Custom rule name совпадает с built-in name
-- Два customRules share name
-
-Force'ит namespace discipline — prefix unique (e.g. `adapstoryBffBoundary`,
-`mermaidLegendCheck`).
-
-### Three-tier extension model
-
-| Tier              | API                                                           | When                                                     |
-| ----------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
-| 1. Config         | `customRules: RuleDefinition[]` в `aact.config.ts`            | Project-specific rules без npm publish                   |
-| 2. Programmatic   | `import { ruleRegistry, defineRule, type Model } from "aact"` | AI agent skills, embedded pipelines, custom CLI wrappers |
-| 3. Plugin bundles | `plugins: AactPlugin[]` (DEFERRED)                            | Когда появится 2-й npm-shareable adopter                 |
-
-### Stability contract (v3.x non-breaking guarantees)
-
-- `RuleDefinition` shape (name/description/check/fix?) — stable
-- `Violation` shape (container/message) — stable
-- `Model` shape — stable
-- `customRules` config field — stable
-- Built-in rule names + their options schemas — stable
+A custom rule whose `name` matches a built-in or another custom rule is
+rejected at startup. Prefix rule names per project (for example,
+`acmeBffBoundary`) to keep them unique.
 
 ### Migration from beta.1
 
-Non-breaking. Existing configs работают без изменений. customRules — purely
-additive opt-in.
+None. `customRules` is additive.
 
-## v3.0.0-beta.1 — Foundations (beta)
+## v3.0.0-beta.1 — 2026-05-12
 
-**Beta release.** Core API (Model, Format, Rule) finalized; partial test
-suite migrated, full pipeline not yet validated. Use for evaluation and
-feedback before stable v3.0.0 ships.
+First v3 beta. Use for evaluation before the stable cut.
 
-aact 3.0 — major bump для Solution Architects, использующих C4 для конкретных
-решений. Один раз breaking Model API, дальше additive minor releases без боли.
+### Breaking
 
-### Why this release
-
-- **Понятные слои + унификация** — code structure для лёгкого вклада контрибьюторов
-- **Self-sufficient C4 Model** — round-trip через PlantUML/Mermaid/Structurizr без
-  потерь данных (technology, sprite, link, description, properties)
-- **Capability-based Format API** — добавление нового формата = одна папка
-  `src/formats/<name>/`, zero core changes
-- **eslint-plugin-boundaries** — clear layers enforced в CI, не convention
-
-### Breaking changes
-
-Model API переработан. См. migration table ниже.
-
-| v2                                                | v3                                                                                |
-| ------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `ArchitectureModel`                               | `Model`                                                                           |
-| `model.allContainers`                             | `Object.values(model.containers)` или `import { allContainers } from "aact"`      |
-| `model.allContainers.find(c => c.name === x)`     | `model.containers[x]` или `getContainer(model, x)`                                |
-| `model.allContainers.some(c => c.name === x)`     | `x in model.containers`                                                           |
-| `container.type === "ContainerDb"`                | `container.kind === "ContainerDb"` (typed!)                                       |
-| `container.type === "System_Ext"`                 | `container.external === true && container.kind === "System"`                      |
-| `relation.to.name`                                | `relation.to` (it IS the name now)                                                |
-| `relation.to.kind`                                | `model.containers[relation.to]?.kind` или `targetOf(model, relation)?.kind`       |
-| `boundary.containers`                             | `boundary.containerNames.map(n => model.containers[n]!)`                          |
-| `boundary.boundaries`                             | `boundary.boundaryNames.map(n => model.boundaries[n]!)`                           |
-| `boundary.type`                                   | `boundary.kind` (typed: `"System" \| "Container" \| "Component" \| "Enterprise"`) |
-| `JSON.stringify(model)`                           | `JSON.stringify(model)` — работает напрямую (Record<>, не Map)                    |
-| `checkAcl(containers, options)`                   | `aclRule.check(model, options)`                                                   |
-| `fixAcl(model, violations, syntax, options)`      | `aclRule.fix(model, violations, syntax, options)`                                 |
-| `loadPlantumlElements(path)` + mapper             | `plantumlFormat.load(path)` returns `{ model, issues }`                           |
-| `loadStructurizrElements(path)`                   | `structurizrFormat.load(path)`                                                    |
-| `generatePlantumlFromModel(model)`                | `plantumlFormat.generate(model)` returns `FormatOutput`                           |
-| `generateKubernetes(model)`                       | `kubernetesFormat.generate(model)` returns `FormatOutput`                         |
-| `EXTERNAL_SYSTEM_TYPE`, `CONTAINER_DB_TYPE`, etc. | literal strings (`"System"`, `"ContainerDb"`) — TS подсветит typo                 |
-| `import { ... } from "aact/loaders/..."`          | `import { ... } from "aact/formats/..."`                                          |
-| `import { ... } from "aact/generators/..."`       | `import { ... } from "aact/formats/..."`                                          |
-| `analyzer.ts`                                     | `analyze.ts` (file renamed)                                                       |
+| v2                                               | v3                                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `ArchitectureModel`                              | `Model`                                                                           |
+| `model.allContainers`                            | `Object.values(model.containers)` or `import { allContainers } from "aact"`       |
+| `model.allContainers.find(c => c.name === x)`    | `model.containers[x]` or `getContainer(model, x)`                                 |
+| `model.allContainers.some(c => c.name === x)`    | `x in model.containers`                                                           |
+| `container.type === "ContainerDb"`               | `container.kind === "ContainerDb"`                                                |
+| `container.type === "System_Ext"`                | `container.external === true && container.kind === "System"`                      |
+| `relation.to.name`                               | `relation.to` (it is the name now)                                                |
+| `relation.to.kind`                               | `model.containers[relation.to]?.kind` or `targetOf(model, relation)?.kind`        |
+| `boundary.containers`                            | `boundary.containerNames.map(n => model.containers[n]!)`                          |
+| `boundary.boundaries`                            | `boundary.boundaryNames.map(n => model.boundaries[n]!)`                           |
+| `boundary.type`                                  | `boundary.kind` (typed: `"System" \| "Container" \| "Component" \| "Enterprise"`) |
+| `checkAcl(containers, options)`                  | `aclRule.check(model, options)`                                                   |
+| `fixAcl(model, violations, syntax, options)`     | `aclRule.fix(model, violations, syntax, options)`                                 |
+| `loadPlantumlElements(path)` + mapper            | `plantumlFormat.load(path)` returns `{ model, issues }`                           |
+| `loadStructurizrElements(path)`                  | `structurizrFormat.load(path)`                                                    |
+| `generatePlantumlFromModel(model)`               | `plantumlFormat.generate(model)`                                                  |
+| `generateKubernetes(model)`                      | `kubernetesFormat.generate(model)`                                                |
+| `EXTERNAL_SYSTEM_TYPE`, `CONTAINER_DB_TYPE`, ... | literal strings (`"System"`, `"ContainerDb"`)                                     |
+| `import ... from "aact/loaders/..."`             | `import ... from "aact/formats/..."`                                              |
+| `import ... from "aact/generators/..."`          | `import ... from "aact/formats/..."`                                              |
 
 ### Added
 
-- `ContainerKind` typed union: Person | System | Container | ContainerDb |
-  ContainerQueue | Component | ComponentDb | ComponentQueue. Полный C4 stdlib.
-- `BoundaryKind` typed union: System | Container | Component | Enterprise.
-  Round-trip без шумного diff'а в git.
-- `external: boolean` orthogonal к kind — заменяет System_Ext kind, покрывает
-  все 8 `_Ext` вариантов PlantUML/Mermaid.
-- `validateModel(model)` returns `ModelIssue[]` — dangling refs, duplicate names,
-  boundary cycles, self-relations, unknown kinds. Заменяет silent drops в loader'ах.
-- `Container.technology` — реально C4 поле, раньше silently lost в Structurizr.
-- `Container.sprite` — отдельно от tags (раньше PlantUML sprite попадал в tags).
-- `Container.link` / `Relation.link` / `Boundary.link` — `$link` для clickable diagrams.
-- `Container.properties` — Structurizr archetype + arbitrary properties round-trip.
-- `Relation.description` — PlantUML Rel label / Structurizr rel.description.
-- `Relation.order` — Dynamic diagram sequence ($index=Index() / dynamic step).
-- `SourceLocation` foundation — file+line tracking для future terminal-link OSC8.
-- `buildModel({ containers, boundaries, rootBoundaryNames })` — единая точка
-  construction'а Model с dedup + validate pipeline.
-- `src/formats/_shared/` — c4Mapping, kindHeuristics, tags, biRel helpers.
-- `Format` capability-based interface с `canLoad` / `canGenerate` / `canFix`
-  type guards.
-- eslint-plugin-boundaries — architectural layer enforcement в CI.
+- `ContainerKind` typed union (full C4 stdlib: `Person`, `System`,
+  `Container`, `ContainerDb`, `ContainerQueue`, `Component`, `ComponentDb`,
+  `ComponentQueue`).
+- `BoundaryKind` typed union (`System`, `Container`, `Component`,
+  `Enterprise`).
+- `external: boolean` orthogonal to `kind`. Replaces the `_Ext` kind
+  variants from PlantUML and Mermaid.
+- `validateModel(model)` returns `ModelIssue[]` for dangling references,
+  duplicate names, boundary cycles, self-relations, and unknown kinds.
+- `Container.technology`, `Container.sprite` (separated from tags),
+  `Container.link`, `Container.properties`, `Relation.link`,
+  `Relation.description`, `Relation.order`, `Boundary.link` — all
+  preserved on round-trip.
+- `Format` capability interface with `canLoad` / `canGenerate` / `canFix`
+  type guards. Adding a format is a single folder under
+  `src/formats/<name>/`.
 
 ### Changed
 
-- Project structure: `src/loaders/` + `src/generators/` collapsed into
-  `src/formats/<name>/`. Один folder = один формат с load + generate + syntax.
-- Rules collapsed: каждое правило — единый файл `src/rules/<name>.ts` с
-  RuleDefinition объектом (check + fix + options + description).
-- `resources/` renamed to `fixtures/` — это test data, не runtime resources.
+- One file per rule under `src/rules/<name>.ts` containing the full
+  `RuleDefinition` object.
+- `src/loaders/` and `src/generators/` collapsed into `src/formats/<name>/`.
 
 ### Removed
 
-- `src/generators/plantuml.ts` (v1 YAML→PUML migrator, не используется в v3).
-- `containerTypes.ts` constants — replaced typed unions.
-- Stringly-typed options (externalType, dbType в правилах) — теперь через
-  typed `kind`/`external` flag.
-- `enrichTagsFromNames` heuristic в Structurizr loader.
-
-### Beta status
-
-This is a beta release. Known gaps before stable 3.0.0:
-
-- ~22 test files в `test/` и `examples/` ещё используют v2 API. 8 rule
-  check tests мигрированы as proof-of-pattern. Остальные mechanical rewrites.
-- Full pipeline (`pnpm test:coverage` + `pnpm test:mutation`) не зелёный.
-- E2E tests против собранного CLI требуют верификации.
-
-После migration оставшихся тестов и validation pipeline'а → stable 3.0.0.
+- The v1 YAML→PUML migrator (`src/generators/plantuml.ts`).
+- `containerTypes.ts` constants, replaced by typed unions.
+- Stringly-typed rule options (`externalType`, `dbType`); detection flows
+  from typed `kind` / `external` fields.
+- `enrichTagsFromNames` heuristic in the Structurizr loader.
 
 ### Known limitations
 
-**Structurizr:**
+**Structurizr.** Component-level elements are not loaded yet. System-level
+relations between internal `SoftwareSystem`s are dropped (internal systems
+map to a `Boundary`, which has no outgoing relations). Dynamic-view step
+ordering is not extracted.
 
-- Component-level элементы не загружаются (opt-in в future minor).
-- System-level relations на internal SoftwareSystems silently дропаются — internal system мапится в Boundary, у которого нет relations. Container-level и cross-system-external relations работают.
-- Dynamic view step ordering (Relation.order) — пока не извлекается из `views[].dynamic`.
+**PlantUML (`plantuml-parser` 0.4).** Properties (`SetPropertyHeader` /
+`AddProperty`), `Boundary` description, `$index=` for dynamic diagrams,
+and `Component_Boundary` are not exposed by the parser. File:line source
+locations are not populated yet.
 
-**PlantUML (plantuml-parser 0.4 limitations):**
+**Kubernetes.** Generate-only; reverse-engineering from YAML is deferred
+to a later v3.x.
 
-- `SetPropertyHeader` / `AddProperty` macros — parser не expose'ит, Container.properties для PUML always undefined.
-- `Boundary` description (6-й positional arg) — parser принимает только 4 positional, descr не доступен.
-- `$index=` для Dynamic diagrams — Relation.order undefined для PUML.
-- `Component_Boundary` macro — parser падает на нём (упоминается в filterElements list как dead branch).
-- File:line source locations — foundation в типах есть (Container.sourceLocation), но loader пока не заполняет. Planned v3.x.
+## v2.1.5 — 2026-05-07
 
-Каждый gap pinned тестом в `test/formats/plantuml/load.test.ts` под `KNOWN GAP:` describe block. Подъём этих limitations = v3.x parser strategy (chevrotain replacement of plantuml-parser).
+### Fixed
 
-**Kubernetes:**
+- `cohesion` rule: custom option values were ignored for inner
+  boundaries; the rule now applies the configured external / internal
+  types at every call site.
+- `kubernetes` generator: `System` and `Component` elements leaked into
+  the output. Switched to a whitelist — only `Container`-typed elements
+  produce deployment YAML.
+- `plantuml` generator: `System` and `Component` containers were
+  re-rendered as `Container`, losing their C4 level. Both kinds are now
+  emitted with the matching macro.
 
-- Generate only. Load (reverse-engineering) deferred к v3.x.
+## v2.1.4 — 2026-05-07
 
-**General IaC (k8s, future Docker Compose):**
+### Changed
 
-- Heuristic mapping (technology hints, image patterns), не proper C4 sources. Document какой semantic mapping корректен per-format.
+- README rewritten with a two-modes intro (CLI vs library).
 
-### Migration tooling
+### Fixed
 
-Manual migration через table выше. `codemod-aact-v2-to-v3` через ts-morph не
-делаем (users-as-library пара человек — manual достаточно).
+- The fix preview in `aact check --fix` is labelled and aligned.
+
+## v2.1.3 — 2026-05-07
+
+### Added
+
+- `aact init` scaffolds a runnable starter project (config plus
+  `architecture.puml`).
+
+### Changed
+
+- Quick Start section in the README rewritten to match what `aact init`
+  produces.
+
+### Fixed
+
+- Friendly error messages when the source file is missing or malformed,
+  instead of raw Node stack traces.
+- `aact --help` reads the version from `package.json` and stays in sync.
+- Codex-review findings in the `crud` rule and `kubernetes` generator.
+
+## v2.1.2 — 2026-03-31
+
+### Fixed
+
+- Added a default-export fallback in `package.json` so library consumers
+  on legacy resolvers can still `import` from `aact`.
+
+## v2.1.1 — 2026-03-21
+
+### Fixed
+
+- Added `jiti` as a runtime dependency so that loading `aact.config.ts`
+  works without an additional install step.
+
+## v2.1.0 — 2026-03-21
+
+### Added
+
+- `commonReuse` rule with its ADR.
+- `apiGateway` rule.
+- `stableDependencies` rule.
+- Auto-fix for the `crud` rule.
+- Naming-convention auto-detection for fix-generated identifiers
+  (snake_case / camelCase / PascalCase) — fixes blend in with the rest
+  of the project.
+- Structurizr DSL output and a write-target workflow via
+  `source.writePath` for `aact check --fix` against Structurizr inputs.
+- `--config` flag on `check`, `analyze`, and `generate`.
+- `ecommerce-structurizr` example.
+- `aclSuffix` option on the `acl` rule.
+
+### Changed
+
+- Hardcoded type strings replaced by named constants throughout the
+  loaders, rules, and generators.
+- Boundary-aware redirect logic extracted into a shared helper used by
+  the `dbPerService` fix.
+- `O(1)` rule lookup in `generateFixes`; parallel writes for Kubernetes
+  output; `Set`-based replacement for previously `O(n²)` patterns in hot
+  paths.
+
+### Fixed
+
+- Source indentation is preserved when applying fix edits.
+- Structurizr loader naming bug for nested elements.
+- Cleaner CLI output (summary lines, fix preview layout).
+
+## v2.0.2 — 2026-02-14
+
+### Fixed
+
+- CLI shebang line and npm keywords. Required for `npx aact` to resolve
+  the bin correctly and for discoverability on the npm registry.
+
+## v2.0.1 — 2026-02-14
+
+### Fixed
+
+- Re-publish shortly after v2.0.0 to correct an issue spotted in the
+  freshly-published tarball.
+
+## v2.0.0 — 2026-02-14
+
+First v2 release. Full rewrite from the v1 hand-rolled checks.
+
+### Added
+
+- CLI with `check`, `generate`, and `init` commands.
+- Built-in rules: `acl`, `acyclic`, `crud`, `dbPerService`, `cohesion`.
+- Auto-fix for `acl` and `dbPerService` rules with a `SourceSyntax`
+  adapter for PlantUML.
+- Code generators for PlantUML and Kubernetes manifests.
+- Structurizr DSL loader.
+- Architecture metrics (`aact analyze`) over boundaries (cohesion,
+  coupling, instability, nested attribution).
+- Config validation via `valibot` (`aact.config.ts`).
+- Rule registry as the extension point for built-ins.
+
+### Changed
+
+- TypeScript- and ESM-first rewrite with modernised tooling.
+- Project layout restructured to match the target ADR layout (`loaders/`,
+  `generators/`, `rules/`, `cli/`).
+
+## v1.0.0 — 2026-02-07
+
+Initial publish. Hand-rolled boundary checks for a single example
+PlantUML project, no CLI, no config schema. Superseded by the v2
+rewrite.
