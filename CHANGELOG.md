@@ -4,6 +4,24 @@ All notable changes to `aact` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v3.0.0-beta.3 — 2026-05-13
+
+Docs / template polish on top of beta.2. No API changes; safe upgrade.
+
+### Changed
+
+- `aact init` template now includes a commented `customRules` block
+  showing how to switch from the type-only import to `defineConfig` for
+  project-specific rules. Type-only import remains the default so
+  `npx aact@beta init` still works without a local install.
+
+### Docs
+
+- `examples/custom-rules/` reworked around two realistic rules:
+  `bcIsolation` (DDD bounded-context isolation) and `requireOwnerTag`
+  (operational ownership). README walks through anatomy, registration,
+  and when to write a custom rule.
+
 ## v3.0.0-beta.2 — 2026-05-13
 
 ### Added
