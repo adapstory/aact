@@ -6,6 +6,7 @@ import type { AactConfig } from "../config";
 import { AactConfigSchema } from "../config";
 import { knownFormatNames, loadFormat } from "../formats/registry";
 import { canLoad } from "../formats/types";
+import type { RuleDefinition } from "../rules/types";
 
 /**
  * Simple two-shape matcher для format.defaultPattern:
@@ -21,6 +22,51 @@ const matchesPattern = (filePath: string, pattern: string): boolean => {
     return filePath.endsWith(pattern.slice(1));
   }
   return basename(filePath) === pattern;
+};
+
+/**
+ * Validate каждый customRules entry — это `RuleDefinition` (name/description/
+ * check required; fix optional). valibot v.array(v.any()) принимает любую
+ * структуру; shape-check здесь даёт actionable error до того как rule
+ * попытается выполниться.
+ *
+ * Conflict detection (name vs built-in / другой custom) — отдельно в check.ts
+ * на activation time, потому что требует registry knowledge.
+ */
+const validateCustomRules = (
+  entries: readonly unknown[],
+): readonly RuleDefinition[] => {
+  const validated: RuleDefinition[] = [];
+  for (const [i, raw] of entries.entries()) {
+    if (!raw || typeof raw !== "object") {
+      throw new Error(
+        `customRules[${i}]: expected RuleDefinition object (got ${typeof raw})`,
+      );
+    }
+    const rule = raw as Record<string, unknown>;
+    if (typeof rule.name !== "string" || !rule.name) {
+      throw new Error(
+        `customRules[${i}]: missing "name" (must be non-empty string)`,
+      );
+    }
+    if (typeof rule.description !== "string") {
+      throw new TypeError(
+        `customRules[${i}] "${rule.name}": missing "description" string`,
+      );
+    }
+    if (typeof rule.check !== "function") {
+      throw new TypeError(
+        `customRules[${i}] "${rule.name}": "check" must be a function`,
+      );
+    }
+    if (rule.fix !== undefined && typeof rule.fix !== "function") {
+      throw new Error(
+        `customRules[${i}] "${rule.name}": "fix" must be a function if provided`,
+      );
+    }
+    validated.push(rule as unknown as RuleDefinition);
+  }
+  return validated;
 };
 
 const inferSourceType = async (filePath: string): Promise<string> => {
@@ -60,8 +106,13 @@ export const loadAndValidateConfig = async (
     );
   }
 
+  const customRules = parsed.customRules
+    ? validateCustomRules(parsed.customRules)
+    : undefined;
+
   return {
     ...parsed,
+    customRules,
     source: {
       path: rawSource.path,
       type,

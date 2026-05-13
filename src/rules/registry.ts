@@ -11,16 +11,17 @@ import type { RuleDefinition } from "./types";
 /**
  * Все built-in правила. Порядок определяет default order CLI вывода.
  * Adding new rule: импорт + строчка в массиве, ничего больше не трогать.
+ *
+ * `check` / `fix` объявлены как методы в `RuleDefinition` (bivariant под
+ * strictFunctionTypes), поэтому typed rules упаковываются в `RuleDefinition[]`
+ * без cast'ов. Это тот же контракт что используют customRules.
  */
-// Cast each rule to RuleDefinition (default unknown options): generic параметр
-// инвариантен (input position), TS не подхватывает widening автоматически.
-// Каждое правило сохраняет typed options через свой xxxRule export.
 export const ruleRegistry: readonly RuleDefinition[] = [
-  aclRule as RuleDefinition,
+  aclRule,
   acyclicRule,
-  apiGatewayRule as RuleDefinition,
-  crudRule as RuleDefinition,
-  dbPerServiceRule as RuleDefinition,
+  apiGatewayRule,
+  crudRule,
+  dbPerServiceRule,
   cohesionRule,
   stableDependenciesRule,
   commonReuseRule,

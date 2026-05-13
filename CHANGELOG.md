@@ -1,5 +1,84 @@
 # Changelog
 
+## v3.0.0-beta.2 — CustomRules extension (beta)
+
+**Beta release.** Adds CLI extension point — projects могут писать project-specific
+checks без форка aact. Same `RuleDefinition` shape что built-ins; eat-our-own-dogfood.
+
+### Why this release
+
+Built-in правила (8 штук) покрывают общий C4 / Solution Architecture слой, но
+каждый проект имеет свои internal conventions — naming, compliance, BC-boundaries,
+plugin manifests etc. Без extension path users вынуждены форкать repo и rebase'ить
+на каждое обновление. Эта версия закрывает gap минимальным API:
+
+- **`customRules: RuleDefinition[]` в `aact.config.ts`** — primary extension path
+- **Programmatic API** для embedded use cases (AI agent skills, custom pipelines)
+- **NO plugin abstraction** — deferred до реального demand на npm-shareable bundles
+
+### Added
+
+- `customRules` field в `AactConfigSchema` — array of `RuleDefinition` objects
+  registered alongside built-ins. Auto-enabled (не нужно дублировать в `rules{}`).
+- `defineRule(rule)` helper — identity function с `<const T extends RuleDefinition>`
+  generic, preserves literal `name` для downstream type propagation.
+- `defineConfig` теперь generic — `<const C extends readonly RuleDefinition[]>` —
+  captures customRules array. Через mapped type `CustomRulesConfig<C>` literal
+  rule names и их `Parameters<check>[1]` (options type) propagate'ятся в `rules{}`,
+  давая IDE autocomplete + type validation на `rules: { customRuleName: { ←tab } }`
+  идентичный built-in syntax'у.
+- `aact rule list` CLI command — показывает effective rule set с source labels
+  (built-in / custom), descriptions, enable/disable status. JSON output via `--json`.
+- `examples/custom-rules/` — полный example с двумя custom rules
+  (`noDeprecatedTag`, `repoNamingConvention`), aact.config.ts, .puml source,
+  и unit tests. Демонстрирует typed options через inline `check(model, options?: Opts)`
+  signature pattern.
+- E2E coverage: inline custom rule в config, disable через `rules.<name>: false`,
+  conflict с built-in name, unknown rule warning, `aact rule list` output shapes.
+
+### Changed
+
+- `config.rules` schema — `v.strictObject(...)` → `v.looseObject(...)`. Built-in
+  rule names остаются typed (autocomplete + strict option validation), но extra
+  keys (для custom rule names) теперь принимаются. Typo'ы surface как runtime
+  warning `Unknown rule "X" in config.rules — ignored`, не как parse error.
+- `RuleDefinition.check` / `.fix` объявлены как **methods** (не arrow properties)
+  — bivariant под strictFunctionTypes, чтобы typed `RuleDefinition<MyOptions>`
+  упаковывался в `RuleDefinition[]` arrays (customRules, registry) без cast'ов.
+- `src/rules/registry.ts` — убраны `as RuleDefinition` casts на built-ins благодаря
+  bivariant methods. Cleaner.
+
+### Conflict policy
+
+Activation error (не silent override) когда:
+
+- Custom rule name совпадает с built-in name
+- Два customRules share name
+
+Force'ит namespace discipline — prefix unique (e.g. `adapstoryBffBoundary`,
+`mermaidLegendCheck`).
+
+### Three-tier extension model
+
+| Tier              | API                                                           | When                                                     |
+| ----------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| 1. Config         | `customRules: RuleDefinition[]` в `aact.config.ts`            | Project-specific rules без npm publish                   |
+| 2. Programmatic   | `import { ruleRegistry, defineRule, type Model } from "aact"` | AI agent skills, embedded pipelines, custom CLI wrappers |
+| 3. Plugin bundles | `plugins: AactPlugin[]` (DEFERRED)                            | Когда появится 2-й npm-shareable adopter                 |
+
+### Stability contract (v3.x non-breaking guarantees)
+
+- `RuleDefinition` shape (name/description/check/fix?) — stable
+- `Violation` shape (container/message) — stable
+- `Model` shape — stable
+- `customRules` config field — stable
+- Built-in rule names + their options schemas — stable
+
+### Migration from beta.1
+
+Non-breaking. Existing configs работают без изменений. customRules — purely
+additive opt-in.
+
 ## v3.0.0-beta.1 — Foundations (beta)
 
 **Beta release.** Core API (Model, Format, Rule) finalized; partial test

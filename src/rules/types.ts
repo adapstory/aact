@@ -19,10 +19,13 @@ export interface FixResult {
 }
 
 /**
- * Uniform rule signature — все правила принимают `Model`, не `Container[]`.
- * Fix-функции получают `SourceSyntax` (regex primitives для inline edit'ов
- * в исходном файле). Будущее: `FixCapability` вместо `SourceSyntax` —
- * non-breaking когда AST primitives добавятся.
+ * Function-type aliases — useful когда user пишет check / fix отдельно от
+ * RuleDefinition объекта. Внутри RuleDefinition объявлены как методы
+ * (bivariant): `RuleDefinition<MyOptions>` assignable to `RuleDefinition<unknown>`,
+ * чтобы typed rules без cast'а попадали в `customRules: readonly RuleDefinition[]`.
+ *
+ * Fix получает `SourceSyntax` (regex primitives). Будущее — `FixCapability`
+ * с AST primitives. Эволюция non-breaking: добавляется новое поле SourceSyntax.
  */
 export type CheckFn<O = unknown> = (
   model: Model,
@@ -40,6 +43,30 @@ export interface RuleDefinition<O = unknown> {
   readonly name: string;
   /** Human-readable description — для CLI `rules list`, docs, CHANGELOG. */
   readonly description: string;
-  readonly check: CheckFn<O>;
-  readonly fix?: FixFn<O>;
+  // Method syntax (не arrow property) — bivariant под strictFunctionTypes,
+  // чтобы typed RuleDefinition<O> упаковывался в RuleDefinition[] arrays
+  // (customRules, registry) без манипуляций.
+  check(model: Model, options?: O): readonly Violation[];
+  fix?(
+    model: Model,
+    violations: readonly Violation[],
+    syntax: SourceSyntax,
+    options?: O,
+  ): readonly FixResult[];
 }
+
+/**
+ * Identity helper для inline RuleDefinition declaracий. Generic с `<const T>`
+ * сохраняет literal type для всех полей — particularly `name`, что позволяет
+ * defineConfig'у через mapped type вытащить literal rule name и propagate'нуть
+ * autocomplete в `rules{}`.
+ *
+ * `T extends RuleDefinition` (constraint без widening через `extends`) валидирует
+ * shape без потери literal'ов.
+ *
+ * Built-ins и custom rules используют один и тот же `RuleDefinition<O>` —
+ * defineRule одинаково применим к обоим.
+ */
+export const defineRule: <const T extends RuleDefinition>(rule: T) => T = (
+  rule,
+) => rule;

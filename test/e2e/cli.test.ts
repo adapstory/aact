@@ -143,6 +143,156 @@ describe("aact check --fix demo loop", () => {
   });
 });
 
+describe("aact check — customRules", () => {
+  // Inline custom rule в config — без "aact" runtime import'а (тестовый
+  // tempdir без `npm install`). Реальные user'ы импортят defineRule из
+  // "aact" — see examples/custom-rules/.
+  const inlineRuleConfig = `
+const noDeprecatedTag = {
+  name: "noDeprecatedTag",
+  description: "Containers must not carry deprecated tag",
+  check(model) {
+    return Object.values(model.containers)
+      .filter((c) => c.tags.includes("deprecated"))
+      .map((c) => ({ container: c.name, message: 'has "deprecated" tag' }));
+  },
+};
+
+export default {
+  source: "./architecture.puml",
+  customRules: [noDeprecatedTag],
+  rules: { crud: false, acl: false, acyclic: false, dbPerService: false },
+};
+`;
+
+  const archWithDeprecated = `@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Container(svc_a, "Service A", "Node.js")
+Container(legacy_svc, "Legacy", "Java 6", $tags="deprecated")
+
+Rel(svc_a, legacy_svc, "HTTP")
+@enduml
+`;
+
+  it("runs inline custom rule and reports its violations", async () => {
+    await fs.writeFile(path.join(workDir, "aact.config.ts"), inlineRuleConfig);
+    await fs.writeFile(
+      path.join(workDir, "architecture.puml"),
+      archWithDeprecated,
+    );
+
+    const result = await runCli(["check"]);
+    expect(result.exitCode).toBe(1);
+    const output = (result.stdout + result.stderr).toLowerCase();
+    expect(output).toContain("nodeprecatedtag");
+    expect(output).toContain("legacy_svc");
+  });
+
+  it("passes when custom rule disabled via rules.<name>: false", async () => {
+    const disabledConfig = inlineRuleConfig.replace(
+      "rules: { crud: false",
+      "rules: { noDeprecatedTag: false, crud: false",
+    );
+    await fs.writeFile(path.join(workDir, "aact.config.ts"), disabledConfig);
+    await fs.writeFile(
+      path.join(workDir, "architecture.puml"),
+      archWithDeprecated,
+    );
+
+    const result = await runCli(["check"]);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("errors when custom rule name collides with built-in", async () => {
+    const conflictConfig = `
+const collide = {
+  name: "acl",
+  description: "collides with built-in",
+  check: () => [],
+};
+export default {
+  source: "./architecture.puml",
+  customRules: [collide],
+};
+`;
+    await fs.writeFile(path.join(workDir, "aact.config.ts"), conflictConfig);
+    await fs.writeFile(
+      path.join(workDir, "architecture.puml"),
+      archWithDeprecated,
+    );
+
+    const result = await runCli(["check"]);
+    expect(result.exitCode).not.toBe(0);
+    const output = result.stdout + result.stderr;
+    expect(output).toMatch(/conflicts with existing built-in/i);
+  });
+
+  it("warns on unknown rule name in config.rules", async () => {
+    const configWithTypo = `
+export default {
+  source: "./architecture.puml",
+  rules: { typoRule: true, crud: false },
+};
+`;
+    await fs.writeFile(path.join(workDir, "aact.config.ts"), configWithTypo);
+    await fs.writeFile(
+      path.join(workDir, "architecture.puml"),
+      archWithDeprecated,
+    );
+
+    const result = await runCli(["check"]);
+    const output = result.stdout + result.stderr;
+    expect(output).toMatch(/Unknown rule "typoRule"/i);
+  });
+});
+
+describe("aact rule list", () => {
+  it("lists built-in rules without config", async () => {
+    const result = await runCli(["rule", "list"]);
+    expect(result.exitCode).toBe(0);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain("Built-in");
+    expect(output).toContain("acl");
+    expect(output).toContain("acyclic");
+  });
+
+  it("includes custom rules from loaded config", async () => {
+    const inlineRuleConfig = `
+const noLegacy = {
+  name: "noLegacy",
+  description: "no legacy",
+  check: () => [],
+};
+export default {
+  source: "./architecture.puml",
+  customRules: [noLegacy],
+};
+`;
+    await fs.writeFile(path.join(workDir, "aact.config.ts"), inlineRuleConfig);
+    await fs.writeFile(
+      path.join(workDir, "architecture.puml"),
+      "@startuml\n@enduml\n",
+    );
+
+    const result = await runCli(["rule", "list"]);
+    expect(result.exitCode).toBe(0);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain("Custom");
+    expect(output).toContain("noLegacy");
+  });
+
+  it("emits JSON when --json flag set", async () => {
+    const result = await runCli(["rule", "list", "--json"]);
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0]).toHaveProperty("name");
+    expect(parsed[0]).toHaveProperty("source");
+    expect(parsed[0]).toHaveProperty("enabled");
+  });
+});
+
 describe("aact --help / --version", () => {
   it("--help lists all four subcommands", async () => {
     const result = await runCli(["--help"]);

@@ -174,8 +174,16 @@ export default tseslint.config(
                 },
               },
             },
-            // model и config — `default: disallow` сам запрещает любые
-            // outbound imports (root layer / standalone). Не нужно явных rules.
+            // config — type-only зависимость от rule для typed customRules:
+            // defineConfig const-generic'и propagate'ят option shapes из
+            // RuleDefinition's check signature в `rules{}` autocomplete.
+            // Type-only dependency, runtime не тянет rules code.
+            {
+              from: { type: "config" },
+              allow: { to: { type: "rule" } },
+            },
+            // model — `default: disallow` сам запрещает любые outbound
+            // imports (root layer). Не нужно явных rules.
           ],
         },
       ],

@@ -7,18 +7,14 @@ import path from "pathe";
 
 import type { AactConfig } from "../../config";
 import { loadFormat } from "../../formats/registry";
-import type {FixCapability, SourceSyntax} from "../../formats/types";
-import {
-  canFix
-} from "../../formats/types";
+import type { FixCapability, SourceSyntax } from "../../formats/types";
+import { canFix } from "../../formats/types";
 import type { Model } from "../../model";
 import { applyEdits } from "../../rules/lib/applyEdits";
 import { ruleRegistry } from "../../rules/registry";
-import type { FixResult, Violation } from "../../rules/types";
+import type { FixResult, RuleDefinition, Violation } from "../../rules/types";
 import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
-
-const ruleMap = new Map(ruleRegistry.map((r) => [r.name, r]));
 
 // eslint-disable-next-line n/no-process-exit
 const exitWithViolations = (): never => process.exit(1);
@@ -28,11 +24,70 @@ interface RuleResult {
   readonly violations: readonly Violation[];
 }
 
-const runRules = (model: Model, rules: AactConfig["rules"]): RuleResult[] => {
+/**
+ * Build merged registry from built-ins + customRules. Conflicts (custom rule
+ * shares name with built-in или с другим custom) — activation error, никакого
+ * silent override. Это force'ит namespace discipline для plugin authors —
+ * prefix unique (adapstoryBffBoundary, mermaidLegend etc.).
+ */
+const buildEffectiveRules = (
+  customRules?: readonly RuleDefinition[],
+): readonly RuleDefinition[] => {
+  if (!customRules || customRules.length === 0) return ruleRegistry;
+
+  const seen = new Map<string, "built-in" | "custom">();
+  for (const r of ruleRegistry) seen.set(r.name, "built-in");
+
+  const merged: RuleDefinition[] = [...ruleRegistry];
+  for (const r of customRules) {
+    const existing = seen.get(r.name);
+    if (existing) {
+      throw new Error(
+        `customRules: rule "${r.name}" conflicts with existing ${existing} rule. ` +
+          `Rename your custom rule (e.g. prefix with your project name).`,
+      );
+    }
+    seen.set(r.name, "custom");
+    merged.push(r);
+  }
+  return merged;
+};
+
+/**
+ * Warn on rule names в `config.rules` которые не зарегистрированы (built-in
+ * или custom). Backward-safe — typo не падает CLI, просто игнорируется
+ * с явным сообщением.
+ */
+const warnUnknownRuleNames = (
+  rules: AactConfig["rules"],
+  effective: readonly RuleDefinition[],
+): void => {
+  if (!rules) return;
+  const known = new Set(effective.map((r) => r.name));
+  for (const key of Object.keys(rules)) {
+    if (!known.has(key)) {
+      consola.warn(
+        `Unknown rule "${key}" in config.rules — ignored. ` +
+          `Did you forget to add it to customRules?`,
+      );
+    }
+  }
+};
+
+const getRuleConfigValue = (
+  rules: AactConfig["rules"],
+  ruleName: string,
+): unknown => (rules)?.[ruleName];
+
+const runRules = (
+  model: Model,
+  rules: AactConfig["rules"],
+  effective: readonly RuleDefinition[],
+): RuleResult[] => {
   const results: RuleResult[] = [];
 
-  for (const rule of ruleRegistry) {
-    const configValue = rules?.[rule.name as keyof typeof rules];
+  for (const rule of effective) {
+    const configValue = getRuleConfigValue(rules, rule.name);
     if (configValue === false) continue;
     const options = typeof configValue === "object" ? configValue : undefined;
     results.push({ name: rule.name, violations: rule.check(model, options) });
@@ -65,14 +120,16 @@ const generateFixes = (
   results: RuleResult[],
   rules: AactConfig["rules"],
   syntax: SourceSyntax,
+  effective: readonly RuleDefinition[],
 ): FixResult[] => {
+  const ruleByName = new Map(effective.map((r) => [r.name, r]));
   const fixes: FixResult[] = [];
 
   for (const result of results) {
     if (result.violations.length === 0) continue;
-    const ruleDef = ruleMap.get(result.name);
+    const ruleDef = ruleByName.get(result.name);
     if (!ruleDef?.fix) continue;
-    const configValue = rules?.[ruleDef.name as keyof typeof rules];
+    const configValue = getRuleConfigValue(rules, ruleDef.name);
     const options = typeof configValue === "object" ? configValue : undefined;
     fixes.push(
       ...(ruleDef.fix?.(model, result.violations, syntax, options) ?? []),
@@ -82,7 +139,10 @@ const generateFixes = (
   return fixes;
 };
 
-const formatText = (results: readonly RuleResult[]): void => {
+const formatText = (
+  results: readonly RuleResult[],
+  effective: readonly RuleDefinition[],
+): void => {
   const failed = results.filter((r) => r.violations.length > 0);
   const passed = results.filter((r) => r.violations.length === 0);
 
@@ -120,7 +180,8 @@ const formatText = (results: readonly RuleResult[]): void => {
   }
 
   const fixableRules = failed.filter(
-    (r) => ruleRegistry.find((rd) => rd.name === r.name)?.fix,
+    (r) =>
+      typeof effective.find((rd) => rd.name === r.name)?.fix === "function",
   ).length;
   const violationsLabel = total === 1 ? "violation" : "violations";
   const rulesLabel = failed.length === 1 ? "rule" : "rules";
@@ -213,6 +274,7 @@ const detectFormat = (format?: string): string => {
 const formatResults = (
   results: readonly RuleResult[],
   format: string,
+  effective: readonly RuleDefinition[],
 ): void => {
   switch (format) {
     case "json": {
@@ -224,7 +286,7 @@ const formatResults = (
       break;
     }
     default: {
-      formatText(results);
+      formatText(results, effective);
     }
   }
 };
@@ -232,6 +294,7 @@ const formatResults = (
 const writeFixes = async (
   config: AactConfig,
   fixes: readonly FixResult[],
+  effective: readonly RuleDefinition[],
 ): Promise<void> => {
   const writePath = path.resolve(config.source.writePath ?? config.source.path);
   let source = await readFile(writePath, "utf8");
@@ -250,7 +313,7 @@ const writeFixes = async (
     );
   } else {
     const { model: reModel } = await loadModel(config);
-    const reResults = runRules(reModel, config.rules);
+    const reResults = runRules(reModel, config.rules, effective);
     const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
     consola.success(
       `Applied ${fixes.length} fix(es), wrote ${writePath}` +
@@ -264,6 +327,7 @@ const handleFixMode = async (
   results: RuleResult[],
   config: AactConfig,
   dryRun: boolean,
+  effective: readonly RuleDefinition[],
 ): Promise<void> => {
   const hasViolations = results.some((r) => r.violations.length > 0);
   if (!hasViolations) {
@@ -279,6 +343,7 @@ const handleFixMode = async (
     results,
     config.rules,
     fixCapability.syntax,
+    effective,
   );
   if (fixes.length === 0) {
     consola.info("No auto-fixes available for these violations");
@@ -293,7 +358,7 @@ const handleFixMode = async (
   console.log();
 
   if (!dryRun) {
-    await writeFixes(config, fixes);
+    await writeFixes(config, fixes, effective);
   }
 };
 
@@ -301,6 +366,7 @@ const suggestFixes = async (
   model: Model,
   results: readonly RuleResult[],
   config: AactConfig,
+  effective: readonly RuleDefinition[],
 ): Promise<void> => {
   const fixCapability = await resolveFixCapability(config);
   if (!fixCapability) return;
@@ -309,6 +375,7 @@ const suggestFixes = async (
     [...results],
     config.rules,
     fixCapability.syntax,
+    effective,
   );
   if (fixes.length > 0) {
     console.log(colors.bold("Suggested fixes:"));
@@ -339,6 +406,9 @@ export const check = defineCommand({
   },
   async run({ args }) {
     const config = await loadAndValidateConfig(args.config);
+    const effective = buildEffectiveRules(config.customRules);
+    warnUnknownRuleNames(config.rules, effective);
+
     const { model, issues } = await loadModel(config);
 
     // Surface loader-time issues (dangling refs, duplicate names, etc.)
@@ -346,18 +416,24 @@ export const check = defineCommand({
       consola.warn(`model: ${issue.kind}`, issue);
     }
 
-    const results = runRules(model, config.rules);
-    formatResults(results, detectFormat(args.format));
+    const results = runRules(model, config.rules, effective);
+    formatResults(results, detectFormat(args.format), effective);
 
     const hasViolations = results.some((r) => r.violations.length > 0);
 
     if (args.fix || args["dry-run"]) {
-      await handleFixMode(model, results, config, args["dry-run"] ?? false);
+      await handleFixMode(
+        model,
+        results,
+        config,
+        args["dry-run"] ?? false,
+        effective,
+      );
       return;
     }
 
     if (hasViolations) {
-      await suggestFixes(model, results, config);
+      await suggestFixes(model, results, config, effective);
       exitWithViolations();
     }
   },

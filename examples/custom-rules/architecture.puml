@@ -1,0 +1,16 @@
+@startuml custom-rules-demo
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+System_Boundary(shop, "Shop") {
+    Container(orders_api, "Orders API", "Node.js")
+    Container(orders_crud, "Orders CRUD", "Node.js", $tags="repo")
+    ContainerDb(orders_db, "Orders DB", "PostgreSQL")
+
+    Container(legacy_payments, "Legacy Payments", "Java 6", $tags="deprecated")
+}
+
+Rel(orders_api, orders_crud, "HTTP")
+Rel(orders_crud, orders_db, "SQL")
+Rel(orders_api, legacy_payments, "HTTP")
+
+@enduml
