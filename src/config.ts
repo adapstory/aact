@@ -24,6 +24,12 @@ export const AactConfigSchema = v.strictObject({
                 boundaryTags: v.optional(v.array(v.string())),
                 boundaryNamePattern: v.optional(v.instance(RegExp)),
             }),
+            "adapstory-schema-per-bc-not-db-per-service": ruleOption({
+                dbType: v.optional(v.string()),
+                sharedDatabasePattern: v.optional(v.instance(RegExp)),
+                bcTagPattern: v.optional(v.instance(RegExp)),
+                schemaMarkerPattern: v.optional(v.instance(RegExp)),
+            }),
             apiGateway: ruleOption({
                 aclTag: v.optional(v.string()),
                 externalType: v.optional(v.string()),

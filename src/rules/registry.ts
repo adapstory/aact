@@ -6,6 +6,8 @@ import type { AdapstoryExternalThroughGatewayOrAclOptions } from "./adapstoryExt
 import { checkAdapstoryExternalThroughGatewayOrAcl } from "./adapstoryExternalThroughGatewayOrAcl";
 import type { AdapstoryNoCoreBcCyclesOptions } from "./adapstoryNoCoreBcCycles";
 import { checkAdapstoryNoCoreBcCycles } from "./adapstoryNoCoreBcCycles";
+import type { AdapstorySchemaPerBcNotDbPerServiceOptions } from "./adapstorySchemaPerBcNotDbPerService";
+import { checkAdapstorySchemaPerBcNotDbPerService } from "./adapstorySchemaPerBcNotDbPerService";
 import type { ApiGatewayOptions } from "./apiGateway";
 import { checkApiGateway } from "./apiGateway";
 import type { CohesionOptions } from "./cohesion";
@@ -67,6 +69,10 @@ export const ruleRegistry: readonly RuleDefinition[] = [
     defineRule<AdapstoryExternalThroughGatewayOrAclOptions>({
         name: "adapstory-external-through-gateway-or-acl",
         check: checkAdapstoryExternalThroughGatewayOrAcl,
+    }),
+    defineRule<AdapstorySchemaPerBcNotDbPerServiceOptions>({
+        name: "adapstory-schema-per-bc-not-db-per-service",
+        check: checkAdapstorySchemaPerBcNotDbPerService,
     }),
     defineRule<ApiGatewayOptions>({
         name: "apiGateway",
