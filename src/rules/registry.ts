@@ -2,6 +2,8 @@ import type { ArchitectureModel } from "../model";
 import type { AclOptions } from "./acl";
 import { checkAcl } from "./acl";
 import { checkAcyclic } from "./acyclic";
+import type { AdapstoryNoCoreBcCyclesOptions } from "./adapstoryNoCoreBcCycles";
+import { checkAdapstoryNoCoreBcCycles } from "./adapstoryNoCoreBcCycles";
 import type { ApiGatewayOptions } from "./apiGateway";
 import { checkApiGateway } from "./apiGateway";
 import type { CohesionOptions } from "./cohesion";
@@ -55,6 +57,10 @@ export const ruleRegistry: readonly RuleDefinition[] = [
     defineRule({
         name: "acyclic",
         check: (m) => checkAcyclic(m.allContainers),
+    }),
+    defineRule<AdapstoryNoCoreBcCyclesOptions>({
+        name: "adapstory-no-core-bc-cycles",
+        check: checkAdapstoryNoCoreBcCycles,
     }),
     defineRule<ApiGatewayOptions>({
         name: "apiGateway",
