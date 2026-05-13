@@ -70,20 +70,20 @@ npx aact generate --format kubernetes
 import type { AactConfig } from "aact";
 
 const config: AactConfig = {
-  source: {
-    type: "plantuml", // "plantuml" | "structurizr"
-    path: "./architecture.puml",
-  },
-  rules: {
-    acl: true,
-    acyclic: true,
-    apiGateway: true,
-    crud: true,
-    dbPerService: true,
-    cohesion: true,
-    stableDependencies: true,
-    commonReuse: true,
-  },
+    source: {
+        type: "plantuml", // "plantuml" | "structurizr"
+        path: "./architecture.puml",
+    },
+    rules: {
+        acl: true,
+        acyclic: true,
+        apiGateway: true,
+        crud: true,
+        dbPerService: true,
+        cohesion: true,
+        stableDependencies: true,
+        commonReuse: true,
+    },
 };
 
 export default config;
@@ -93,12 +93,12 @@ export default config;
 
 ```ts
 import {
-  loadPlantumlElements,
-  mapContainersFromPlantumlElements,
-  checkAcl,
-  checkAcyclic,
-  checkCrud,
-  analyzeArchitecture,
+    loadPlantumlElements,
+    mapContainersFromPlantumlElements,
+    checkAcl,
+    checkAcyclic,
+    checkCrud,
+    analyzeArchitecture,
 } from "aact";
 
 const elements = await loadPlantumlElements("architecture.puml");

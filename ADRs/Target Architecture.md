@@ -151,29 +151,29 @@ Roadmap форматов:
 import { defineConfig } from "aact";
 
 export default defineConfig({
-  source: {
-    type: "structurizr", // "plantuml" | "structurizr"
-    path: "./workspace.json",
-  },
-  rules: {
-    acl: { tag: "adapter" }, // кастомный тег вместо "acl"
-    acyclic: true, // true = дефолтный конфиг
-    dbPerService: true,
-    crud: { repoTag: "repository" },
-  },
+    source: {
+        type: "structurizr", // "plantuml" | "structurizr"
+        path: "./workspace.json",
+    },
+    rules: {
+        acl: { tag: "adapter" }, // кастомный тег вместо "acl"
+        acyclic: true, // true = дефолтный конфиг
+        dbPerService: true,
+        crud: { repoTag: "repository" },
+    },
 });
 ```
 
 ```yaml
 # .aactrc.yaml — для тех, кому удобнее YAML
 source:
-  type: structurizr
-  path: ./workspace.json
+    type: structurizr
+    path: ./workspace.json
 rules:
-  acl:
-    tag: adapter
-  acyclic: true
-  dbPerService: true
+    acl:
+        tag: adapter
+    acyclic: true
+    dbPerService: true
 ```
 
 Возможности c12:
@@ -326,27 +326,27 @@ Corepack для фиксации версии:
 
 ```json
 {
-  "name": "aact",
-  "version": "2.0.0",
-  "type": "module",
-  "packageManager": "pnpm@9.15.4",
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+    "name": "aact",
+    "version": "2.0.0",
+    "type": "module",
+    "packageManager": "pnpm@9.15.4",
+    "exports": {
+        ".": {
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.cjs"
+        }
+    },
+    "bin": {
+        "aact": "./dist/cli.mjs"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "build": "unbuild",
+        "test": "vitest",
+        "lint": "eslint ."
     }
-  },
-  "bin": {
-    "aact": "./dist/cli.mjs"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "scripts": {
-    "build": "unbuild",
-    "test": "vitest",
-    "lint": "eslint ."
-  }
 }
 ```
 

@@ -20,60 +20,66 @@ import { checkStableDependencies } from "./stableDependencies";
 import type { Violation } from "./types";
 
 export interface RuleDefinition {
-  readonly name: string;
-  readonly check: (model: ArchitectureModel, options?: unknown) => Violation[];
-  readonly fix?: (
-    model: ArchitectureModel,
-    violations: Violation[],
-    syntax: SourceSyntax,
-    options?: unknown,
-  ) => FixResult[];
+    readonly name: string;
+    readonly check: (
+        model: ArchitectureModel,
+        options?: unknown,
+    ) => Violation[];
+    readonly fix?: (
+        model: ArchitectureModel,
+        violations: Violation[],
+        syntax: SourceSyntax,
+        options?: unknown,
+    ) => FixResult[];
 }
 
 /** Type-safe rule factory — isolates the type erasure to a single point */
 const defineRule = <O>(def: {
-  readonly name: string;
-  readonly check: (model: ArchitectureModel, options?: O) => Violation[];
-  readonly fix?: (
-    model: ArchitectureModel,
-    violations: Violation[],
-    syntax: SourceSyntax,
-    options?: O,
-  ) => FixResult[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
+    readonly name: string;
+    readonly check: (model: ArchitectureModel, options?: O) => Violation[];
+    readonly fix?: (
+        model: ArchitectureModel,
+        violations: Violation[],
+        syntax: SourceSyntax,
+        options?: O,
+    ) => FixResult[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
 }): RuleDefinition => def as any;
 
 export const ruleRegistry: readonly RuleDefinition[] = [
-  defineRule<AclOptions>({
-    name: "acl",
-    check: (m, o) => checkAcl(m.allContainers, o),
-    fix: fixAcl,
-  }),
-  defineRule({ name: "acyclic", check: (m) => checkAcyclic(m.allContainers) }),
-  defineRule<ApiGatewayOptions>({
-    name: "apiGateway",
-    check: (m, o) => checkApiGateway(m.allContainers, o),
-  }),
-  defineRule<CrudOptions>({
-    name: "crud",
-    check: (m, o) => checkCrud(m.allContainers, o),
-    fix: fixCrud,
-  }),
-  defineRule<DbPerServiceOptions>({
-    name: "dbPerService",
-    check: (m, o) => checkDbPerService(m.allContainers, o),
-    fix: fixDbPerService,
-  }),
-  defineRule<CohesionOptions>({
-    name: "cohesion",
-    check: (m, o) => checkCohesion(m, o),
-  }),
-  defineRule<StableDependenciesOptions>({
-    name: "stableDependencies",
-    check: (m, o) => checkStableDependencies(m.allContainers, o),
-  }),
-  defineRule({
-    name: "commonReuse",
-    check: (m) => checkCommonReuse(m),
-  }),
+    defineRule<AclOptions>({
+        name: "acl",
+        check: (m, o) => checkAcl(m.allContainers, o),
+        fix: fixAcl,
+    }),
+    defineRule({
+        name: "acyclic",
+        check: (m) => checkAcyclic(m.allContainers),
+    }),
+    defineRule<ApiGatewayOptions>({
+        name: "apiGateway",
+        check: (m, o) => checkApiGateway(m.allContainers, o),
+    }),
+    defineRule<CrudOptions>({
+        name: "crud",
+        check: (m, o) => checkCrud(m.allContainers, o),
+        fix: fixCrud,
+    }),
+    defineRule<DbPerServiceOptions>({
+        name: "dbPerService",
+        check: (m, o) => checkDbPerService(m.allContainers, o),
+        fix: fixDbPerService,
+    }),
+    defineRule<CohesionOptions>({
+        name: "cohesion",
+        check: (m, o) => checkCohesion(m, o),
+    }),
+    defineRule<StableDependenciesOptions>({
+        name: "stableDependencies",
+        check: (m, o) => checkStableDependencies(m.allContainers, o),
+    }),
+    defineRule({
+        name: "commonReuse",
+        check: (m) => checkCommonReuse(m),
+    }),
 ];

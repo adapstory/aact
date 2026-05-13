@@ -57,42 +57,42 @@ const configFileName = "aact.config.ts";
 const architectureFileName = "architecture.puml";
 
 const writeIfNew = async (
-  filePath: string,
-  content: string,
-  label: string,
+    filePath: string,
+    content: string,
+    label: string,
 ): Promise<boolean> => {
-  try {
-    await fs.access(filePath);
-    consola.warn(`${label} already exists. Skipping.`);
-    return false;
-  } catch {
-    await fs.writeFile(filePath, content);
-    consola.success(`Created ${label}`);
-    return true;
-  }
+    try {
+        await fs.access(filePath);
+        consola.warn(`${label} already exists. Skipping.`);
+        return false;
+    } catch {
+        await fs.writeFile(filePath, content);
+        consola.success(`Created ${label}`);
+        return true;
+    }
 };
 
 export const init = defineCommand({
-  meta: {
-    description: "Create aact.config.ts and a starter architecture file",
-  },
-  async run() {
-    const cwd = process.cwd();
-    const configCreated = await writeIfNew(
-      path.resolve(cwd, configFileName),
-      configTemplate,
-      configFileName,
-    );
-    const archCreated = await writeIfNew(
-      path.resolve(cwd, architectureFileName),
-      architectureTemplate,
-      architectureFileName,
-    );
+    meta: {
+        description: "Create aact.config.ts and a starter architecture file",
+    },
+    async run() {
+        const cwd = process.cwd();
+        const configCreated = await writeIfNew(
+            path.resolve(cwd, configFileName),
+            configTemplate,
+            configFileName,
+        );
+        const archCreated = await writeIfNew(
+            path.resolve(cwd, architectureFileName),
+            architectureTemplate,
+            architectureFileName,
+        );
 
-    if (configCreated || archCreated) {
-      consola.info(
-        "Next: run `aact check` to see violations, then `aact check --fix` to auto-fix.",
-      );
-    }
-  },
+        if (configCreated || archCreated) {
+            consola.info(
+                "Next: run `aact check` to see violations, then `aact check --fix` to auto-fix.",
+            );
+        }
+    },
 });

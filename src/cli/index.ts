@@ -7,12 +7,12 @@ import { generate } from "./commands/generate";
 import { init } from "./commands/init";
 
 const main = defineCommand({
-  meta: {
-    name: "aact",
-    version,
-    description: "Architecture analysis and compliance tool",
-  },
-  subCommands: { init, check, analyze, generate },
+    meta: {
+        name: "aact",
+        version,
+        description: "Architecture analysis and compliance tool",
+    },
+    subCommands: { init, check, analyze, generate },
 });
 
 void runMain(main);
