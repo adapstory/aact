@@ -2,6 +2,8 @@ import type { ArchitectureModel } from "../model";
 import type { AclOptions } from "./acl";
 import { checkAcl } from "./acl";
 import { checkAcyclic } from "./acyclic";
+import type { AdapstoryBffBoundaryOptions } from "./adapstoryBffBoundary";
+import { checkAdapstoryBffBoundary } from "./adapstoryBffBoundary";
 import type { AdapstoryExternalThroughGatewayOrAclOptions } from "./adapstoryExternalThroughGatewayOrAcl";
 import { checkAdapstoryExternalThroughGatewayOrAcl } from "./adapstoryExternalThroughGatewayOrAcl";
 import type { AdapstoryNoCoreBcCyclesOptions } from "./adapstoryNoCoreBcCycles";
@@ -63,6 +65,10 @@ export const ruleRegistry: readonly RuleDefinition[] = [
     defineRule({
         name: "acyclic",
         check: (m) => checkAcyclic(m.allContainers),
+    }),
+    defineRule<AdapstoryBffBoundaryOptions>({
+        name: "adapstory-bff-boundary",
+        check: checkAdapstoryBffBoundary,
     }),
     defineRule<AdapstoryNoCoreBcCyclesOptions>({
         name: "adapstory-no-core-bc-cycles",

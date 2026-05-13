@@ -16,6 +16,15 @@ export const AactConfigSchema = v.strictObject({
                 externalType: v.optional(v.string()),
             }),
             acyclic: v.optional(v.boolean()),
+            "adapstory-bff-boundary": ruleOption({
+                bffTagPattern: v.optional(v.instance(RegExp)),
+                allowedBcTags: v.optional(v.array(v.string())),
+                targetApiTags: v.optional(v.array(v.string())),
+                targetGatewayTags: v.optional(v.array(v.string())),
+                allowedTargetNamePattern: v.optional(v.instance(RegExp)),
+                pluginInternalTagPattern: v.optional(v.instance(RegExp)),
+                pluginInternalNamePattern: v.optional(v.instance(RegExp)),
+            }),
             "adapstory-no-core-bc-cycles": ruleOption({
                 coreBcTags: v.optional(v.array(v.string())),
             }),
