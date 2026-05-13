@@ -1,7 +1,7 @@
 import { load } from "../../src/formats/plantuml/load";
 import type { Model } from "../../src/model";
-import { noDeprecatedTagRule } from "./rules/noDeprecatedTag";
-import { repoNamingConventionRule } from "./rules/repoNamingConvention";
+import { bcIsolationRule } from "./rules/bcIsolation";
+import { requireOwnerTagRule } from "./rules/requireOwnerTag";
 
 describe("custom-rules example", () => {
   let model: Model;
@@ -11,42 +11,67 @@ describe("custom-rules example", () => {
     model = result.model;
   });
 
-  describe("noDeprecatedTag", () => {
-    it("flags container tagged 'deprecated'", () => {
-      const violations = noDeprecatedTagRule.check(model);
+  describe("bcIsolation", () => {
+    it("flags direct cross-BC call that bypasses the public API", () => {
+      const violations = bcIsolationRule.check(model);
       expect(violations).toHaveLength(1);
-      expect(violations[0].container).toBe("legacy_payments");
-      expect(violations[0].message).toContain("deprecated");
+      expect(violations[0].container).toBe("orders_svc");
+      expect(violations[0].message).toContain("orders");
+      expect(violations[0].message).toContain("inventory");
+      expect(violations[0].message).toContain("inventory_svc");
     });
 
-    it("respects custom tag option", () => {
-      const violations = noDeprecatedTagRule.check(model, {
-        tag: "nonexistent",
+    it("ignores cross-BC calls that go through a *_api container", () => {
+      const violations = bcIsolationRule.check(model);
+      expect(
+        violations.every((v) => !v.message.includes("inventory_api")),
+      ).toBe(true);
+    });
+
+    it("ignores cross-BC calls via a broker-tagged container", () => {
+      const violations = bcIsolationRule.check(model);
+      expect(violations.every((v) => v.container !== "inventory_svc")).toBe(
+        true,
+      );
+    });
+
+    it("respects the apiSuffix option", () => {
+      // With a different suffix, inventory_api stops counting as a BC entry
+      // and orders_svc → inventory_api becomes a violation too.
+      const violations = bcIsolationRule.check(model, {
+        apiSuffix: "_gateway",
       });
-      expect(violations).toHaveLength(0);
+      expect(violations.length).toBeGreaterThan(1);
     });
   });
 
-  describe("repoNamingConvention", () => {
-    it("flags container tagged 'repo' that doesn't end with '_repo'", () => {
-      const violations = repoNamingConventionRule.check(model);
+  describe("requireOwnerTag", () => {
+    it("flags containers without an owner:* tag", () => {
+      const violations = requireOwnerTagRule.check(model);
       expect(violations).toHaveLength(1);
-      expect(violations[0].container).toBe("orders_crud");
-      expect(violations[0].message).toContain("_repo");
+      expect(violations[0].container).toBe("inventory_svc");
+      expect(violations[0].message).toContain("owner:");
     });
 
-    it("respects custom suffix option", () => {
-      const violations = repoNamingConventionRule.check(model, {
-        suffix: "_crud",
-      });
-      expect(violations).toHaveLength(0);
+    it("ignores containers that already carry an owner tag", () => {
+      const violations = requireOwnerTagRule.check(model);
+      const flagged = violations.map((v) => v.container);
+      expect(flagged).not.toContain("orders_svc");
+      expect(flagged).not.toContain("orders_db");
+      expect(flagged).not.toContain("inventory_api");
+    });
+
+    it("respects the prefix option", () => {
+      // With `team:` prefix, every operational container is missing the tag.
+      const violations = requireOwnerTagRule.check(model, { prefix: "team:" });
+      expect(violations.length).toBeGreaterThan(1);
     });
   });
 
   it("both custom rules return well-formed Violation objects", () => {
     const all = [
-      ...noDeprecatedTagRule.check(model),
-      ...repoNamingConventionRule.check(model),
+      ...bcIsolationRule.check(model),
+      ...requireOwnerTagRule.check(model),
     ];
     for (const v of all) {
       expect(typeof v.container).toBe("string");

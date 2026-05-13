@@ -1,34 +1,40 @@
 import { defineConfig } from "../../src";
-import { noDeprecatedTagRule } from "./rules/noDeprecatedTag";
-import { repoNamingConventionRule } from "./rules/repoNamingConvention";
+import { bcIsolationRule } from "./rules/bcIsolation";
+import { requireOwnerTagRule } from "./rules/requireOwnerTag";
 
 /**
- * Example aact config с двумя custom rules.
+ * Example aact config with two project-specific rules:
  *
- * Через `defineConfig` const-generic'и — custom rule names и их option types
- * propagate'ятся в `rules{}` autocomplete. IDE подскажет `repoNamingConvention`
- * как валидный key, а внутри `{ suffix, tag }` подсветит shape из rule generic.
+ *   - `bcIsolation`      — DDD bounded-context isolation
+ *   - `requireOwnerTag`  — every Container needs an owner:<team> tag
  *
- * Семантика:
- *   - Custom rules auto-enabled (как built-ins) — не нужно `myRule: true`
- *   - `rules.<name>: false` disables (built-in или custom)
- *   - `rules.<name>: { ...opts }` передаёт options в check()
- *   - Conflict (custom rule name === built-in name) → activation error
+ * Setup pattern:
+ *   1. Write each rule as a `RuleDefinition` (see `./rules/*.ts`)
+ *   2. Register via `customRules: [...]` — auto-enables the rules
+ *   3. Configure in `rules: {}` with the same syntax as built-ins
+ *
+ * `defineConfig` is generic over `customRules`, so TypeScript autocompletes
+ * the rule names and their option types in `rules{}` — typing
+ * `rules: { bcIsolation: { ←tab } }` suggests `bcTagPrefix`, `apiSuffix`,
+ * `brokerTag` from `BcIsolationOptions`.
  */
 export default defineConfig({
   source: "./architecture.puml",
 
-  customRules: [noDeprecatedTagRule, repoNamingConventionRule],
+  customRules: [bcIsolationRule, requireOwnerTagRule],
 
   rules: {
-    // Built-ins:
+    // --- Built-in checks ---
     acl: true,
     acyclic: true,
-    crud: true,
-    dbPerService: true,
 
-    // Custom rule options — TS autocompletes shape из NoDeprecatedTagOptions
-    // / RepoNamingOptions через const-generic propagation:
-    repoNamingConvention: { suffix: "_repo", tag: "repo" },
+    // --- Custom rule configuration ---
+    // Pass options identically to a built-in. Omit the entry to use defaults.
+    bcIsolation: {
+      bcTagPrefix: "bc:",
+      apiSuffix: "_api",
+      brokerTag: "broker",
+    },
+    // `requireOwnerTag` is auto-enabled with default options.
   },
 });

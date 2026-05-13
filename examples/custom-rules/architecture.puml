@@ -2,15 +2,34 @@
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
 System_Boundary(shop, "Shop") {
-    Container(orders_api, "Orders API", "Node.js")
-    Container(orders_crud, "Orders CRUD", "Node.js", $tags="repo")
-    ContainerDb(orders_db, "Orders DB", "PostgreSQL")
 
-    Container(legacy_payments, "Legacy Payments", "Java 6", $tags="deprecated")
+    ' === Orders bounded context ===
+    Container(orders_api, "Orders API", "Node.js", $tags="bc:orders+owner:orders-team")
+    Container(orders_svc, "Orders Service", "Node.js", $tags="bc:orders+owner:orders-team")
+    ContainerDb(orders_db, "Orders DB", "PostgreSQL", $tags="bc:orders+owner:orders-team")
+
+    ' === Inventory bounded context ===
+    Container(inventory_api, "Inventory API", "Node.js", $tags="bc:inventory+owner:inventory-team")
+    Container(inventory_svc, "Inventory Service", "Node.js", $tags="bc:inventory")
+    '                                                                  ^^^^^^^^^^^^^^^
+    ' VIOLATION (requireOwnerTag): missing owner:<team> tag
+    ContainerDb(inventory_db, "Inventory DB", "PostgreSQL", $tags="bc:inventory+owner:inventory-team")
+
+    ' === Platform infrastructure ===
+    Container(events, "Events Broker", "Kafka", $tags="broker+owner:platform-team")
 }
 
-Rel(orders_api, orders_crud, "HTTP")
-Rel(orders_crud, orders_db, "SQL")
-Rel(orders_api, legacy_payments, "HTTP")
+' --- Internal traffic ---
+Rel(orders_svc, orders_db, "SQL")
+Rel(inventory_svc, inventory_db, "SQL")
+
+' --- Cross-BC traffic via public API: OK ---
+Rel(orders_svc, inventory_api, "HTTP")
+
+' --- VIOLATION (bcIsolation): orders BC reaches into inventory BC directly ---
+Rel(orders_svc, inventory_svc, "HTTP")
+
+' --- Cross-BC via broker: OK ---
+Rel(inventory_svc, events, "publish")
 
 @enduml

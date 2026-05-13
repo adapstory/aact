@@ -27,6 +27,32 @@ const config: AactConfig = {
     commonReuse: true, // Reuse all of a context's public API or none
   },
 
+  // -----------------------------------------------------------------------
+  // Project-specific (custom) rules
+  //
+  // After \`npm install aact\` locally, switch from this type-only import to
+  // \`defineConfig\` to register your own checks alongside the built-ins:
+  //
+  //   import { defineConfig } from "aact";
+  //   import { bcIsolationRule } from "./rules/bcIsolation";
+  //
+  //   export default defineConfig({
+  //     source: { type: "plantuml", path: "./architecture.puml" },
+  //
+  //     customRules: [bcIsolationRule],
+  //
+  //     rules: {
+  //       acl: true,
+  //       // Configure custom rules with the same syntax as built-ins.
+  //       // TypeScript autocompletes options based on the rule definition.
+  //       bcIsolation: { apiSuffix: "_api" },
+  //     },
+  //   });
+  //
+  // Worked example with two rules and tests:
+  //   https://github.com/Byndyusoft/aact/tree/main/examples/custom-rules
+  // -----------------------------------------------------------------------
+
   // PlantUML generation from Kubernetes configs (aact generate)
   // generate: {
   //   kubernetes: { path: "./fixtures/kubernetes" },

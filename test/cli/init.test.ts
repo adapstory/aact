@@ -100,7 +100,9 @@ describe("init command", () => {
 
     const content = findWrite("aact.config.ts")?.content ?? "";
     expect(content).toContain('import type { AactConfig } from "aact"');
-    expect(content).not.toMatch(/import\s*{\s*defineConfig\s*}/);
+    // Anchor at line start so the commented-out `defineConfig` example block
+    // in the template doesn't trip the runtime-import guard.
+    expect(content).not.toMatch(/^import\s*{\s*defineConfig\s*}/m);
   });
 
   it("config template defaults to plantuml source", async () => {
