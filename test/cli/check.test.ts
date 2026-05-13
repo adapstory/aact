@@ -219,7 +219,12 @@ describe("check command", () => {
     });
 
     it("respects rules config disabling acl", async () => {
-        setupConfig({ rules: { acl: false } });
+        setupConfig({
+            rules: {
+                acl: false,
+                "adapstory-external-through-gateway-or-acl": false,
+            },
+        });
         mockMapContainers.mockReturnValue(violatingModel());
 
         await expect(runCheck()).resolves.toBeUndefined();

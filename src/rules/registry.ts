@@ -2,6 +2,8 @@ import type { ArchitectureModel } from "../model";
 import type { AclOptions } from "./acl";
 import { checkAcl } from "./acl";
 import { checkAcyclic } from "./acyclic";
+import type { AdapstoryExternalThroughGatewayOrAclOptions } from "./adapstoryExternalThroughGatewayOrAcl";
+import { checkAdapstoryExternalThroughGatewayOrAcl } from "./adapstoryExternalThroughGatewayOrAcl";
 import type { AdapstoryNoCoreBcCyclesOptions } from "./adapstoryNoCoreBcCycles";
 import { checkAdapstoryNoCoreBcCycles } from "./adapstoryNoCoreBcCycles";
 import type { ApiGatewayOptions } from "./apiGateway";
@@ -61,6 +63,10 @@ export const ruleRegistry: readonly RuleDefinition[] = [
     defineRule<AdapstoryNoCoreBcCyclesOptions>({
         name: "adapstory-no-core-bc-cycles",
         check: checkAdapstoryNoCoreBcCycles,
+    }),
+    defineRule<AdapstoryExternalThroughGatewayOrAclOptions>({
+        name: "adapstory-external-through-gateway-or-acl",
+        check: checkAdapstoryExternalThroughGatewayOrAcl,
     }),
     defineRule<ApiGatewayOptions>({
         name: "apiGateway",

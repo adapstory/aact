@@ -19,6 +19,11 @@ export const AactConfigSchema = v.strictObject({
             "adapstory-no-core-bc-cycles": ruleOption({
                 coreBcTags: v.optional(v.array(v.string())),
             }),
+            "adapstory-external-through-gateway-or-acl": ruleOption({
+                externalType: v.optional(v.string()),
+                boundaryTags: v.optional(v.array(v.string())),
+                boundaryNamePattern: v.optional(v.instance(RegExp)),
+            }),
             apiGateway: ruleOption({
                 aclTag: v.optional(v.string()),
                 externalType: v.optional(v.string()),

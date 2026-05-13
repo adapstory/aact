@@ -1,5 +1,6 @@
 export * from "./acl";
 export * from "./acyclic";
+export * from "./adapstoryExternalThroughGatewayOrAcl";
 export * from "./adapstoryNoCoreBcCycles";
 export * from "./apiGateway";
 export * from "./cohesion";
