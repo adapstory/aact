@@ -27,6 +27,7 @@ export interface RelationSpec {
   readonly technology?: string;
   readonly tags?: readonly string[];
   readonly order?: number;
+  readonly link?: string;
 }
 
 export interface BoundarySpec {
@@ -37,6 +38,7 @@ export interface BoundarySpec {
   readonly tags?: readonly string[];
   readonly containerNames?: readonly string[];
   readonly boundaryNames?: readonly string[];
+  readonly link?: string;
 }
 
 const makeContainer = (spec: ContainerSpec): Container => ({
@@ -54,6 +56,7 @@ const makeContainer = (spec: ContainerSpec): Container => ({
     technology: r.technology,
     tags: r.tags ?? [],
     order: r.order,
+    link: r.link,
   })),
   link: spec.link,
   properties: spec.properties,
@@ -67,6 +70,7 @@ const makeBoundary = (spec: BoundarySpec): Boundary => ({
   tags: spec.tags ?? [],
   containerNames: spec.containerNames ?? [],
   boundaryNames: spec.boundaryNames ?? [],
+  link: spec.link,
 });
 
 export interface ModelSpec {
