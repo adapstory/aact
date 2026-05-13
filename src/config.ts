@@ -30,6 +30,11 @@ export const AactConfigSchema = v.strictObject({
                 bcTagPattern: v.optional(v.instance(RegExp)),
                 schemaMarkerPattern: v.optional(v.instance(RegExp)),
             }),
+            "adapstory-plugin-capabilities-from-manifest": ruleOption({
+                pluginTagPattern: v.optional(v.instance(RegExp)),
+                capabilitySurfacePattern: v.optional(v.instance(RegExp)),
+                provenancePattern: v.optional(v.instance(RegExp)),
+            }),
             apiGateway: ruleOption({
                 aclTag: v.optional(v.string()),
                 externalType: v.optional(v.string()),

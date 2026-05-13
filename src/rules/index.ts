@@ -2,6 +2,7 @@ export * from "./acl";
 export * from "./acyclic";
 export * from "./adapstoryExternalThroughGatewayOrAcl";
 export * from "./adapstoryNoCoreBcCycles";
+export * from "./adapstoryPluginCapabilitiesFromManifest";
 export * from "./adapstorySchemaPerBcNotDbPerService";
 export * from "./apiGateway";
 export * from "./cohesion";
