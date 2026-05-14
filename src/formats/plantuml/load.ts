@@ -18,26 +18,72 @@ import { parseCsvTags } from "../_shared/tags";
 import type { LoadResult } from "../types";
 import { filterElements } from "./lib/filterElements";
 
-/**
- * plantuml-parser 0.4 не поддерживает named-arg syntax `$tags="..."`. Мы
- * перепаковываем такие named args в positional с unique marker prefix —
- * loader потом извлекает их из любой positional slot без конфликта с
- * real values в той же позиции.
- *
- * Old hack (just strip $tags=, leave bare value) ломался на реальных
- * sprites: `Container(svc, "L", "Java", "D", "java-logo")` parser давал
- * sprite="java-logo", и loader не отличал от sprite-как-tags fallback.
- */
+// ───────────────────────────────────────────────────────────────────────────
+// plantuml-parser 0.4 adapter
+//
+// The third-party `plantuml-parser` 0.4 has grammar gaps that this section
+// works around. It is a self-contained unit — when the chevrotain parser
+// lands in v3.x, this whole block is deleted in one commit.
+//
+// Gaps closed here:
+//   1. Named-arg syntax (`$tags=`, `$link=`, `$sprite=`, `$index=`) — the
+//      parser drops the entire element when it sees a named arg. We repack
+//      named args into positional slots with a unique marker prefix; the
+//      loader then extracts them from whichever slot they landed in.
+//   2. `Component_Boundary` — the parser's grammar lacks this token entirely
+//      and throws SyntaxError on valid C4-PlantUML. We rewrite it to
+//      `Container_Boundary` (accepted) and track the aliases so the loader
+//      restores kind="Component".
+//
+// Old hack (just strip `$tags=`, leave bare value) broke on real sprites:
+// `Container(svc, "L", "Java", "D", "java-logo")` gave sprite="java-logo"
+// and the loader could not tell it from a sprite-as-tags fallback.
+// ───────────────────────────────────────────────────────────────────────────
 const TAGS_MARKER = "__aact_tags__:";
 const LINK_MARKER = "__aact_link__:";
 const SPRITE_MARKER = "__aact_sprite__:";
+const INDEX_MARKER = "__aact_index__:";
 
 const preTransformNamedArgs = (raw: string): string =>
   raw
     .replaceAll(/, \$tags="(.+?)"/g, `, "${TAGS_MARKER}$1"`)
     .replaceAll(/, \$link="(.+?)"/g, `, "${LINK_MARKER}$1"`)
     .replaceAll(/, \$sprite="(.+?)"/g, `, "${SPRITE_MARKER}$1"`)
+    // $index= accepts both quoted (`$index="1"`) and bare numeric
+    // (`$index=1`) forms in C4-PlantUML — handle both.
+    .replaceAll(
+      /, \$index=(?:"([^"]+)"|([^,)\s]+))/g,
+      (_match, quoted: string | undefined, bare: string | undefined) =>
+        `, "${INDEX_MARKER}${quoted ?? bare ?? ""}"`,
+    )
     .replaceAll('""', '" "');
+
+/**
+ * `Component_Boundary` is absent from plantuml-parser 0.4's grammar — it
+ * throws SyntaxError. Rewrite to `Container_Boundary` (which the parser
+ * accepts) and capture the rewritten aliases so `buildBoundary` can restore
+ * `kind: "Component"`. Aliases not captured (exotic identifier characters)
+ * degrade gracefully to `kind: "Container"` — no crash either way.
+ */
+const COMPONENT_BOUNDARY_ALIAS_RE =
+  /\bComponent_Boundary\(\s*([A-Za-z0-9_.]+)/g;
+
+interface PreTransformResult {
+  readonly source: string;
+  readonly componentBoundaryAliases: ReadonlySet<string>;
+}
+
+const preTransform = (raw: string): PreTransformResult => {
+  const componentBoundaryAliases = new Set<string>();
+  for (const match of raw.matchAll(COMPONENT_BOUNDARY_ALIAS_RE)) {
+    componentBoundaryAliases.add(match[1]);
+  }
+  const source = preTransformNamedArgs(raw).replaceAll(
+    /\bComponent_Boundary\(/g,
+    "Container_Boundary(",
+  );
+  return { source, componentBoundaryAliases };
+};
 
 const stripMarker = (
   value: string | undefined,
@@ -83,7 +129,7 @@ const normalizeRelBack = (elements: UMLElement[]): void => {
   }
 };
 
-const ALL_MARKERS = [TAGS_MARKER, LINK_MARKER, SPRITE_MARKER];
+const ALL_MARKERS = [TAGS_MARKER, LINK_MARKER, SPRITE_MARKER, INDEX_MARKER];
 
 const buildContainer = (
   el: Stdlib_C4_Context | Stdlib_C4_Container_Component,
@@ -145,30 +191,23 @@ const buildContainer = (
 const buildRelation = (rel: Stdlib_C4_Dynamic_Rel): Relation => {
   // Same marker-strip logic — Rel signature: from, to, label, techn, descr,
   // sprite, tags, link. Any named arg может оказаться в любой positional.
-  const taggedValue = extractMarked(
-    TAGS_MARKER,
+  const relSlots = [
     rel.techn,
     rel.descr,
     rel.sprite,
     rel.tags,
     rel.link,
-  );
-  const linkValue = extractMarked(
-    LINK_MARKER,
-    rel.techn,
-    rel.descr,
-    rel.sprite,
-    rel.tags,
-    rel.link,
-  );
-  const spriteNamedValue = extractMarked(
-    SPRITE_MARKER,
-    rel.techn,
-    rel.descr,
-    rel.sprite,
-    rel.tags,
-    rel.link,
-  );
+  ] as const;
+  const taggedValue = extractMarked(TAGS_MARKER, ...relSlots);
+  const linkValue = extractMarked(LINK_MARKER, ...relSlots);
+  const spriteNamedValue = extractMarked(SPRITE_MARKER, ...relSlots);
+  // $index= (dynamic-diagram step order) → Relation.order. Non-numeric
+  // values degrade to undefined rather than NaN.
+  const indexValue = extractMarked(INDEX_MARKER, ...relSlots);
+  const order =
+    indexValue !== undefined && Number.isFinite(Number(indexValue))
+      ? Number(indexValue)
+      : undefined;
 
   return {
     to: rel.to,
@@ -183,6 +222,7 @@ const buildRelation = (rel: Stdlib_C4_Dynamic_Rel): Relation => {
         : parseCsvTags(taggedValue),
     sprite: spriteNamedValue ?? cleanSlot(rel.sprite, ...ALL_MARKERS),
     link: linkValue ?? cleanSlot(rel.link, ...ALL_MARKERS),
+    order,
   };
 };
 
@@ -190,16 +230,24 @@ const buildBoundary = (
   el: Stdlib_C4_Boundary,
   childContainers: readonly string[],
   childBoundaries: readonly string[],
+  componentBoundaryAliases: ReadonlySet<string>,
 ): Boundary => {
   // Same marker-strip как в buildContainer/buildRelation: $tags=/$link=
   // могут приземлиться в любой positional slot (parser имеет tags+link).
   const taggedValue = extractMarked(TAGS_MARKER, el.tags, el.link);
   const linkValue = extractMarked(LINK_MARKER, el.tags, el.link);
 
+  // `Component_Boundary` was rewritten to `Container_Boundary` in the
+  // pre-transform (parser grammar gap). Restore the real kind from the
+  // alias set captured before the rewrite.
+  const kind = componentBoundaryAliases.has(el.alias)
+    ? "Component"
+    : parseBoundaryMacro(el.type_.name);
+
   return {
     name: el.alias,
     label: el.label,
-    kind: parseBoundaryMacro(el.type_.name),
+    kind,
     tags:
       taggedValue === undefined
         ? parseCsvTags(cleanSlot(el.tags, ...ALL_MARKERS))
@@ -281,7 +329,7 @@ const collectChildBoundaryNames = (
 export const load = async (filePath: string): Promise<LoadResult> => {
   const filepath = path.resolve(filePath);
   const raw = await fs.readFile(filepath, "utf8");
-  const transformed = preTransformNamedArgs(raw);
+  const { source: transformed, componentBoundaryAliases } = preTransform(raw);
   const [{ elements: rawElements }] = parsePuml(transformed);
   const elements = filterElements(rawElements);
 
@@ -306,7 +354,12 @@ export const load = async (filePath: string): Promise<LoadResult> => {
   const boundaries = boundaryElements.map((b) => {
     const { containers, boundaries: childBoundaries } =
       collectBoundaryChildren(b);
-    return buildBoundary(b, containers, childBoundaries);
+    return buildBoundary(
+      b,
+      containers,
+      childBoundaries,
+      componentBoundaryAliases,
+    );
   });
   const rootBoundaryNames = boundaries
     .map((b) => b.name)

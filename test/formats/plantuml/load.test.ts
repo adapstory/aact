@@ -396,9 +396,10 @@ describe("PlantUML load — unit", () => {
     ["System_Boundary", "System"],
     ["Container_Boundary", "Container"],
     ["Enterprise_Boundary", "Enterprise"],
-    // Note: Component_Boundary в filterElements list, но plantuml-parser
-    // 0.4 его не парсит — dead branch. Дропнуть из набора при следующем
-    // upgrade плансера или явно ignore.
+    // Component_Boundary is absent from plantuml-parser 0.4's grammar; the
+    // pre-transform rewrites it to Container_Boundary and restores the kind
+    // from the captured alias set. See "Component_Boundary" tests below.
+    ["Component_Boundary", "Component"],
   ])(
     "filterElements recognises %s → boundary.kind=%s",
     async (macro, expectedKind) => {
@@ -756,9 +757,12 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
     expect(model.boundaries.orders?.description).toBeUndefined();
   });
 
-  it("KNOWN GAP: $index= для Dynamic diagrams — Relation.order undefined", async () => {
+  // ── plantuml-parser 0.4 adapter — gaps closed by pre-transform ──
+  // (was "KNOWN GAP: $index=" — now fixed by the INDEX_MARKER pre-transform)
+
+  it("$index= populates Relation.order — bare numeric form", async () => {
     const model = await loadFromContent(
-      "indexed.puml",
+      "indexed-bare.puml",
       [
         "@startuml",
         "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
@@ -769,12 +773,105 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
         "@enduml",
       ].join("\n"),
     );
-    // Both relations loaded but order field stays undefined — Dynamic diagrams
-    // и step ordering — v3.x feature.
+    // Without the pre-transform, $index= made plantuml-parser drop the entire
+    // relation. Now both relations load AND carry their order.
     const a = getContainer(model, "a")!;
     const b = getContainer(model, "b")!;
-    expect(a.relations[0]?.order).toBeUndefined();
-    expect(b.relations[0]?.order).toBeUndefined();
+    expect(a.relations).toHaveLength(1);
+    expect(b.relations).toHaveLength(1);
+    expect(a.relations[0]?.order).toBe(1);
+    expect(b.relations[0]?.order).toBe(2);
+  });
+
+  it("$index= populates Relation.order — quoted form", async () => {
+    const model = await loadFromContent(
+      "indexed-quoted.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "step", "HTTP", $index="3")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(getContainer(model, "a")?.relations[0]?.order).toBe(3);
+  });
+
+  it("$index= with a non-numeric value degrades to undefined (no NaN)", async () => {
+    const model = await loadFromContent(
+      "indexed-bad.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        'Container(a, "A")',
+        'Container(b, "B")',
+        'Rel(a, b, "step", $index="oops")',
+        "@enduml",
+      ].join("\n"),
+    );
+    // Relation still loads; order is undefined rather than NaN.
+    expect(getContainer(model, "a")?.relations).toHaveLength(1);
+    expect(getContainer(model, "a")?.relations[0]?.order).toBeUndefined();
+  });
+
+  it("Component_Boundary does not crash the loader", async () => {
+    // plantuml-parser 0.4's grammar lacks the Component_Boundary token and
+    // throws SyntaxError. The pre-transform rewrites it to Container_Boundary.
+    await expect(
+      loadFromContent(
+        "component-boundary.puml",
+        [
+          "@startuml",
+          "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml",
+          'Component_Boundary(api, "API Layer") {',
+          '  Component(ctrl, "Controller")',
+          '  Component(svc, "Service")',
+          "}",
+          'Rel(ctrl, svc, "calls")',
+          "@enduml",
+        ].join("\n"),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("Component_Boundary loads with kind=Component and its children", async () => {
+    const model = await loadFromContent(
+      "component-boundary-kind.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml",
+        'Component_Boundary(api, "API Layer") {',
+        '  Component(ctrl, "Controller")',
+        '  Component(svc, "Service")',
+        "}",
+        'Rel(ctrl, svc, "calls")',
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(model.boundaries.api?.kind).toBe("Component");
+    expect(model.boundaries.api?.containerNames).toEqual(["ctrl", "svc"]);
+    expect(getContainer(model, "ctrl")?.relations[0]?.to).toBe("svc");
+  });
+
+  it("Component_Boundary nested inside another boundary", async () => {
+    const model = await loadFromContent(
+      "component-boundary-nested.puml",
+      [
+        "@startuml",
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml",
+        'Container_Boundary(app, "App") {',
+        '  Component_Boundary(api, "API Layer") {',
+        '    Component(ctrl, "Controller")',
+        "  }",
+        "}",
+        "@enduml",
+      ].join("\n"),
+    );
+    expect(model.boundaries.app?.kind).toBe("Container");
+    expect(model.boundaries.app?.boundaryNames).toContain("api");
+    expect(model.boundaries.api?.kind).toBe("Component");
+    expect(model.boundaries.api?.containerNames).toEqual(["ctrl"]);
   });
 });
 

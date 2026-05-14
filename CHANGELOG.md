@@ -4,6 +4,22 @@ All notable changes to `aact` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v3.0.0-beta.4 — 2026-05-14
+
+PlantUML loader robustness. No API changes; safe upgrade.
+
+### Fixed
+
+- `Component_Boundary` no longer crashes the PlantUML loader. The
+  underlying `plantuml-parser` 0.4 grammar lacks this token; the loader
+  now rewrites it to `Container_Boundary` before parsing and restores
+  `kind: "Component"` from the captured aliases.
+- `$index=` on a `Rel` no longer drops the entire relation. The named
+  argument previously made `plantuml-parser` discard the relation
+  silently; it is now extracted and populates `Relation.order` (both
+  `$index=1` and `$index="1"` forms; non-numeric values degrade to
+  `undefined`).
+
 ## v3.0.0-beta.3 — 2026-05-13
 
 Docs / template polish on top of beta.2. No API changes; safe upgrade.
