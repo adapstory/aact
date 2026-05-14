@@ -44,6 +44,27 @@ export const AactConfigSchema = v.strictObject({
                 capabilitySurfacePattern: v.optional(v.instance(RegExp)),
                 provenancePattern: v.optional(v.instance(RegExp)),
             }),
+            "adapstory-widget-lake-contract": ruleOption({
+                surfacePattern: v.optional(v.instance(RegExp)),
+                contractPattern: v.optional(v.instance(RegExp)),
+            }),
+            "adapstory-smart-line-tenant-scope": ruleOption({
+                smartLinePattern: v.optional(v.instance(RegExp)),
+                tenantEvidencePattern: v.optional(v.instance(RegExp)),
+            }),
+            "adapstory-mcp-plugin-first-boundary": ruleOption({
+                mcpPattern: v.optional(v.instance(RegExp)),
+                pluginGatewayPattern: v.optional(v.instance(RegExp)),
+                manifestPattern: v.optional(v.instance(RegExp)),
+            }),
+            "adapstory-tenant-isolation-evidence": ruleOption({
+                tenantScopedSurfacePattern: v.optional(v.instance(RegExp)),
+                tenantEvidencePattern: v.optional(v.instance(RegExp)),
+            }),
+            "adapstory-ai-capability-governance": ruleOption({
+                aiCapabilityPattern: v.optional(v.instance(RegExp)),
+                governancePattern: v.optional(v.instance(RegExp)),
+            }),
             apiGateway: ruleOption({
                 aclTag: v.optional(v.string()),
                 externalType: v.optional(v.string()),

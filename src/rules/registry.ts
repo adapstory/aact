@@ -6,6 +6,20 @@ import type { AdapstoryBffBoundaryOptions } from "./adapstoryBffBoundary";
 import { checkAdapstoryBffBoundary } from "./adapstoryBffBoundary";
 import type { AdapstoryExternalThroughGatewayOrAclOptions } from "./adapstoryExternalThroughGatewayOrAcl";
 import { checkAdapstoryExternalThroughGatewayOrAcl } from "./adapstoryExternalThroughGatewayOrAcl";
+import type {
+    AdapstoryAiCapabilityGovernanceOptions,
+    AdapstoryMcpPluginFirstBoundaryOptions,
+    AdapstorySmartLineTenantScopeOptions,
+    AdapstoryTenantIsolationEvidenceOptions,
+    AdapstoryWidgetLakeContractOptions,
+} from "./adapstoryIncubatingRules";
+import {
+    checkAdapstoryAiCapabilityGovernance,
+    checkAdapstoryMcpPluginFirstBoundary,
+    checkAdapstorySmartLineTenantScope,
+    checkAdapstoryTenantIsolationEvidence,
+    checkAdapstoryWidgetLakeContract,
+} from "./adapstoryIncubatingRules";
 import type { AdapstoryNoCoreBcCyclesOptions } from "./adapstoryNoCoreBcCycles";
 import { checkAdapstoryNoCoreBcCycles } from "./adapstoryNoCoreBcCycles";
 import type { AdapstoryPluginCapabilitiesFromManifestOptions } from "./adapstoryPluginCapabilitiesFromManifest";
@@ -85,6 +99,26 @@ export const ruleRegistry: readonly RuleDefinition[] = [
     defineRule<AdapstoryPluginCapabilitiesFromManifestOptions>({
         name: "adapstory-plugin-capabilities-from-manifest",
         check: checkAdapstoryPluginCapabilitiesFromManifest,
+    }),
+    defineRule<AdapstoryWidgetLakeContractOptions>({
+        name: "adapstory-widget-lake-contract",
+        check: checkAdapstoryWidgetLakeContract,
+    }),
+    defineRule<AdapstorySmartLineTenantScopeOptions>({
+        name: "adapstory-smart-line-tenant-scope",
+        check: checkAdapstorySmartLineTenantScope,
+    }),
+    defineRule<AdapstoryMcpPluginFirstBoundaryOptions>({
+        name: "adapstory-mcp-plugin-first-boundary",
+        check: checkAdapstoryMcpPluginFirstBoundary,
+    }),
+    defineRule<AdapstoryTenantIsolationEvidenceOptions>({
+        name: "adapstory-tenant-isolation-evidence",
+        check: checkAdapstoryTenantIsolationEvidence,
+    }),
+    defineRule<AdapstoryAiCapabilityGovernanceOptions>({
+        name: "adapstory-ai-capability-governance",
+        check: checkAdapstoryAiCapabilityGovernance,
     }),
     defineRule<ApiGatewayOptions>({
         name: "apiGateway",
