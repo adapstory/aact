@@ -293,14 +293,27 @@ export default {
   });
 });
 
+describe("aact skill", () => {
+  it("defaults to install and accepts install options", async () => {
+    const targetRoot = path.join(workDir, "skills");
+    const result = await runCli(["skill", "--dry-run", "--target", targetRoot]);
+
+    expect(result.exitCode).toBe(0);
+    await expect(
+      fs.access(path.join(targetRoot, "aact-architect")),
+    ).rejects.toThrow();
+  });
+});
+
 describe("aact --help / --version", () => {
-  it("--help lists all four subcommands", async () => {
+  it("--help lists the user-facing subcommands", async () => {
     const result = await runCli(["--help"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("init");
     expect(result.stdout).toContain("check");
     expect(result.stdout).toContain("analyze");
     expect(result.stdout).toContain("generate");
+    expect(result.stdout).toContain("skill");
   });
 
   it("--help reports a version that matches package.json", async () => {
