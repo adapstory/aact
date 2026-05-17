@@ -4,6 +4,21 @@ All notable changes to `aact` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v3.0.0-beta.5 — 2026-05-17
+
+Agent skill installer. No library API changes; safe upgrade.
+
+### Added
+
+- `aact skill` / `aact skill install` command for installing the community
+  `aact-architect` skill from
+  `https://github.com/ChS23/aact-architect-skill.git`.
+- Client targets for shared Agent Skills (`~/.agents/skills`), Claude Code
+  (`~/.claude/skills`) and Cline (`~/.cline/skills`). Codex, Cursor and
+  GitHub Copilot resolve to the shared target.
+- `--target`, `--repo`, `--ref`, `--force`, `--dry-run`, `--client` and
+  per-client flags for controlled installation/update flows.
+
 ## v3.0.0-beta.4 — 2026-05-14
 
 PlantUML loader robustness. No API changes; safe upgrade.
