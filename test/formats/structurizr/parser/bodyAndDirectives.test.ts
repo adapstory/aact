@@ -96,6 +96,19 @@ describe("Structurizr parser — body statements + directives", () => {
     expect(model.containers["API"]?.link).toBe("https://docs.example.com/api");
   });
 
+  it("body `properties` accepts bare `/` as a value (e.g. groupSeparator)", () => {
+    const src = `workspace {
+      model {
+        properties {
+          "structurizr.groupSeparator" /
+        }
+        api = container "API"
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
   it("body `properties { key value }` lands on Container.properties", () => {
     const src = `workspace {
       model {

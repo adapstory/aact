@@ -79,6 +79,12 @@ export const LBrace = createToken({ name: "LBrace", pattern: /\{/ });
 export const RBrace = createToken({ name: "RBrace", pattern: /\}/ });
 export const Equals = createToken({ name: "Equals", pattern: /=/ });
 export const Comma = createToken({ name: "Comma", pattern: /,/ });
+/**
+ * Standalone `/` token. Used as a property value (`structurizr.
+ * groupSeparator /`) — the reference whitespace tokeniser accepts any
+ * non-empty token in that slot. We surface it as a dedicated token so
+ * the parser can OR over it where bare punctuation is expected. */
+export const Slash = createToken({ name: "Slash", pattern: /\// });
 
 // ── Identifier (referenced by keyword `longer_alt`) ────────────────────
 
@@ -259,6 +265,13 @@ export const allTokens = [
   RBrace,
   Equals,
   Comma,
+  // Slash must come AFTER NoRelationship/Relationship/etc so they win
+  // when they appear; standalone `/` only matches when no longer
+  // operator does. Slash also competes with Identifier (which now
+  // accepts `/` mid-token); `/` at the START of a token does not
+  // match Identifier (Identifier requires a leading `\w`), so the
+  // standalone slash falls through to here.
+  Slash,
 
   // !directives
   BangIncludeUrl, // before BangInclude (longer prefix)

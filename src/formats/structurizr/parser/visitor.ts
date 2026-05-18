@@ -537,9 +537,13 @@ class StructurizrCstToAst extends BaseVisitor {
     };
   }
 
-  propertyEntry(ctx: { key: [IToken]; value: [IToken] }) {
+  propertyEntry(ctx: {
+    key: [IToken];
+    value?: [IToken];
+    valueSlash?: [IToken];
+  }) {
     const keyToken = ctx.key[0];
-    const valueToken = ctx.value[0];
+    const valueToken = (ctx.value ?? ctx.valueSlash)![0];
     const isStringValue = valueToken.tokenType.name === "StringLiteral";
     const isStringKey = keyToken.tokenType.name === "StringLiteral";
     return {

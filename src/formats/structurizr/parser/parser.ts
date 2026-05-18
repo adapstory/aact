@@ -57,6 +57,7 @@ import {
   Properties,
   RBrace,
   Relationship,
+  Slash,
   SoftwareSystem,
   StringLiteral,
   Tag,
@@ -136,6 +137,7 @@ class StructurizrParser extends CstParser {
       { ALT: () => this.SUBRULE(this.reopenDeclaration) },
       { ALT: () => this.SUBRULE(this.relationship) },
       { ALT: () => this.SUBRULE(this.directive) },
+      { ALT: () => this.SUBRULE(this.propertiesBlock) },
     ]);
   });
 
@@ -279,9 +281,13 @@ class StructurizrParser extends CstParser {
       { ALT: () => this.CONSUME1(StringLiteral, { LABEL: "key" }) },
       { ALT: () => this.CONSUME1(Identifier, { LABEL: "key" }) },
     ]);
+    // Value can also be a bare `/` — reference fixtures use it for
+    // `structurizr.groupSeparator /`. Identifier covers letters,
+    // digits, `.`, `_`, `-`, `/` mid-token; Slash covers a lone `/`.
     this.OR2([
       { ALT: () => this.CONSUME2(StringLiteral, { LABEL: "value" }) },
       { ALT: () => this.CONSUME2(Identifier, { LABEL: "value" }) },
+      { ALT: () => this.CONSUME(Slash, { LABEL: "valueSlash" }) },
     ]);
   });
 
