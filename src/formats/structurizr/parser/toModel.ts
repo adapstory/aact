@@ -149,6 +149,9 @@ const handleGroup = (
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
 ): void => {
+  const groupName = group.name.value;
+  const containersBefore = containers.length;
+  const boundariesBefore = boundaries.length;
   for (const member of group.members) {
     if (member.kind === "relationship") {
       handleRelationship(member, containers, identifierMap);
@@ -162,7 +165,26 @@ const handleGroup = (
       );
     }
   }
+  // Tag every element that was newly added inside the group with
+  // `properties.group = <groupName>` so downstream consumers (rules,
+  // diagram renderers) can recognise the grouping. Groups themselves
+  // are not C4 elements — they're a visual / organisational hint, so
+  // they must not appear in the Model as a Container or Boundary.
+  for (let i = containersBefore; i < containers.length; i++) {
+    containers[i] = withGroupProperty(containers[i], groupName);
+  }
+  for (let i = boundariesBefore; i < boundaries.length; i++) {
+    boundaries[i] = withGroupProperty(boundaries[i], groupName);
+  }
 };
+
+const withGroupProperty = <T extends Container | Boundary>(
+  el: T,
+  groupName: string,
+): T => ({
+  ...el,
+  properties: { ...el.properties, group: groupName },
+});
 
 const handleBoundary = (
   element: Extract<ElementNode, { kind: "softwareSystem" | "container" }>,
