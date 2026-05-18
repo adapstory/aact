@@ -103,7 +103,7 @@ describe("Structurizr parser — implicit-source relationships", () => {
     expect(rel?.to).toBe("DB");
     expect(rel?.description).toBe("writes to");
     expect(rel?.technology).toBe("JDBC");
-    expect(rel?.tags).toEqual(["internal", "critical"]);
+    expect(rel?.tags).toEqual(["Relationship", "internal", "critical"]);
   });
 
   it("implicit-source at model scope is dropped (no enclosing element)", () => {

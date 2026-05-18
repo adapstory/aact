@@ -18,7 +18,7 @@ describe("Structurizr parser — re-open form", () => {
     expect(model.containers["API"]).toEqual(
       expect.objectContaining({
         description: "Updated description",
-        tags: ["core"],
+        tags: ["Element", "Container", "core"],
       }),
     );
   });
@@ -57,7 +57,7 @@ describe("Structurizr parser — re-open form", () => {
     expect(model.boundaries["Bank"]).toEqual(
       expect.objectContaining({
         description: "Reopened bank description",
-        tags: ["core"],
+        tags: ["Element", "Software System", "core"],
       }),
     );
   });
@@ -75,6 +75,8 @@ describe("Structurizr parser — re-open form", () => {
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
     expect(model.containers["API"]?.tags).toEqual([
+      "Element",
+      "Container",
       "external",
       "core",
       "critical",

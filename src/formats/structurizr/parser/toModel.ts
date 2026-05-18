@@ -264,7 +264,11 @@ const aggregateBody = (
     element.kind === "container" || element.kind === "component"
       ? element.headerTechnology?.value
       : undefined;
-  const tags: string[] = [];
+  // Seed tags with the reference parser's element-kind defaults.
+  // The Java parser stamps every element with "Element" plus a
+  // kind-specific tag (`Person`, `Software System`, `Container`,
+  // `Component`); explicit header and body tags are appended.
+  const tags: string[] = [...defaultTagsForKind(element.kind)];
   if (element.headerTags?.value)
     tags.push(...splitTags(element.headerTags.value));
   let link: string | undefined;
@@ -468,7 +472,10 @@ const handleRelationship = (
     to: destinationName,
     description: rel.headerDescription?.value,
     technology: rel.headerTechnology?.value,
-    tags: rel.headerTags ? splitTags(rel.headerTags.value) : [],
+    tags: [
+      ...DEFAULT_RELATION_TAGS,
+      ...(rel.headerTags ? splitTags(rel.headerTags.value) : []),
+    ],
     sourceLocation: rel.range,
   };
 
@@ -676,6 +683,39 @@ const splitTags = (raw: string): readonly string[] =>
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+
+/**
+ * Default tag set the reference parser stamps on every element of
+ * a given DSL kind. Order matters — `Element` first, then the
+ * kind-specific label (with space for `Software System`).
+ */
+const defaultTagsForKind = (kind: ElementNode["kind"]): readonly string[] => {
+  switch (kind) {
+    case "person": {
+      return ["Element", "Person"];
+    }
+    case "softwareSystem": {
+      return ["Element", "Software System"];
+    }
+    case "container": {
+      return ["Element", "Container"];
+    }
+    case "component": {
+      return ["Element", "Component"];
+    }
+    case "group": {
+      // Groups aren't C4 elements — handled elsewhere; return empty
+      // so callers that pass a group don't accidentally seed tags.
+      return [];
+    }
+  }
+};
+
+/**
+ * Default tag set the reference parser stamps on every relationship.
+ * Header / body tags append after this.
+ */
+const DEFAULT_RELATION_TAGS: readonly string[] = ["Relationship"];
 
 // Re-export the Model type so callers don't need a separate import.
 

@@ -40,6 +40,8 @@ describe("Structurizr parser — body statements + directives", () => {
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
     expect(model.containers["API"]?.tags).toEqual([
+      "Element",
+      "Container",
       "external",
       "api",
       "compliance",
@@ -55,7 +57,11 @@ describe("Structurizr parser — body statements + directives", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["API"]?.tags).toEqual(["compliance"]);
+    expect(model.containers["API"]?.tags).toEqual([
+      "Element",
+      "Container",
+      "compliance",
+    ]);
   });
 
   it("body `url` lands on Container.link", () => {
@@ -173,7 +179,7 @@ describe("Structurizr parser — body statements + directives", () => {
     expect(model.boundaries["Bank"]).toEqual(
       expect.objectContaining({
         description: "The bank's internal system",
-        tags: ["core"],
+        tags: ["Element", "Software System", "core"],
       }),
     );
     expect(model.containers["API"]).toBeDefined();
