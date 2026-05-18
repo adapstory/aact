@@ -123,6 +123,39 @@ describe("Structurizr parser — implicit-source relationships", () => {
   });
 });
 
+describe("Structurizr parser — `this` as destination", () => {
+  it("resolves `source -> this` to enclosing element on destination side", () => {
+    const src = `workspace {
+      model {
+        other = softwareSystem "Other"
+        bank = softwareSystem "Bank" {
+          other -> this "called by"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["Other"]?.relations).toEqual([
+      expect.objectContaining({ to: "Bank", description: "called by" }),
+    ]);
+  });
+
+  it("`this -> this` resolves both endpoints to enclosing element", () => {
+    const src = `workspace {
+      model {
+        bank = softwareSystem "Bank" {
+          this -> this "self call"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["Bank"]?.relations).toEqual([
+      expect.objectContaining({ to: "Bank", description: "self call" }),
+    ]);
+  });
+});
+
 describe("Structurizr parser — `-/>` no-relationship form", () => {
   it("parses `source -/> destination` without emitting a Model edge", () => {
     const src = `workspace {

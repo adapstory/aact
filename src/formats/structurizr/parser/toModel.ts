@@ -452,10 +452,14 @@ const handleRelationship = (
     identifierMap,
     enclosingElementName,
   );
-  const destinationName =
-    identifierMap.get(rel.destination.name.toLowerCase()) ??
-    rel.destination.name;
-  if (!sourceName) return;
+  // `this` keyword on the destination side resolves to the enclosing
+  // element — same rule as on the source side. `softwareSystem "X" {
+  // container "Y" { other -> this } }` makes `Y` the destination.
+  const destinationName = rel.destination.isThis
+    ? enclosingElementName
+    : (identifierMap.get(rel.destination.name.toLowerCase()) ??
+      rel.destination.name);
+  if (!sourceName || !destinationName) return;
 
   const sourceContainer = containers.find((c) => c.name === sourceName);
   if (!sourceContainer) return;
