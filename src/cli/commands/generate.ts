@@ -1,79 +1,245 @@
 import fs from "node:fs/promises";
 
-import { defineCommand } from "citty";
-import consola from "consola";
 import path from "pathe";
 
+import type { AactConfig } from "../../config";
 import { loadFormat } from "../../formats/registry";
 import { canGenerate } from "../../formats/types";
-import { loadAndValidateConfig } from "../loadConfig";
 import { loadModel } from "../loadModel";
+import type { Diagnostic, Renderer } from "../output";
+import { ToolError } from "../output";
+import type { ExecuteResult } from "../run";
+import { cliCommandWithConfig } from "../run";
+import { configArg, jsonArg } from "../sharedArgs";
 
-/**
- * Generate command — Model → format artefact. Использует format registry,
- * формат self-describes capability через `canGenerate`. Output dispatch
- * через unified `FormatOutput.files` — single-file (PlantUML/Mermaid) или
- * multi-file (k8s manifests). Stdout если output не задан И один файл.
- */
-export const generate = defineCommand({
+// -----------------------------------------------------------------------------
+// Public data shape (envelope.data for `aact generate`)
+// -----------------------------------------------------------------------------
+
+export type GenerateOutputSink = "stdout" | "file" | "directory" | "none";
+
+export interface GeneratedFileInfo {
+  /** Path relative to outputPath for directory sinks; basename for file sinks; "<stdout>" for stdout. */
+  readonly path: string;
+  readonly bytes: number;
+}
+
+export interface GenerateData {
+  readonly formatName: string;
+  readonly outputSink: GenerateOutputSink;
+  readonly outputPath: string | null;
+  readonly files: readonly GeneratedFileInfo[];
+}
+
+// -----------------------------------------------------------------------------
+// Sink resolution — UNIX-style: `-` means stdout
+// -----------------------------------------------------------------------------
+
+type Sink =
+  | { readonly kind: "stdout" }
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "directory"; readonly path: string };
+
+const STDOUT_SENTINEL = "-";
+
+const resolveSink = (
+  args: { output?: string },
+  config: AactConfig,
+  fileCount: number,
+): Sink => {
+  if (fileCount === 1) {
+    if (args.output === STDOUT_SENTINEL) return { kind: "stdout" };
+    if (args.output) return { kind: "file", path: args.output };
+    // No --output for a single-file artefact: stream to stdout (UNIX default).
+    return { kind: "stdout" };
+  }
+
+  // Multi-file: directory sink is required.
+  if (args.output === STDOUT_SENTINEL) {
+    throw new ToolError(
+      "config.missingOutputPath",
+      "Multi-file artefact cannot stream to stdout — provide --output <directory>.",
+    );
+  }
+  const dir =
+    args.output ??
+    config.generate?.kubernetes?.path ??
+    "fixtures/kubernetes/microservices";
+  return { kind: "directory", path: dir };
+};
+
+// -----------------------------------------------------------------------------
+// Pure executor
+// -----------------------------------------------------------------------------
+
+export interface GenerateArgs {
+  readonly format?: string;
+  readonly output?: string;
+  readonly json?: boolean;
+}
+
+const loadFormatOrThrow = async (formatName: string) => {
+  try {
+    return await loadFormat(formatName);
+  } catch (error) {
+    throw new ToolError(
+      "format.unknown",
+      error instanceof Error ? error.message : String(error),
+      { format: formatName },
+    );
+  }
+};
+
+export const executeGenerate = async (
+  config: AactConfig,
+  args: GenerateArgs,
+): Promise<ExecuteResult<GenerateData>> => {
+  const formatName = args.format ?? "plantuml";
+  const format = await loadFormatOrThrow(formatName);
+
+  if (!canGenerate(format)) {
+    throw new ToolError(
+      "format.unknown",
+      `Format "${format.name}" doesn't support generate`,
+      { format: format.name },
+    );
+  }
+
+  const { model } = await loadModel(config);
+  const output = format.generate(model);
+
+  if (output.files.length === 0) {
+    const diagnostic: Diagnostic = {
+      kind: "format.emptyOutput",
+      message: "Generator produced no files",
+      severity: "warning",
+      context: { format: formatName },
+    };
+    return {
+      data: {
+        formatName,
+        outputSink: "none",
+        outputPath: null,
+        files: [],
+      },
+      exitCode: 0,
+      diagnostics: [diagnostic],
+    };
+  }
+
+  const sink = resolveSink(args, config, output.files.length);
+
+  // JSON mode owns stdout for the envelope; artefact cannot live there.
+  if (args.json === true && sink.kind === "stdout") {
+    throw new ToolError(
+      "config.outputCollidesWithJson",
+      `generate --json requires --output <path> — stdout is reserved for the JSON envelope (single-file artefact would otherwise stream there).`,
+      { format: formatName },
+    );
+  }
+
+  if (sink.kind === "stdout") {
+    const file = output.files[0];
+    process.stdout.write(file.content);
+    return {
+      data: {
+        formatName,
+        outputSink: "stdout",
+        outputPath: null,
+        files: [{ path: "<stdout>", bytes: file.content.length }],
+      },
+      exitCode: 0,
+      stdoutClaimed: true,
+    };
+  }
+
+  if (sink.kind === "file") {
+    const file = output.files[0];
+    await fs.writeFile(sink.path, file.content);
+    return {
+      data: {
+        formatName,
+        outputSink: "file",
+        outputPath: sink.path,
+        files: [{ path: sink.path, bytes: file.content.length }],
+      },
+      exitCode: 0,
+    };
+  }
+
+  // directory sink
+  await fs.mkdir(sink.path, { recursive: true });
+  await Promise.all(
+    output.files.map((f) =>
+      fs.writeFile(path.join(sink.path, f.path), f.content),
+    ),
+  );
+  return {
+    data: {
+      formatName,
+      outputSink: "directory",
+      outputPath: sink.path,
+      files: output.files.map((f) => ({
+        path: f.path,
+        bytes: f.content.length,
+      })),
+    },
+    exitCode: 0,
+  };
+};
+
+// -----------------------------------------------------------------------------
+// Text rendering — mirrors current consola.success messages
+// -----------------------------------------------------------------------------
+
+export const renderGenerateText: Renderer<GenerateData> = (envelope, sink) => {
+  const { data } = envelope;
+
+  if (data.outputSink === "none") {
+    sink.write("⚠ Generator produced no files\n");
+    return;
+  }
+
+  if (data.outputSink === "stdout") {
+    // The artefact itself is already on stdout. Envelope goes to stderr via
+    // stdoutClaimed → this writes a brief confirmation.
+    sink.write(
+      `✔ Generated ${data.formatName} artefact (${data.files[0].bytes} bytes) to stdout\n`,
+    );
+    return;
+  }
+
+  if (data.outputSink === "file") {
+    sink.write(`✔ Written to ${data.outputPath}\n`);
+    return;
+  }
+
+  // directory
+  sink.write(
+    `✔ Generated ${data.files.length} file(s) in ${data.outputPath}\n`,
+  );
+};
+
+// -----------------------------------------------------------------------------
+// Command definition
+// -----------------------------------------------------------------------------
+
+export const generate = cliCommandWithConfig({
+  name: "generate",
   meta: { description: "Generate architecture artifacts" },
   args: {
-    config: {
-      type: "string",
-      description: "Path to aact config file",
-    },
+    ...configArg,
+    ...jsonArg,
     output: {
       type: "string",
-      description: "Output path (file for single output, directory for multi)",
+      description:
+        "Output path: file for single-file artefacts, directory for multi-file, '-' for stdout",
     },
     format: {
       type: "string",
       description: "Target format name (plantuml, kubernetes, ...)",
     },
   },
-  async run({ args }) {
-    const config = await loadAndValidateConfig(args.config);
-    const { model } = await loadModel(config);
-
-    const formatName = args.format ?? "plantuml";
-    const format = await loadFormat(formatName);
-
-    if (!canGenerate(format)) {
-      throw new Error(`Format "${format.name}" doesn't support generate`);
-    }
-
-    const output = format.generate(model);
-
-    if (output.files.length === 0) {
-      consola.warn("Generator produced no files");
-      return;
-    }
-
-    // Single-file output: write to args.output (file) или stdout.
-    if (output.files.length === 1) {
-      const file = output.files[0];
-      if (args.output) {
-        await fs.writeFile(args.output, file.content);
-        consola.success(`Written to ${args.output}`);
-      } else {
-        console.log(file.content);
-      }
-      return;
-    }
-
-    // Multi-file output: write each file под `args.output` directory.
-    const targetDir =
-      args.output ??
-      config.generate?.kubernetes?.path ??
-      "fixtures/kubernetes/microservices";
-
-    await fs.mkdir(targetDir, { recursive: true });
-    await Promise.all(
-      output.files.map((f) =>
-        fs.writeFile(path.join(targetDir, f.path), f.content),
-      ),
-    );
-
-    consola.success(`Generated ${output.files.length} file(s) in ${targetDir}`);
-  },
+  renderText: renderGenerateText,
+  execute: (ctx, config) => executeGenerate(config, ctx.args as GenerateArgs),
 });

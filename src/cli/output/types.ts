@@ -38,6 +38,7 @@ export type DiagnosticKind =
   | "format.unsupportedFix"
   | "format.missingWritePath"
   | "format.unknown"
+  | "format.emptyOutput"
   // Skill installer
   | "skill.unmanagedDir"
   | "skill.repoMismatch"

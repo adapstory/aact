@@ -423,6 +423,53 @@ export default {
   });
 });
 
+describe("aact generate", () => {
+  it("streams plantuml to stdout by default (UNIX pipe)", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["generate"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("@startuml");
+    expect(result.stdout).toContain("@enduml");
+  });
+
+  it("writes plantuml to --output file", async () => {
+    await runCli(["init"]);
+    const outFile = path.join(workDir, "out.puml");
+    const result = await runCli(["generate", "--output", outFile]);
+    expect(result.exitCode).toBe(0);
+    const written = await fs.readFile(outFile, "utf8");
+    expect(written).toContain("@startuml");
+  });
+
+  it("--json + --output emits envelope on stdout, artefact on disk", async () => {
+    await runCli(["init"]);
+    const outFile = path.join(workDir, "out.puml");
+    const result = await runCli(["generate", "--json", "--output", outFile]);
+    expect(result.exitCode).toBe(0);
+
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe("generate");
+    expect(envelope.ok).toBe(true);
+
+    const data = envelope.data as Record<string, unknown>;
+    expect(data.outputSink).toBe("file");
+    expect(data.outputPath).toBe(outFile);
+
+    const written = await fs.readFile(outFile, "utf8");
+    expect(written).toContain("@startuml");
+  });
+
+  it("--json without --output exits 2 (stdout collision)", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["generate", "--json"]);
+    expect(result.exitCode).toBe(2);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const diag = (envelope.diagnostics as Array<Record<string, unknown>>)[0];
+    expect(diag.kind).toBe("config.outputCollidesWithJson");
+  });
+});
+
 describe("aact skill", () => {
   it("defaults to install and accepts install options", async () => {
     const targetRoot = path.join(workDir, "skills");
