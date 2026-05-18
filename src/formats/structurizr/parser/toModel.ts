@@ -21,6 +21,7 @@ import type {
   Boundary,
   Container,
   ContainerKind,
+  ModelIssue,
   Relation,
 } from "../../../model";
 import { buildModel } from "../../../model";
@@ -53,9 +54,21 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
   // user-visible `name` doubles as the lookup key.
   const identifierMap = new Map<string, string>();
 
+  // Parser-emitted issues. Collisions on identifier registration land
+  // here so the linter can surface them through `LoadResult.issues`
+  // without disturbing the structural model.
+  const parserIssues: ModelIssue[] = [];
+
   for (const model of pickModels(workspace)) {
     for (const child of model.children) {
-      collectModelChild(child, containers, boundaries, identifierMap);
+      collectModelChild(
+        child,
+        containers,
+        boundaries,
+        identifierMap,
+        undefined,
+        parserIssues,
+      );
     }
   }
 
@@ -63,11 +76,15 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
     applyImpliedRelationships(containers, boundaries);
   }
 
-  return buildModel({
+  const built = buildModel({
     containers,
     boundaries,
     rootBoundaryNames: boundaries.map((b) => b.name),
   });
+  return {
+    model: built.model,
+    issues: [...parserIssues, ...built.issues],
+  };
 };
 
 /**
@@ -214,6 +231,7 @@ const collectModelChild = (
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
+  parserIssues: ModelIssue[],
 ): void => {
   if (child.kind === "relationship") {
     handleRelationship(child, containers, identifierMap);
@@ -230,6 +248,7 @@ const collectModelChild = (
       boundaries,
       identifierMap,
       parentIdentifierPath,
+      parserIssues,
     );
   }
   // Directives (include / const / var / identifiers /
@@ -271,6 +290,7 @@ const handleGroup = (
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
+  parserIssues: ModelIssue[],
 ): void => {
   const groupName = group.name.value;
   const containersBefore = containers.length;
@@ -285,6 +305,7 @@ const handleGroup = (
         boundaries,
         identifierMap,
         parentIdentifierPath,
+        parserIssues,
       );
     }
   }
@@ -317,6 +338,7 @@ const handleBoundary = (
   identifierMap: Map<string, string>,
   selfIdentifierPath: string,
   name: string,
+  parserIssues: ModelIssue[],
 ): void => {
   const displayName = element.name.value;
   const childContainerNames: string[] = [];
@@ -329,6 +351,7 @@ const handleBoundary = (
       boundaries,
       identifierMap,
       selfIdentifierPath,
+      parserIssues,
     );
     // The nested child's Model key is its own DSL identifier
     // (assignedIdentifier if present, else its display name). We
@@ -494,6 +517,7 @@ const handleElement = (
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
+  parserIssues: ModelIssue[],
 ): void => {
   const displayName = element.name.value;
   // Container.name is the DSL identifier (the short id authors write
@@ -503,6 +527,25 @@ const handleElement = (
   // When the user omits the `id =` prefix, the display name doubles
   // as the identifier.
   const lookupKey = element.assignedIdentifier?.name ?? displayName;
+  // Reference parser's `IdentifiersRegister.register` throws when the
+  // same identifier is bound to two distinct elements. We detect this
+  // separately from the resolution map (which holds id→id) by
+  // checking whether a Container/Boundary with this name already
+  // exists. Surface the collision as a ModelIssue so the linter
+  // warns without aborting the parse — last-write-wins keeps the
+  // most recent element as the resolution target.
+  // Case-insensitive: `IdentifiersRegister.getElement` does
+  // equalsIgnoreCase, so `BANK` colliding with `bank` registers as a
+  // duplicate too. Checking identifierMap.has on the lowercased key
+  // catches that — identifierMap is populated only by handleElement,
+  // not by reopen, so reopens don't trigger false positives.
+  const alreadyRegistered = identifierMap.has(lookupKey.toLowerCase());
+  if (alreadyRegistered) {
+    parserIssues.push({
+      kind: "duplicate-identifier",
+      identifier: lookupKey,
+    });
+  }
   // Keys are stored lowercased and looked up lowercased to mirror the
   // reference parser's equalsIgnoreCase identifier resolution. The
   // mapped value is the canonical identifier itself (the
@@ -526,6 +569,7 @@ const handleElement = (
       boundaries,
       identifierMap,
       parentIdentifierPath,
+      parserIssues,
     );
     return;
   }
@@ -547,6 +591,7 @@ const handleElement = (
       identifierMap,
       selfIdentifierPath,
       lookupKey,
+      parserIssues,
     );
     return;
   }

@@ -19,6 +19,11 @@ export type ModelIssue =
   | { kind: "boundary-cycle"; path: readonly string[] }
   | { kind: "duplicate-container-name"; name: string }
   | { kind: "duplicate-boundary-name"; name: string }
+  /** Two distinct elements registered under the same DSL identifier
+   * (`api = container "X"` then `api = container "Y"` later). Reference
+   * Structurizr throws on this; we surface it as an issue so the linter
+   * runs all rules but the user sees the collision. */
+  | { kind: "duplicate-identifier"; identifier: string }
   | { kind: "self-relation"; container: string }
   | { kind: "unknown-kind"; container: string; raw: string };
 
