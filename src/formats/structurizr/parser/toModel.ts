@@ -431,9 +431,11 @@ const aggregateBody = (
         for (const entry of item.entries) {
           const key = `perspective.${entry.name.name}`;
           properties[key] = entry.description.value;
-          if (entry.value) {
-            properties[`${key}.value`] = entry.value.value;
-          }
+          // Reference always exposes `Perspective.getValue()` as a
+          // string — `""` when the user omitted the third argument.
+          // Mirror that with an explicit empty-string property so
+          // downstream lookups don't see undefined.
+          properties[`${key}.value`] = entry.value?.value ?? "";
         }
 
         break;

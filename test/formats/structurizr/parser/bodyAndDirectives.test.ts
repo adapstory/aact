@@ -48,6 +48,25 @@ describe("Structurizr parser — body statements + directives", () => {
     ]);
   });
 
+  it("body `tags` accepts multiple whitespace-separated string args", () => {
+    const src = `workspace {
+      model {
+        api = container "API" {
+          tags "alpha" "beta" "gamma"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["API"]?.tags).toEqual([
+      "Element",
+      "Container",
+      "alpha",
+      "beta",
+      "gamma",
+    ]);
+  });
+
   it("body `tag` appends a single tag", () => {
     const src = `workspace {
       model {
@@ -111,6 +130,7 @@ describe("Structurizr parser — body statements + directives", () => {
     expect(parseErrors).toEqual([]);
     expect(model.containers["API"]?.properties).toEqual({
       "perspective.Security": "OWASP top 10 covered",
+      "perspective.Security.value": "",
       "perspective.Scalability": "Tested to 10k rps",
       "perspective.Scalability.value": "high",
     });

@@ -243,7 +243,12 @@ class StructurizrParser extends CstParser {
 
   private tagsStmt = this.RULE("tagsStmt", () => {
     this.CONSUME(Tags);
-    this.CONSUME(StringLiteral);
+    // Reference DSL accepts either a single comma-separated string
+    // (`tags "a,b,c"`) or multiple whitespace-separated strings
+    // (`tags "a" "b" "c"`). The lexer keeps each `"..."` as a distinct
+    // StringLiteral; the visitor concatenates the values and lets
+    // splitTags handle the comma form.
+    this.AT_LEAST_ONE(() => this.CONSUME(StringLiteral));
   });
 
   private tagStmt = this.RULE("tagStmt", () => {

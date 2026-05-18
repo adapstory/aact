@@ -480,13 +480,22 @@ class StructurizrCstToAst extends BaseVisitor {
     };
   }
 
-  tagsStmt(ctx: { Tags: [IToken]; StringLiteral: [IToken] }) {
+  tagsStmt(ctx: { Tags: [IToken]; StringLiteral: IToken[] }) {
     const keyword = ctx.Tags[0];
-    const value = ctx.StringLiteral[0];
+    const tokens = ctx.StringLiteral;
+    // Multi-string form (`tags "a" "b" "c"`) joins the unwrapped values
+    // with `,` so the downstream splitTags pass produces three tags.
+    // Single-string form (`tags "a,b,c"`) is the comma case; both
+    // funnel through the same value string.
+    const joined = tokens.map((t) => unwrapStringLiteral(t.image)).join(",");
     return {
       kind: "tags" as const,
-      value: this.stringFromToken(value),
-      range: rangeFromTokens(keyword, value, this.file),
+      value: {
+        kind: "string" as const,
+        value: joined,
+        range: rangeFromTokens(tokens[0], tokens.at(-1)!, this.file),
+      },
+      range: rangeFromTokens(keyword, tokens.at(-1)!, this.file),
     };
   }
 
