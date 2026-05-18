@@ -215,3 +215,7 @@ pnpm-workspace.yaml
 
 # Local research drafts / notes
 docs/research/
+
+### v3 parser reference repositories — fetched on demand by scripts/fetch-parser-refs.sh.
+### Studied for grammar and behaviour only, never copied verbatim into this repo (license firewall).
+.parser-refs/
