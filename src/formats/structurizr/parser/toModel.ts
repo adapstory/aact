@@ -89,11 +89,33 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
     containers,
     boundaries,
     rootBoundaryNames: boundaries.map((b) => b.name),
+    workspace: workspaceMetadata(workspace),
   });
   return {
     model: built.model,
     issues: [...parserIssues, ...built.issues],
   };
+};
+
+/**
+ * Surface workspace-level metadata from the AST so the Model carries
+ * `Workspace.getName()` / `getDescription()` info the reference
+ * parser exposes. Returns undefined when nothing useful was set, so
+ * the Model object stays terse.
+ */
+const workspaceMetadata = (
+  workspace: WorkspaceNode,
+):
+  | { name?: string; description?: string; extendsTarget?: string }
+  | undefined => {
+  const meta: { name?: string; description?: string; extendsTarget?: string } =
+    {};
+  if (workspace.name) meta.name = workspace.name.value;
+  if (workspace.description) meta.description = workspace.description.value;
+  if (workspace.extendsTarget)
+    meta.extendsTarget = workspace.extendsTarget.value;
+  if (Object.keys(meta).length === 0) return undefined;
+  return meta;
 };
 
 /**

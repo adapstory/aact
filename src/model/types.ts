@@ -154,4 +154,18 @@ export interface Model {
   readonly boundaries: Readonly<Record<string, Boundary>>;
   /** Корневые boundaries — top-level в рендере. Все остальные boundary вложены через `boundaryNames`. */
   readonly rootBoundaryNames: readonly string[];
+  /**
+   * Workspace-level metadata: name, description, version. Optional —
+   * formats that don't carry workspace headers (e.g. PUML) leave it
+   * undefined; Structurizr DSL / JSON populate it from `workspace
+   * "name" "description" extends "..."` and `properties` blocks.
+   * Reference parsers expose this via `Workspace.getName()` etc.
+   */
+  readonly workspace?: WorkspaceMetadata;
+}
+
+export interface WorkspaceMetadata {
+  readonly name?: string;
+  readonly description?: string;
+  readonly extendsTarget?: string;
 }

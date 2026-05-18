@@ -1,6 +1,6 @@
-import type { Boundary, Container, Model } from "./types";
-import type {ModelIssue} from "./validate";
-import {  validateModel } from "./validate";
+import type { Boundary, Container, Model, WorkspaceMetadata } from "./types";
+import type { ModelIssue } from "./validate";
+import { validateModel } from "./validate";
 
 /**
  * Все loader'ы (PlantUML, Structurizr, Kubernetes, future Mermaid/Compose/
@@ -21,6 +21,9 @@ export interface ModelBuildInput {
   readonly containers: readonly Container[];
   readonly boundaries: readonly Boundary[];
   readonly rootBoundaryNames: readonly string[];
+  /** Workspace-level metadata (name, description, extends target).
+   *  Optional — formats without a workspace header omit it. */
+  readonly workspace?: WorkspaceMetadata;
   /** Issues найденные loader'ом до сборки (parse errors etc.) — добавляются к ModelIssue'ам валидации. */
   readonly preIssues?: readonly ModelIssue[];
 }
@@ -65,6 +68,7 @@ export const buildModel = (input: ModelBuildInput): ModelBuildResult => {
     containers: Object.freeze(containerMap),
     boundaries: Object.freeze(boundaryMap),
     rootBoundaryNames: Object.freeze([...input.rootBoundaryNames]),
+    ...(input.workspace ? { workspace: Object.freeze(input.workspace) } : {}),
   });
 
   return {
