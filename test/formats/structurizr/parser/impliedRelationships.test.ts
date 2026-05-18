@@ -17,18 +17,18 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
     // Explicit: api -> user
-    expect(model.containers["API"]?.relations).toEqual([
-      expect.objectContaining({ to: "User", description: "Sends data to" }),
+    expect(model.containers["api"]?.relations).toEqual([
+      expect.objectContaining({ to: "user", description: "Sends data to" }),
     ]);
     // Implied: Bank (parent of api) -> User
-    const bankFromContainers = model.containers["Bank"];
+    const bankFromContainers = model.containers["bank"];
     expect(bankFromContainers).toBeUndefined(); // Bank is a Boundary
     // The implied edge attaches at the Boundary's identifier; since
     // Bank is represented as a Boundary (no Container), the implied
     // edge cannot land on it directly. This is a known limitation:
     // the reference Model treats softwareSystem as both Element and
     // potential Boundary, but our split forbids edges on Boundary.
-    expect(model.boundaries["Bank"]).toBeDefined();
+    expect(model.boundaries["bank"]).toBeDefined();
   });
 
   it("implied edge inherits description and technology, with empty tags", () => {
@@ -48,10 +48,10 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
     // Explicit edge keeps default + header tags
-    const explicit = model.containers["A"]?.relations[0];
+    const explicit = model.containers["a"]?.relations[0];
     expect(explicit?.tags).toEqual(["Relationship", "internal"]);
     // No implied edge from "B" (no relation from B exists)
-    expect(model.containers["B"]?.relations).toEqual([]);
+    expect(model.containers["b"]?.relations).toEqual([]);
   });
 
   it("does nothing when the directive is absent", () => {
@@ -66,11 +66,11 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["A"]?.relations).toEqual([
-      expect.objectContaining({ to: "Ext", description: "uses" }),
+    expect(model.containers["a"]?.relations).toEqual([
+      expect.objectContaining({ to: "ext", description: "uses" }),
     ]);
     // No implied edges
-    expect(model.containers["Ext"]?.relations).toEqual([]);
+    expect(model.containers["ext"]?.relations).toEqual([]);
   });
 
   it("does nothing for `!impliedRelationships false`", () => {
@@ -86,6 +86,6 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Ext"]?.relations).toEqual([]);
+    expect(model.containers["ext"]?.relations).toEqual([]);
   });
 });

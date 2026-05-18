@@ -16,7 +16,7 @@ describe("Structurizr parser — deployment family", () => {
     }`;
     const { model, parseErrors, infoBlocks } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Bank"]).toBeDefined();
+    expect(model.containers["bank"]).toBeDefined();
     expect(infoBlocks).toEqual([
       expect.objectContaining({ construct: "deploymentEnvironment" }),
     ]);
@@ -66,9 +66,9 @@ describe("Structurizr parser — implicit-source relationships", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    const rels = model.containers["Alice"]?.relations ?? [];
+    const rels = model.containers["a"]?.relations ?? [];
     expect(rels).toEqual([
-      expect.objectContaining({ to: "B", description: "uses" }),
+      expect.objectContaining({ to: "b", description: "uses" }),
     ]);
   });
 
@@ -83,8 +83,8 @@ describe("Structurizr parser — implicit-source relationships", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["A"]?.relations).toEqual([
-      expect.objectContaining({ to: "B", description: "uses" }),
+    expect(model.containers["a"]?.relations).toEqual([
+      expect.objectContaining({ to: "b", description: "uses" }),
     ]);
   });
 
@@ -99,8 +99,8 @@ describe("Structurizr parser — implicit-source relationships", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    const rel = model.containers["API"]?.relations[0];
-    expect(rel?.to).toBe("DB");
+    const rel = model.containers["api"]?.relations[0];
+    expect(rel?.to).toBe("db");
     expect(rel?.description).toBe("writes to");
     expect(rel?.technology).toBe("JDBC");
     expect(rel?.tags).toEqual(["Relationship", "internal", "critical"]);
@@ -118,8 +118,8 @@ describe("Structurizr parser — implicit-source relationships", () => {
     expect(parseErrors).toEqual([]);
     // No enclosing element at model scope — the implicit-source line
     // is silently dropped from the model.
-    expect(model.containers["Alice"]?.relations).toEqual([]);
-    expect(model.containers["B"]?.relations).toEqual([]);
+    expect(model.containers["a"]?.relations).toEqual([]);
+    expect(model.containers["b"]?.relations).toEqual([]);
   });
 });
 
@@ -135,8 +135,8 @@ describe("Structurizr parser — `this` as destination", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Other"]?.relations).toEqual([
-      expect.objectContaining({ to: "Bank", description: "called by" }),
+    expect(model.containers["other"]?.relations).toEqual([
+      expect.objectContaining({ to: "bank", description: "called by" }),
     ]);
   });
 
@@ -150,8 +150,8 @@ describe("Structurizr parser — `this` as destination", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Bank"]?.relations).toEqual([
-      expect.objectContaining({ to: "Bank", description: "self call" }),
+    expect(model.containers["bank"]?.relations).toEqual([
+      expect.objectContaining({ to: "bank", description: "self call" }),
     ]);
   });
 });
@@ -167,8 +167,8 @@ describe("Structurizr parser — `-/>` no-relationship form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["A"]?.relations).toEqual([]);
-    expect(model.containers["B"]?.relations).toEqual([]);
+    expect(model.containers["a"]?.relations).toEqual([]);
+    expect(model.containers["b"]?.relations).toEqual([]);
   });
 
   it("`-/>` does not crash even with description / tags arguments", () => {

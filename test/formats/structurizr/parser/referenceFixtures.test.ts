@@ -41,11 +41,11 @@ maybe("Structurizr parser — reference DSL fixtures", () => {
     );
     expect(parseErrors).toEqual([]);
     // user + softwareSystem
-    expect(model.containers["User"]?.kind).toBe("Person");
-    expect(model.containers["Software System"]?.kind).toBe("System");
+    expect(model.containers["user"]?.kind).toBe("Person");
+    expect(model.containers["softwareSystem"]?.kind).toBe("System");
     // single explicit relationship
-    expect(model.containers["User"]?.relations).toEqual([
-      expect.objectContaining({ to: "Software System", description: "Uses" }),
+    expect(model.containers["user"]?.relations).toEqual([
+      expect.objectContaining({ to: "softwareSystem", description: "Uses" }),
     ]);
     // views block dropped via opaque strip
     expect(opaqueBlocks.some((b) => b.name === "views")).toBe(true);
@@ -81,36 +81,36 @@ maybe("Structurizr parser — reference DSL fixtures", () => {
     expect(parseErrors).toEqual([]);
 
     // Key people
-    expect(model.containers["Personal Banking Customer"]?.kind).toBe("Person");
-    expect(model.containers["Customer Service Staff"]?.kind).toBe("Person");
-    expect(model.containers["Back Office Staff"]?.kind).toBe("Person");
+    expect(model.containers["customer"]?.kind).toBe("Person");
+    expect(model.containers["supportStaff"]?.kind).toBe("Person");
+    expect(model.containers["backoffice"]?.kind).toBe("Person");
 
     // Leaf software systems (no nested children)
-    expect(model.containers["Mainframe Banking System"]?.kind).toBe("System");
-    expect(model.containers["E-mail System"]?.kind).toBe("System");
-    expect(model.containers["ATM"]?.kind).toBe("System");
+    expect(model.containers["mainframe"]?.kind).toBe("System");
+    expect(model.containers["email"]?.kind).toBe("System");
+    expect(model.containers["atm"]?.kind).toBe("System");
 
     // Internet Banking System has nested children → promoted to a
     // System Boundary
-    expect(model.boundaries["Internet Banking System"]).toBeDefined();
-    expect(model.boundaries["Internet Banking System"]?.kind).toBe("System");
+    expect(model.boundaries["internetBankingSystem"]).toBeDefined();
+    expect(model.boundaries["internetBankingSystem"]?.kind).toBe("System");
 
     // API Application is a Container with nested Components → promoted
     // to a Container Boundary
-    expect(model.boundaries["API Application"]).toBeDefined();
-    expect(model.boundaries["API Application"]?.kind).toBe("Container");
+    expect(model.boundaries["apiApplication"]).toBeDefined();
+    expect(model.boundaries["apiApplication"]?.kind).toBe("Container");
 
     // Components inside API Application
-    expect(model.containers["Sign In Controller"]?.kind).toBe("Component");
-    expect(model.containers["Security Component"]?.kind).toBe("Component");
+    expect(model.containers["signinController"]?.kind).toBe("Component");
+    expect(model.containers["securityComponent"]?.kind).toBe("Component");
 
     // Explicit relationship: customer → internet banking system
-    const customer = model.containers["Personal Banking Customer"];
+    const customer = model.containers["customer"];
     expect(customer?.relations.length).toBeGreaterThan(0);
     expect(customer?.relations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          to: "Internet Banking System",
+          to: "internetBankingSystem",
           description: "Views account balances, and makes payments using",
         }),
       ]),
@@ -122,7 +122,7 @@ maybe("Structurizr parser — reference DSL fixtures", () => {
     );
 
     // group "Big Bank plc" stamps properties.group on its children
-    expect(model.containers["Customer Service Staff"]?.properties?.group).toBe(
+    expect(model.containers["supportStaff"]?.properties?.group).toBe(
       "Big Bank plc",
     );
 

@@ -17,40 +17,32 @@ describe("structurizrFormat.load — .dsl dispatch", () => {
   it("loads ecommerce workspace.dsl into a populated Model", async () => {
     const result = await load(ECOMMERCE_DSL);
 
-    // Three internal systems (Orders/Inventory/Fulfillment) each
+    // Three internal systems (orders/inventory/fulfillment) each
     // gain a Boundary because they contain nested containers;
-    // Payment Provider and Notification Provider are leaf systems
-    // → Containers with kind System.
+    // payment and notifications are leaf systems → Containers.
+    // Model.containers keyed by DSL identifier (assignedIdentifier).
     expect(Object.keys(result.model.boundaries).sort()).toEqual([
-      "Fulfillment",
-      "Inventory",
-      "Orders",
+      "fulfillment",
+      "inventory",
+      "orders",
     ]);
-    expect(result.model.containers["Payment Provider"]?.kind).toBe("System");
-    expect(result.model.containers["Notification Provider"]?.kind).toBe(
-      "System",
-    );
+    expect(result.model.containers["payment"]?.kind).toBe("System");
+    expect(result.model.containers["notifications"]?.kind).toBe("System");
 
     // Container kinds resolved by name (CRUD → repo tag, DB → kind
     // ContainerDb when technology heuristic kicks in)
-    expect(result.model.containers["Orders API"]?.kind).toBe("Container");
-    expect(result.model.containers["Orders DB"]?.technology).toBe("PostgreSQL");
+    expect(result.model.containers["orders_api"]?.kind).toBe("Container");
+    expect(result.model.containers["orders_db"]?.technology).toBe("PostgreSQL");
 
     // Explicit relationships preserved with description, technology,
-    // and default `Relationship` tag
-    const ordersApi = result.model.containers["Orders API"];
+    // and default `Relationship` tag. relation.to references DSL ids.
+    const ordersApi = result.model.containers["orders_api"];
     expect(ordersApi?.relations).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ to: "orders_crud", description: "HTTP" }),
+        expect.objectContaining({ to: "inventory_api", description: "HTTP" }),
         expect.objectContaining({
-          to: "Orders CRUD",
-          description: "HTTP",
-        }),
-        expect.objectContaining({
-          to: "Inventory API",
-          description: "HTTP",
-        }),
-        expect.objectContaining({
-          to: "Fulfillment API",
+          to: "fulfillment_api",
           description: "HTTP",
         }),
       ]),

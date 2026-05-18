@@ -15,7 +15,7 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["API"]).toEqual(
+    expect(model.containers["api"]).toEqual(
       expect.objectContaining({
         description: "Updated description",
         tags: ["Element", "Container", "core"],
@@ -35,8 +35,8 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["API"]?.relations).toEqual([
-      expect.objectContaining({ to: "DB", description: "writes" }),
+    expect(model.containers["api"]?.relations).toEqual([
+      expect.objectContaining({ to: "db", description: "writes" }),
     ]);
   });
 
@@ -54,7 +54,7 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.boundaries["Bank"]).toEqual(
+    expect(model.boundaries["bank"]).toEqual(
       expect.objectContaining({
         description: "Reopened bank description",
         tags: ["Element", "Software System", "core"],
@@ -74,7 +74,7 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["API"]?.tags).toEqual([
+    expect(model.containers["api"]?.tags).toEqual([
       "Element",
       "Container",
       "external",
@@ -94,7 +94,7 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["API"]).toBeDefined();
+    expect(model.containers["api"]).toBeDefined();
   });
 
   it("hierarchical reopen target resolves via dotted identifier map", () => {
@@ -110,6 +110,6 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["API"]?.description).toBe("API inside bank");
+    expect(model.containers["api"]?.description).toBe("API inside bank");
   });
 });

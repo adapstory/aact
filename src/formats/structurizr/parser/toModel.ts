@@ -316,6 +316,7 @@ const handleBoundary = (
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   selfIdentifierPath: string,
+  name: string,
 ): void => {
   const displayName = element.name.value;
   const childContainerNames: string[] = [];
@@ -329,7 +330,12 @@ const handleBoundary = (
       identifierMap,
       selfIdentifierPath,
     );
-    const nestedName = child.name.value;
+    // The nested child's Model key is its own DSL identifier
+    // (assignedIdentifier if present, else its display name). We
+    // resolve through identifierMap which already stores that mapping.
+    const childLookup = child.assignedIdentifier?.name ?? child.name.value;
+    const nestedName =
+      identifierMap.get(childLookup.toLowerCase()) ?? childLookup;
     if (boundaries.some((b) => b.name === nestedName)) {
       childBoundaryNames.push(nestedName);
     } else {
@@ -338,7 +344,7 @@ const handleBoundary = (
   }
   for (const child of children) {
     if (child.kind === "relationship") {
-      handleRelationship(child, containers, identifierMap, displayName);
+      handleRelationship(child, containers, identifierMap, name);
     }
   }
   // Aggregate the parent element's own body statements onto the
@@ -348,7 +354,7 @@ const handleBoundary = (
   // disappear just because the element gained nested children.
   const agg = aggregateBody(element);
   boundaries.push({
-    name: displayName,
+    name,
     label: displayName,
     kind: element.kind === "softwareSystem" ? "System" : "Container",
     description: agg.description,
@@ -458,11 +464,12 @@ const handleLeaf = (
   children: readonly (ElementNode | RelationshipNode)[],
   containers: Container[],
   identifierMap: Map<string, string>,
+  name: string,
 ): void => {
   const displayName = element.name.value;
   const agg = aggregateBody(element);
   containers.push({
-    name: displayName,
+    name,
     label: displayName,
     kind: kindFromAstKind(element.kind),
     external: false,
@@ -476,7 +483,7 @@ const handleLeaf = (
   });
   for (const child of children) {
     if (child.kind === "relationship") {
-      handleRelationship(child, containers, identifierMap, displayName);
+      handleRelationship(child, containers, identifierMap, name);
     }
   }
 };
@@ -489,20 +496,27 @@ const handleElement = (
   parentIdentifierPath: string | undefined,
 ): void => {
   const displayName = element.name.value;
+  // Container.name is the DSL identifier (the short id authors write
+  // in source — `orders_crud = container "Orders CRUD"` gives name
+  // `orders_crud` and label `Orders CRUD`). Matches the Model JSDoc
+  // contract: "PlantUML alias / Structurizr structurizr.dsl.identifier".
+  // When the user omits the `id =` prefix, the display name doubles
+  // as the identifier.
   const lookupKey = element.assignedIdentifier?.name ?? displayName;
   // Keys are stored lowercased and looked up lowercased to mirror the
-  // reference parser's equalsIgnoreCase identifier resolution.
-  identifierMap.set(lookupKey.toLowerCase(), displayName);
+  // reference parser's equalsIgnoreCase identifier resolution. The
+  // mapped value is the canonical identifier itself (the
+  // Model.containers key) — relations / reopens resolve to that.
+  identifierMap.set(lookupKey.toLowerCase(), lookupKey);
   const selfIdentifierPath = parentIdentifierPath
     ? `${parentIdentifierPath}.${lookupKey}`
     : lookupKey;
-  // Record the qualified path too — `bank.api` resolves to the same
-  // displayName as the local `api`. Multiple nested boundaries can
-  // share local identifiers (`bank.api` vs `payments.api`); the
-  // qualified path disambiguates while the local key keeps backwards
-  // compatibility with un-prefixed references.
+  // Hierarchical path also resolves to the leaf identifier. Multiple
+  // nested boundaries can share local identifiers (`bank.api` vs
+  // `payments.api`); the qualified path disambiguates while the local
+  // key keeps backwards compatibility with un-prefixed references.
   if (selfIdentifierPath !== lookupKey) {
-    identifierMap.set(selfIdentifierPath.toLowerCase(), displayName);
+    identifierMap.set(selfIdentifierPath.toLowerCase(), lookupKey);
   }
 
   if (element.kind === "group") {
@@ -532,10 +546,11 @@ const handleElement = (
       boundaries,
       identifierMap,
       selfIdentifierPath,
+      lookupKey,
     );
     return;
   }
-  handleLeaf(element, children, containers, identifierMap);
+  handleLeaf(element, children, containers, identifierMap, lookupKey);
 };
 
 const kindFromAstKind = (k: ElementNode["kind"]): ContainerKind => {

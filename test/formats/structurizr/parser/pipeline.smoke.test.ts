@@ -20,8 +20,8 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     }`;
     const { model, parseErrors } = parseSource(src, "test.dsl");
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Customer"]?.kind).toBe("Person");
-    expect(model.containers["Mainframe Banking"]?.kind).toBe("System");
+    expect(model.containers["customer"]?.kind).toBe("Person");
+    expect(model.containers["mainframe"]?.kind).toBe("System");
   });
 
   it("promotes softwareSystem with nested containers to a System boundary", () => {
@@ -36,13 +36,10 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     const { model, parseErrors } = parseSource(src, "test.dsl");
     expect(parseErrors).toEqual([]);
     // Bank promoted to Boundary; its children are Containers.
-    expect(model.boundaries["Internet Banking"]?.kind).toBe("System");
-    expect(model.boundaries["Internet Banking"]?.containerNames).toEqual([
-      "Web App",
-      "API",
-    ]);
-    expect(model.containers["Web App"]?.technology).toBe("Java");
-    expect(model.containers["API"]?.technology).toBe("Node.js");
+    expect(model.boundaries["bank"]?.kind).toBe("System");
+    expect(model.boundaries["bank"]?.containerNames).toEqual(["web", "api"]);
+    expect(model.containers["web"]?.technology).toBe("Java");
+    expect(model.containers["api"]?.technology).toBe("Node.js");
   });
 
   it("resolves relationships using `id = element` assignments", () => {
@@ -55,9 +52,9 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     }`;
     const { model, parseErrors } = parseSource(src, "test.dsl");
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Customer"]?.relations).toEqual([
+    expect(model.containers["customer"]?.relations).toEqual([
       expect.objectContaining({
-        to: "Internet Banking",
+        to: "bank",
         description: "Uses",
       }),
     ]);
@@ -71,7 +68,7 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     }`;
     const { model, parseErrors } = parseSource(src, "fixture.dsl");
     expect(parseErrors).toEqual([]);
-    const loc = model.containers["Bank"]?.sourceLocation;
+    const loc = model.containers["bank"]?.sourceLocation;
     expect(loc).toBeDefined();
     expect(loc?.file).toBe("fixture.dsl");
     // The `bank = softwareSystem "Bank"` line starts on line 3 of the
@@ -86,7 +83,7 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     const src = `workspace {\n  model {\n    a = person "A"\n    b = person "B"\n    a -> b "uses"\n  }\n}`;
     const { model, parseErrors } = parseSource(src, "rel.dsl");
     expect(parseErrors).toEqual([]);
-    const rel = model.containers["A"]?.relations[0];
+    const rel = model.containers["a"]?.relations[0];
     expect(rel).toBeDefined();
     expect(rel?.sourceLocation?.file).toBe("rel.dsl");
     expect(rel?.sourceLocation?.start.line).toBe(5);
@@ -141,11 +138,11 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     }`;
     const { model, parseErrors } = parseSource(src, "hier.dsl");
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Client"]?.relations).toEqual([
-      expect.objectContaining({ to: "API", description: "calls" }),
+    expect(model.containers["client"]?.relations).toEqual([
+      expect.objectContaining({ to: "api", description: "calls" }),
     ]);
-    expect(model.containers["API"]?.relations).toEqual([
-      expect.objectContaining({ to: "Database", description: "reads" }),
+    expect(model.containers["api"]?.relations).toEqual([
+      expect.objectContaining({ to: "db", description: "reads" }),
     ]);
   });
 
@@ -161,7 +158,7 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
 }`;
     const { model, parseErrors } = parseSource(src, "multi.dsl");
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Bank"]?.description).toBe(
+    expect(model.containers["bank"]?.description).toBe(
       "Internet Banking System",
     );
   });

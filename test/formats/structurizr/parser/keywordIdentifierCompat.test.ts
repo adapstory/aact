@@ -16,8 +16,8 @@ describe("Structurizr parser — keyword-as-identifier compatibility", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Bank"]).toBeDefined();
-    expect(model.containers["API"]).toBeDefined();
+    expect(model.containers["softwareSystem"]).toBeDefined();
+    expect(model.containers["container"]).toBeDefined();
   });
 
   it("element-kind keyword identifier resolves on the source side", () => {
@@ -30,8 +30,8 @@ describe("Structurizr parser — keyword-as-identifier compatibility", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Bank"]?.relations).toEqual([
-      expect.objectContaining({ to: "API", description: "uses" }),
+    expect(model.containers["softwareSystem"]?.relations).toEqual([
+      expect.objectContaining({ to: "api", description: "uses" }),
     ]);
   });
 
@@ -45,8 +45,8 @@ describe("Structurizr parser — keyword-as-identifier compatibility", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["User"]?.relations).toEqual([
-      expect.objectContaining({ to: "Bank", description: "uses" }),
+    expect(model.containers["user"]?.relations).toEqual([
+      expect.objectContaining({ to: "softwareSystem", description: "uses" }),
     ]);
   });
 
@@ -61,7 +61,7 @@ describe("Structurizr parser — keyword-as-identifier compatibility", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["Bank"]?.description).toBe("Updated");
+    expect(model.containers["softwareSystem"]?.description).toBe("Updated");
   });
 });
 
@@ -78,8 +78,8 @@ describe("Structurizr parser — case-insensitive identifier lookup", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["User"]?.relations).toEqual([
-      expect.objectContaining({ to: "Bank", description: "uses" }),
+    expect(model.containers["user"]?.relations).toEqual([
+      expect.objectContaining({ to: "bank", description: "uses" }),
     ]);
   });
 
@@ -95,8 +95,8 @@ describe("Structurizr parser — case-insensitive identifier lookup", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["User"]?.relations).toEqual([
-      expect.objectContaining({ to: "API", description: "uses" }),
+    expect(model.containers["user"]?.relations).toEqual([
+      expect.objectContaining({ to: "api", description: "uses" }),
     ]);
   });
 });

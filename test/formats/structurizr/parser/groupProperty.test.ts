@@ -15,9 +15,9 @@ describe("Structurizr parser — group → properties.group", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["API"]?.properties?.group).toBe("Payments");
-    expect(model.containers["DB"]?.properties?.group).toBe("Payments");
-    expect(model.containers["External"]?.properties?.group).toBeUndefined();
+    expect(model.containers["api"]?.properties?.group).toBe("Payments");
+    expect(model.containers["db"]?.properties?.group).toBe("Payments");
+    expect(model.containers["external"]?.properties?.group).toBeUndefined();
   });
 
   it("group does not itself appear in the Model as a Container or Boundary", () => {
@@ -47,7 +47,7 @@ describe("Structurizr parser — group → properties.group", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["API"]?.properties).toEqual({
+    expect(model.containers["api"]?.properties).toEqual({
       owner: "platform-team",
       group: "Payments",
     });
