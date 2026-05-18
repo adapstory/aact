@@ -59,11 +59,133 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
     }
   }
 
+  if (impliedRelationshipsEnabled(workspace)) {
+    applyImpliedRelationships(containers, boundaries);
+  }
+
   return buildModel({
     containers,
     boundaries,
     rootBoundaryNames: boundaries.map((b) => b.name),
   });
+};
+
+/**
+ * Walk every model block and look for an `!impliedRelationships true`
+ * directive. The reference parser supports several strategy strings,
+ * but the linter only needs the simple boolean `true` case today —
+ * the default strategy is no-op and FQCN strategies are out of scope.
+ */
+const impliedRelationshipsEnabled = (workspace: WorkspaceNode): boolean => {
+  for (const model of pickModels(workspace)) {
+    for (const child of model.children) {
+      if (
+        child.kind === "impliedRelationships" &&
+        child.value.value === "true"
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+/**
+ * Apply the reference parser's
+ * `CreateImpliedRelationshipsUnlessAnyRelationshipExistsStrategy`:
+ *
+ *   for every existing relation (source → destination):
+ *     for every ancestor of source S' (S' != source, walking up boundaries):
+ *       for every ancestor of destination D' (D' != destination):
+ *         add an implied relation S' → D' inheriting the original
+ *         description and technology, with empty tags — unless an
+ *         identical relation already exists between S' and D'.
+ *
+ * Boundaries can have child containers (`Boundary.containerNames`)
+ * and child boundaries (`Boundary.boundaryNames`); the parent chain
+ * is reversed by scanning every boundary once.
+ */
+const applyImpliedRelationships = (
+  containers: Container[],
+  boundaries: Boundary[],
+): void => {
+  // Build a child-name → parent-name index for both containers and
+  // boundaries. Boundaries are also Model elements in the reference;
+  // we treat them as containers for the purpose of edge attachment
+  // and add the implied edge by inserting a synthesized leaf if the
+  // ancestor itself isn't a Container today.
+  const parentOf = new Map<string, string>();
+  for (const b of boundaries) {
+    for (const c of b.containerNames) parentOf.set(c, b.name);
+    for (const nested of b.boundaryNames) parentOf.set(nested, b.name);
+  }
+
+  const ancestorsOf = (name: string): readonly string[] => {
+    const out: string[] = [];
+    let cur = parentOf.get(name);
+    while (cur) {
+      out.push(cur);
+      cur = parentOf.get(cur);
+    }
+    return out;
+  };
+
+  const relationExists = (
+    fromName: string,
+    toName: string,
+    description: string | undefined,
+  ): boolean => {
+    const c = containers.find((x) => x.name === fromName);
+    if (!c) return false;
+    return c.relations.some(
+      (r) => r.to === toName && r.description === description,
+    );
+  };
+
+  // Snapshot the existing explicit relations BEFORE we start mutating,
+  // so implied edges don't trigger further implied edges.
+  type SourceRel = {
+    sourceName: string;
+    rel: Relation;
+  };
+  const seeds: SourceRel[] = [];
+  for (const c of containers) {
+    for (const rel of c.relations) {
+      seeds.push({ sourceName: c.name, rel });
+    }
+  }
+
+  for (const { sourceName, rel } of seeds) {
+    const srcAncestors = ancestorsOf(sourceName);
+    const dstAncestors = ancestorsOf(rel.to);
+    // Pairs include (ancestor, dest), (source, ancestor), and
+    // (ancestor, ancestor), excluding the original (source, dest).
+    const pairs: { from: string; to: string }[] = [];
+    for (const sa of srcAncestors) pairs.push({ from: sa, to: rel.to });
+    for (const da of dstAncestors) pairs.push({ from: sourceName, to: da });
+    for (const sa of srcAncestors) {
+      for (const da of dstAncestors) {
+        pairs.push({ from: sa, to: da });
+      }
+    }
+    for (const { from, to } of pairs) {
+      if (from === to) continue;
+      if (relationExists(from, to, rel.description)) continue;
+      const idx = containers.findIndex((x) => x.name === from);
+      if (idx === -1) continue;
+      const impliedRel: Relation = {
+        to,
+        description: rel.description,
+        technology: rel.technology,
+        tags: [], // implied relations have empty tags per reference
+        sourceLocation: rel.sourceLocation,
+      };
+      containers[idx] = {
+        ...containers[idx],
+        relations: [...containers[idx].relations, impliedRel],
+      };
+    }
+  }
 };
 
 /** Workspaces have at most one model block, but the AST permits MANY
