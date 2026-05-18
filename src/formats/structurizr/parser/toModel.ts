@@ -360,7 +360,9 @@ const handleElement = (
 ): void => {
   const displayName = element.name.value;
   const lookupKey = element.assignedIdentifier?.name ?? displayName;
-  identifierMap.set(lookupKey, displayName);
+  // Keys are stored lowercased and looked up lowercased to mirror the
+  // reference parser's equalsIgnoreCase identifier resolution.
+  identifierMap.set(lookupKey.toLowerCase(), displayName);
   const selfIdentifierPath = parentIdentifierPath
     ? `${parentIdentifierPath}.${lookupKey}`
     : lookupKey;
@@ -370,7 +372,7 @@ const handleElement = (
   // qualified path disambiguates while the local key keeps backwards
   // compatibility with un-prefixed references.
   if (selfIdentifierPath !== lookupKey) {
-    identifierMap.set(selfIdentifierPath, displayName);
+    identifierMap.set(selfIdentifierPath.toLowerCase(), displayName);
   }
 
   if (element.kind === "group") {
@@ -451,7 +453,8 @@ const handleRelationship = (
     enclosingElementName,
   );
   const destinationName =
-    identifierMap.get(rel.destination.name) ?? rel.destination.name;
+    identifierMap.get(rel.destination.name.toLowerCase()) ??
+    rel.destination.name;
   if (!sourceName) return;
 
   const sourceContainer = containers.find((c) => c.name === sourceName);
@@ -490,7 +493,7 @@ const handleReopen = (
   identifierMap: Map<string, string>,
 ): void => {
   const targetDisplay =
-    identifierMap.get(reopen.target.name) ?? reopen.target.name;
+    identifierMap.get(reopen.target.name.toLowerCase()) ?? reopen.target.name;
 
   const bodyStatements = reopen.body.filter(
     (b): b is Exclude<ElementBodyNode, ElementNode | RelationshipNode> =>
@@ -661,7 +664,7 @@ const resolveRelationshipSource = (
 ): string | undefined => {
   if (!rel.source) return enclosingElementName;
   if (rel.source.isThis) return enclosingElementName;
-  return identifierMap.get(rel.source.name) ?? rel.source.name;
+  return identifierMap.get(rel.source.name.toLowerCase()) ?? rel.source.name;
 };
 
 const splitTags = (raw: string): readonly string[] =>

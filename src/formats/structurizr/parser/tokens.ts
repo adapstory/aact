@@ -151,7 +151,16 @@ export const BangRelationshipsSelector = directive(
 
 /** Helper: keyword tokens delegate to Identifier for the longer-alt
  * rule, so identifiers starting with a keyword (`workspaceName`) parse
- * as identifiers rather than `workspace` + `Name`. */
+ * as identifiers rather than `workspace` + `Name`.
+ *
+ * Match is case-sensitive in the lexer. The reference parser's
+ * whitespace-only tokeniser does case-insensitive dispatch later in
+ * the pipeline; we approximate by lowercasing keys before storing /
+ * looking up identifiers in toModel, which handles the realistic
+ * cases (`softwareSystem` vs `softwaresystem` references). A
+ * case-insensitive lexer pattern is rejected because it would match
+ * idiomatic uppercase constants (`NAME`, `FOO`) as the `name`/`foo`
+ * keywords. */
 const keyword = (name: string, lexeme: string) =>
   createToken({
     name,

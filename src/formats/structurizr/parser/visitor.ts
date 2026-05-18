@@ -107,6 +107,27 @@ const findClosingBrace = (cst: CstNode): IToken | undefined => {
   return rbrace?.[0];
 };
 
+/**
+ * `identifierName` subrule yields a CST node whose single child is
+ * the token that matched (Identifier | Person | SoftwareSystem | ...).
+ * Pull the token out regardless of which alternative fired.
+ */
+const tokenFromIdentifierName = (cst: CstNode): IToken => {
+  const children = cst.children as Readonly<Record<string, IToken[]>>;
+  for (const key of [
+    "Identifier",
+    "Person",
+    "SoftwareSystem",
+    "Container",
+    "Component",
+    "Group",
+  ]) {
+    const tok = children[key]?.[0];
+    if (tok) return tok;
+  }
+  throw new Error("identifierName CST had no recognised token alternative");
+};
+
 class StructurizrCstToAst extends BaseVisitor {
   private file = "";
 
@@ -183,8 +204,19 @@ class StructurizrCstToAst extends BaseVisitor {
     return undefined; // recovered / incomplete — caller filters
   }
 
+  /**
+   * `identifierName` subrule — no real AST output, the parent rule
+   * pulls the matched token out directly via `tokenFromIdentifierName`.
+   * The visitor method exists only to satisfy chevrotain's
+   * `validateVisitor` check that every rule has a corresponding
+   * method.
+   */
+  identifierName(): undefined {
+    return undefined;
+  }
+
   reopenDeclaration(ctx: ReopenDeclarationCtx): ModelChildNode {
-    const targetToken = ctx.target[0];
+    const targetToken = tokenFromIdentifierName(ctx.target[0]);
     const body = this.visit(ctx.elementBody[0]) as ElementBodyNode[];
     const closeToken = findClosingBrace(ctx.elementBody[0]);
     return {
@@ -204,16 +236,19 @@ class StructurizrCstToAst extends BaseVisitor {
     const body: ElementBodyNode[] = ctx.elementBody
       ? (this.visit(ctx.elementBody[0]) as ElementBodyNode[])
       : [];
-    const assigned = ctx.assignedIdentifier?.[0];
-    const assignedAst: AstIdentifier | undefined = assigned
+    const assignedCst = ctx.assignedIdentifier?.[0];
+    const assignedToken = assignedCst
+      ? tokenFromIdentifierName(assignedCst)
+      : undefined;
+    const assignedAst: AstIdentifier | undefined = assignedToken
       ? {
           kind: "identifier",
-          name: assigned.image,
-          range: rangeFromToken(assigned, this.file),
+          name: assignedToken.image,
+          range: rangeFromToken(assignedToken, this.file),
         }
       : undefined;
 
-    const startToken = assigned ?? header.kindToken;
+    const startToken = assignedToken ?? header.kindToken;
     const closingToken = ctx.elementBody?.[0]
       ? findClosingBrace(ctx.elementBody[0])
       : header.lastToken;
@@ -629,14 +664,18 @@ class StructurizrCstToAst extends BaseVisitor {
   }
 
   relationship(ctx: RelationshipCtx): RelationshipNode {
-    const sourceToken = ctx.source?.[0];
-    const destinationToken = ctx.destination[0];
-    // Chevrotain's CONSUME / CONSUME1 produce separate context keys for
-    // each numbered occurrence of the same token type. The explicit
-    // form's arrow lands in `arrow`; the implicit form uses different
-    // CONSUME indices and may land in `arrow` or in the raw
-    // Relationship / NoRelationship arrays — fall back through all
-    // possibilities so we always recover the arrow token.
+    // Source / destination each have two surface forms in the grammar:
+    //   - identifierName subrule (any identifier-like token)
+    //   - bare `this` keyword
+    // Resolve to a single IToken for downstream consumers.
+    const sourceToken =
+      (ctx.source && tokenFromIdentifierName(ctx.source[0])) ??
+      ctx.sourceThis?.[0];
+    const destinationToken =
+      (ctx.destination && tokenFromIdentifierName(ctx.destination[0])) ??
+      ctx.destinationThis![0];
+
+    // Arrow lands in one of three slots depending on which OR alt fired.
     const arrowToken =
       ctx.arrow?.[0] ?? ctx.Relationship?.[0] ?? ctx.NoRelationship?.[0];
 
@@ -651,24 +690,27 @@ class StructurizrCstToAst extends BaseVisitor {
           kind: "identifierRef",
           name: sourceToken.image,
           range: rangeFromToken(sourceToken, this.file),
-          ...(sourceToken.image === "this" ? { isThis: true as const } : {}),
+          ...(ctx.sourceThis ? { isThis: true as const } : {}),
         }
       : undefined;
     const destination: IdentifierRef = {
       kind: "identifierRef",
       name: destinationToken.image,
       range: rangeFromToken(destinationToken, this.file),
-      ...(destinationToken.image === "this" ? { isThis: true as const } : {}),
+      ...(ctx.destinationThis ? { isThis: true as const } : {}),
     };
-    const assigned = ctx.assignedIdentifier?.[0];
-    const assignedAst: AstIdentifier | undefined = assigned
+    const assignedCst = ctx.assignedIdentifier?.[0];
+    const assignedToken = assignedCst
+      ? tokenFromIdentifierName(assignedCst)
+      : undefined;
+    const assignedAst: AstIdentifier | undefined = assignedToken
       ? {
           kind: "identifier",
-          name: assigned.image,
-          range: rangeFromToken(assigned, this.file),
+          name: assignedToken.image,
+          range: rangeFromToken(assignedToken, this.file),
         }
       : undefined;
-    const startToken = assigned ?? sourceToken ?? arrowToken!;
+    const startToken = assignedToken ?? sourceToken ?? arrowToken!;
     return {
       kind: "relationship",
       assignedIdentifier: assignedAst,
@@ -725,12 +767,12 @@ interface ModelBodyItemCtx {
 }
 
 interface ReopenDeclarationCtx {
-  readonly target: readonly [IToken];
+  readonly target: readonly [CstNode];
   readonly elementBody: readonly [CstNode];
 }
 
 interface ElementDeclarationCtx {
-  readonly assignedIdentifier?: readonly [IToken];
+  readonly assignedIdentifier?: readonly [CstNode];
   readonly Equals?: readonly [IToken];
   readonly elementHeader: readonly [CstNode];
   readonly elementBody?: readonly [CstNode];
@@ -768,9 +810,11 @@ interface BodyStatementCtx {
 }
 
 interface RelationshipCtx {
-  readonly assignedIdentifier?: readonly [IToken];
-  readonly source?: readonly [IToken];
-  readonly destination: readonly [IToken];
+  readonly assignedIdentifier?: readonly [CstNode];
+  readonly source?: readonly [CstNode];
+  readonly sourceThis?: readonly [IToken];
+  readonly destination?: readonly [CstNode];
+  readonly destinationThis?: readonly [IToken];
   readonly arrow?: readonly IToken[];
   readonly Relationship?: readonly IToken[];
   readonly NoRelationship?: readonly IToken[];

@@ -120,7 +120,7 @@ class StructurizrParser extends CstParser {
   // element. Disambiguated from `id = element` and `id -> id` by the
   // `{` following the identifier.
   private reopenDeclaration = this.RULE("reopenDeclaration", () => {
-    this.CONSUME(Identifier, { LABEL: "target" });
+    this.SUBRULE(this.identifierName, { LABEL: "target" });
     this.SUBRULE(this.elementBody);
   });
 
@@ -128,11 +128,31 @@ class StructurizrParser extends CstParser {
 
   private elementDeclaration = this.RULE("elementDeclaration", () => {
     this.OPTION1(() => {
-      this.CONSUME(Identifier, { LABEL: "assignedIdentifier" });
+      this.SUBRULE(this.identifierName, { LABEL: "assignedIdentifier" });
       this.CONSUME(Equals);
     });
     this.SUBRULE(this.elementHeader);
     this.OPTION2(() => this.SUBRULE(this.elementBody));
+  });
+
+  /**
+   * Any token that can appear in identifier position: a plain
+   * `Identifier`, or an element-kind keyword (`person`, `softwareSystem`,
+   * `container`, `component`, `group`) used as an identifier. The
+   * reference parser's tokeniser is whitespace-only so `softwareSystem`
+   * is a perfectly valid identifier name in fixtures like
+   * `softwareSystem = softwareSystem "X"`. Visitor extracts the image
+   * regardless of which token alt matched.
+   */
+  private identifierName = this.RULE("identifierName", () => {
+    this.OR([
+      { ALT: () => this.CONSUME(Identifier) },
+      { ALT: () => this.CONSUME(Person) },
+      { ALT: () => this.CONSUME(SoftwareSystem) },
+      { ALT: () => this.CONSUME(Container) },
+      { ALT: () => this.CONSUME(Component) },
+      { ALT: () => this.CONSUME(Group) },
+    ]);
   });
 
   private elementHeader = this.RULE("elementHeader", () => {
@@ -328,18 +348,27 @@ class StructurizrParser extends CstParser {
       {
         ALT: () => {
           this.OPTION1(() => {
-            this.CONSUME(Identifier, { LABEL: "assignedIdentifier" });
+            this.SUBRULE(this.identifierName, { LABEL: "assignedIdentifier" });
             this.CONSUME(Equals);
           });
           this.OR2([
-            { ALT: () => this.CONSUME1(Identifier, { LABEL: "source" }) },
-            { ALT: () => this.CONSUME(This, { LABEL: "source" }) },
+            {
+              ALT: () =>
+                this.SUBRULE1(this.identifierName, { LABEL: "source" }),
+            },
+            { ALT: () => this.CONSUME(This, { LABEL: "sourceThis" }) },
           ]);
           this.OR1([
             { ALT: () => this.CONSUME(Relationship, { LABEL: "arrow" }) },
             { ALT: () => this.CONSUME(NoRelationship, { LABEL: "arrow" }) },
           ]);
-          this.CONSUME2(Identifier, { LABEL: "destination" });
+          this.OR4([
+            {
+              ALT: () =>
+                this.SUBRULE2(this.identifierName, { LABEL: "destination" }),
+            },
+            { ALT: () => this.CONSUME1(This, { LABEL: "destinationThis" }) },
+          ]);
           this.OPTION2(() =>
             this.CONSUME1(StringLiteral, { LABEL: "description" }),
           );
@@ -355,7 +384,13 @@ class StructurizrParser extends CstParser {
             { ALT: () => this.CONSUME1(Relationship, { LABEL: "arrow" }) },
             { ALT: () => this.CONSUME1(NoRelationship, { LABEL: "arrow" }) },
           ]);
-          this.CONSUME3(Identifier, { LABEL: "destination" });
+          this.OR5([
+            {
+              ALT: () =>
+                this.SUBRULE3(this.identifierName, { LABEL: "destination" }),
+            },
+            { ALT: () => this.CONSUME2(This, { LABEL: "destinationThis" }) },
+          ]);
           this.OPTION5(() =>
             this.CONSUME4(StringLiteral, { LABEL: "description" }),
           );
