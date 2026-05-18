@@ -38,6 +38,92 @@ behind the primary three.
 The chevrotain grammar is the **union** of categories 1–3. Category 4 is
 handled at lex time.
 
+## Implementation status (parser cutover readiness)
+
+After two rounds of agent-driven comparison against the reference
+Java parser (`StructurizrDslParser.java` + JUnit assertions in
+`*ParserTests.java`), the following list captures what's in place and
+what's deferred. **Every BLOCKING item is closed**; the remaining
+NOTABLE items don't prevent the parser from accepting realistic
+fixtures (Big Bank, getting-started, multi-line, etc.).
+
+### Closed
+
+- workspace / model / element / relationship base grammar
+- element body statements (description / technology / tags / tag / url
+  / properties / perspectives)
+- directives (`!include`, `!const`, `!var`, `!identifiers`,
+  `!impliedRelationships`) at top, workspace, and model scope
+- workspace-scope `properties { ... }`
+- bare paths in `!include` and `extends` (e.g. `path/to/parent.dsl`)
+- triple-quoted text blocks (`"""..."""`) as `!const` / `!var` values
+- multi-line `\` continuations (pre-lex pass)
+- opaque block stripping (views / styles / configuration / branding /
+  terminology / themes) with source range surfaced via
+  `ChevrotainParseResult.opaqueBlocks`
+- deployment-family blocks (deploymentEnvironment, deploymentNode,
+  deploymentGroup, infrastructureNode, softwareSystemInstance,
+  containerInstance, instanceOf, healthCheck) → `infoBlocks`
+- hard-removed constructs (`!ref`, `!extend`, `!constant`,
+  `enterprise`) become `parseErrors` with replacement-hint messages,
+  with whole-block strip when `{ ... }` follows
+- auxiliary directives (`!docs`, `!decisions`, `!adrs` — inline;
+  `!script`, `!plugin`, `!components` — block)
+- explicit `[id =] source -> destination [desc] [tech] [tags]`
+- implicit-source `-> destination ...` form inside element body
+- `this` as source AND destination, resolved to enclosing element
+- `-/>` no-relationship form (parsed, no Model edge)
+- hierarchical refs `bank.api -> bank.db` (Identifier accepts `.`)
+- bare slash in property values (`structurizr.groupSeparator /`)
+- case-insensitive identifier resolution
+- element-kind keyword used as identifier (`softwareSystem = softwareSystem "X"`)
+- reopen form `existing { body }` merges into prior Container/Boundary
+- group children → `Container.properties["group"]`
+- boundary-form body aggregation (promoted softwareSystem carries
+  description/tags/url/properties)
+- default tags per element kind (`Element` + `Person`/`Software System`/etc.)
+- default `Relationship` tag on every relation
+- `!impliedRelationships true` ancestor-edge propagation
+- multi-string `tags "a" "b" "c"` form
+- perspective without explicit value records `""`
+- CustomElement (`element <name>` keyword) → Container with `["Element"]` tag
+
+### Open (NOTABLE — non-blocking for cutover)
+
+- **Archetypes**: `archetypes { ... }` block + `--archetype->`
+  relationship form. Reference: `archetypesContext`. Once supported,
+  archetype defaults (description/technology/tags) propagate to
+  elements declared via the alias keyword.
+- **Selectors**: `!element`/`!elements`/`!relationship`/
+  `!relationships` with body — selector + property-modifier semantics.
+  Reference: `FindElement(s)Parser`, `FindRelationship(s)Parser`.
+- **String substitution**: `${NAME}` interpolation from `!const`/
+  `!var`/env into every string token. Reference:
+  `StructurizrDslParser:1385-1414`. Requires post-tokenize string
+  pass.
+- **Nested-group `structurizr.groupSeparator` join**: when the
+  property is set, child elements inside `group "Outer" { group "Inner" { … } }`
+  get `properties.group = "Outer/Inner"` instead of the inner-most
+  name only.
+- **Group as element-body property statement**: `component "X" { group "Layer" }`
+  should set `Component.properties.group = "Layer"` instead of
+  recording the group as a nested element. Today the group is dropped
+  because Components hold no element children in the Model anyway.
+- **Reopen with NEW nested elements**: `bank { newComponent = component "X" }`
+  silently drops the new child today; handleReopen only merges body
+  statements, not element children.
+- **Identifier re-registration error**: the reference throws when the
+  same element is registered under two different identifiers. We
+  silently overwrite the identifier map's value.
+- **Empty `""` vs `undefined`**: reference returns `""` for missing
+  description/technology/tags strings; our Model carries `undefined`
+  for absent values. Changing this affects the public Model contract
+  — deliberate divergence, deferred to a Model-API design pass.
+- **Workspace name/description in Model**: reference exposes
+  `Workspace.getName()` and `getDescription()`. Our Model has no
+  workspace metadata field — round-trip writers will need it. Deferred
+  to a Model-API design pass.
+
 ## 1. In-scope productions
 
 ### Lexical primitives
