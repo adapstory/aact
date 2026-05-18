@@ -60,7 +60,13 @@ export const parseSource = (
   text: string,
   filePath: string,
 ): ChevrotainParseResult => {
-  const lex = StructurizrLexer.tokenize(text);
+  // Pre-lexer pass: collapse backslash-newline continuations into a
+  // single logical line, mirroring the reference parser's line
+  // preprocessing (`StructurizrDslParser.preProcessLines`). Without
+  // this, fixtures like multi-line.dsl that wrap a long
+  // `softwareSystem` declaration across several lines fail to parse.
+  const joined = joinContinuationLines(text);
+  const lex = StructurizrLexer.tokenize(joined);
 
   // Pre-parse passes in order:
   //   1. Strip opaque workspace blocks (views/styles/…) so their inner
@@ -111,6 +117,23 @@ export const parseSource = (
     infoBlocks: deployment.blocks,
   };
 };
+
+/**
+ * Replace every `\\\n[whitespace]*` with a single space so the
+ * remaining text is one logical line per source line. The reference
+ * parser (`StructurizrDslParser:1311-1383`) strips the leading
+ * whitespace after the join; we use a single space to keep token
+ * separation (`softwareSystem\` joined with `name "X"` becomes
+ * `softwareSystem name "X"` rather than `softwareSystemname "X"`).
+ *
+ * Source positions in the joined string no longer match the original
+ * file — line numbers from the lexer point at the joined-line index.
+ * For downstream diagnostics this is acceptable: continuation lines
+ * are by convention logically one line, and reference parser
+ * diagnostics behave the same way.
+ */
+const joinContinuationLines = (text: string): string =>
+  text.replaceAll(/\\\r?\n[ \t]*/g, " ");
 
 const hardRemovedToParseError = (
   e: HardRemovedError,

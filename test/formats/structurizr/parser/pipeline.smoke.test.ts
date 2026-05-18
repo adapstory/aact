@@ -149,6 +149,23 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     ]);
   });
 
+  it("collapses backslash-newline continuations into one logical line", () => {
+    // Real-world fixture `multi-line.dsl` wraps an element declaration
+    // across several lines using `\` continuations.
+    const src = String.raw`workspace {
+  model {
+    bank = softwareSystem \
+      "Bank" \
+      "Internet Banking System"
+  }
+}`;
+    const { model, parseErrors } = parseSource(src, "multi.dsl");
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["Bank"]?.description).toBe(
+      "Internet Banking System",
+    );
+  });
+
   it("returns parseErrors (does not throw) on malformed input", () => {
     const { parseErrors } = parseSource(
       `workspace { model { unclosed`,
