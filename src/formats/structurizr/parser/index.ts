@@ -19,6 +19,7 @@ import type {
 } from "./preParse";
 import {
   findHardRemovedTokens,
+  normalizeKeywordCase,
   stripDeploymentBlocks,
   stripInlineDirectives,
   stripOpaqueBlocks,
@@ -75,7 +76,12 @@ export const parseSource = (
   //   2. Strip deployment-family blocks — recognised but not modelled.
   //   3. Convert hard-removed tokens (`!ref`/`enterprise`/…) into
   //      explicit errors with replacement hints.
-  const stripped = stripOpaqueBlocks(lex.tokens, filePath);
+  // First normalisation: rewrite lowercase keyword spellings
+  // (`softwaresystem`, `softwaresysteminstance`, …) from Identifier
+  // back to their canonical keyword tokens so the grammar matches
+  // the reference parser's case-insensitive dispatch.
+  const normalizedTokens = normalizeKeywordCase(lex.tokens);
+  const stripped = stripOpaqueBlocks(normalizedTokens, filePath);
   const deployment = stripDeploymentBlocks(stripped.tokens, filePath);
   // Strip inline `!docs` / `!decisions` / `!adrs` directives — they
   // take 1–2 positional path/importer args and no body. Run AFTER

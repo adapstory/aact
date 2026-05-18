@@ -108,6 +108,8 @@ const findClosingBrace = (cst: CstNode): IToken | undefined => {
   return rbrace?.[0];
 };
 
+const zeroPos = (): SourcePosition => ({ line: 1, col: 1, offset: 0 });
+
 /**
  * Strip `"""..."""` wrapping from a triple-quoted text block token.
  * The reference DSL preserves the inner contents verbatim — no escape
@@ -757,7 +759,34 @@ class StructurizrCstToAst extends BaseVisitor {
       ctx.sourceThis?.[0];
     const destinationToken =
       (ctx.destination && tokenFromIdentifierName(ctx.destination[0])) ??
-      ctx.destinationThis![0];
+      ctx.destinationThis?.[0];
+    if (!destinationToken) {
+      // Partial CST after parser recovery — leave the AST shape
+      // intact so downstream visitors don't crash, but mark the node
+      // as recovered. toModel filters relationships with no
+      // resolvable destination.
+      const arrowToken =
+        ctx.arrow?.[0] ?? ctx.Relationship?.[0] ?? ctx.NoRelationship?.[0];
+      const fallbackStart = sourceToken ?? arrowToken;
+      const fallbackEnd = arrowToken ?? sourceToken;
+      return {
+        kind: "relationship",
+        arrow: "->",
+        destination: {
+          kind: "identifierRef",
+          name: "<recovered>",
+          range: fallbackStart
+            ? rangeFromToken(fallbackStart, this.file)
+            : { file: this.file, start: zeroPos(), end: zeroPos() },
+        },
+        body: [],
+        range:
+          fallbackStart && fallbackEnd
+            ? rangeFromTokens(fallbackStart, fallbackEnd, this.file)
+            : { file: this.file, start: zeroPos(), end: zeroPos() },
+        recovered: true as const,
+      };
+    }
 
     // Arrow lands in one of three slots depending on which OR alt fired.
     const arrowToken =

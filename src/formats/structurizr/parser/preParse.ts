@@ -24,6 +24,7 @@
  */
 
 import type { IToken } from "chevrotain";
+import type { TokenType } from "chevrotain";
 import { tokenMatcher } from "chevrotain";
 
 import type { SourceLocation } from "../../../model";
@@ -38,18 +39,24 @@ import {
   BangRefHardError,
   BangScript,
   Branding,
+  Component,
   Configuration,
+  Container,
   ContainerInstance,
   DeploymentEnvironment,
   DeploymentGroup,
   DeploymentNode,
   EnterpriseHardError,
+  Equals,
+  Group,
   HealthCheck,
   Identifier,
   InfrastructureNode,
   InstanceOf,
   LBrace,
+  Person,
   RBrace,
+  SoftwareSystem,
   SoftwareSystemInstance,
   StringLiteral,
   Styles,
@@ -286,6 +293,48 @@ const isInlineDirectiveArg = (token: IToken): boolean => {
   );
 };
 
+/**
+ * Reference DSL fixtures (big-bank-plc.dsl) mix camelCase and
+ * lowercase keyword spellings: `softwareSystem` next to
+ * `softwaresystem`, `softwareSystemInstance` next to
+ * `softwaresysteminstance`, etc. The reference parser's tokeniser is
+ * whitespace-only and dispatches on `equalsIgnoreCase`. Our
+ * chevrotain lexer keeps keyword regexes case-sensitive (so uppercase
+ * idiomatic constants like `NAME`/`FOO` don't accidentally match the
+ * `name`/`foo` keywords), which means lowercase keyword spellings
+ * fall through to `Identifier`.
+ *
+ * This pass walks the token stream once, and for every `Identifier`
+ * whose lowercased image matches a known keyword spelling, rewrites
+ * its `tokenType` to that keyword. The lookup table is built from
+ * the keyword strings the parser cares about.
+ */
+const CASE_INSENSITIVE_KEYWORDS: ReadonlyMap<string, TokenType> = new Map([
+  ["person", Person],
+  ["softwaresystem", SoftwareSystem],
+  ["container", Container],
+  ["component", Component],
+  ["group", Group],
+]);
+
+export const normalizeKeywordCase = (tokens: readonly IToken[]): IToken[] => {
+  return tokens.map((t) => {
+    if (t.tokenType.name !== "Identifier") return t;
+    const keyword = CASE_INSENSITIVE_KEYWORDS.get(t.image.toLowerCase());
+    if (!keyword) return t;
+    // Re-tag the token. Chevrotain matches tokens via the numeric
+    // `tokenTypeIdx` for speed, so we must update BOTH that and the
+    // `tokenType` reference. Copy rather than mutate so the original
+    // lexer array isn't disturbed.
+    const idxKey = "tokenTypeIdx";
+    return {
+      ...t,
+      tokenType: keyword,
+      [idxKey]: (keyword as TokenType & { tokenTypeIdx?: number }).tokenTypeIdx,
+    } as IToken;
+  });
+};
+
 export const stripInlineDirectives = (tokens: readonly IToken[]): IToken[] => {
   const out: IToken[] = [];
   let i = 0;
@@ -362,6 +411,18 @@ export const stripDeploymentBlocks = (
       out.push(t);
       i++;
       continue;
+    }
+    // If the deployment keyword is on the RHS of an assignment
+    // (`live = deploymentEnvironment "X" { ... }`), the `live =`
+    // tokens are already in `out`. Pop them so the orphan assignment
+    // doesn't trip the parser.
+    if (
+      out.length >= 2 &&
+      tokenMatcher(out.at(-1), Equals) &&
+      tokenMatcher(out.at(-2), Identifier)
+    ) {
+      out.pop(); // Equals
+      out.pop(); // Identifier
     }
     blocks.push({
       construct: t.image,
