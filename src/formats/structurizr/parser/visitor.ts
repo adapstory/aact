@@ -530,13 +530,23 @@ class StructurizrCstToAst extends BaseVisitor {
     };
   }
 
-  tagStmt(ctx: { Tag: [IToken]; StringLiteral: [IToken] }) {
+  tagStmt(ctx: { Tag: [IToken]; StringLiteral: IToken[] }) {
+    // `tag` is a syntactic alias for `tags` in the reference parser
+    // (`StructurizrDslParser.java:612` dispatches both to
+    // `ModelItemParser.parseTags`). Same shape: accept multiple
+    // string args, join with `,` so downstream splitTags handles the
+    // comma form uniformly.
     const keyword = ctx.Tag[0];
-    const value = ctx.StringLiteral[0];
+    const tokens = ctx.StringLiteral;
+    const joined = tokens.map((t) => unwrapStringLiteral(t.image)).join(",");
     return {
       kind: "tag" as const,
-      value: this.stringFromToken(value),
-      range: rangeFromTokens(keyword, value, this.file),
+      value: {
+        kind: "string" as const,
+        value: joined,
+        range: rangeFromTokens(tokens[0], tokens.at(-1)!, this.file),
+      },
+      range: rangeFromTokens(keyword, tokens.at(-1)!, this.file),
     };
   }
 

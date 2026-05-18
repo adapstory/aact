@@ -535,7 +535,8 @@ const aggregateBody = (
         break;
       }
       case "tag": {
-        tags.push(item.value.value.trim());
+        // `tag` is an alias for `tags` in the reference; same split.
+        tags.push(...splitTags(item.value.value));
         break;
       }
       case "url": {
@@ -989,7 +990,8 @@ const aggregateBodyStatements = (
         break;
       }
       case "tag": {
-        tags.push(item.value.value.trim());
+        // `tag` is an alias for `tags` in the reference; same split.
+        tags.push(...splitTags(item.value.value));
         break;
       }
       case "url": {

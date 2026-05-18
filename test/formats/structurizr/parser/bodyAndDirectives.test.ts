@@ -67,6 +67,58 @@ describe("Structurizr parser — body statements + directives", () => {
     ]);
   });
 
+  it("body `tag` is an alias for `tags` — splits CSV", () => {
+    // Reference: StructurizrDslParser.java:612 dispatches both `tag`
+    // and `tags` to ModelItemParser.parseTags. Each arg is
+    // comma-split, multiple args accepted.
+    const src = `workspace {
+      model {
+        api = container "API" {
+          tag "alpha,beta"
+        }
+      }
+    }`;
+    const { model } = parse(src);
+    expect(model.containers["api"]?.tags).toEqual([
+      "Element",
+      "Container",
+      "alpha",
+      "beta",
+    ]);
+  });
+
+  it("body `tag` accepts multiple whitespace-separated args (like tags)", () => {
+    const src = `workspace {
+      model {
+        api = container "API" {
+          tag "alpha" "beta" "gamma"
+        }
+      }
+    }`;
+    const { model } = parse(src);
+    expect(model.containers["api"]?.tags).toEqual([
+      "Element",
+      "Container",
+      "alpha",
+      "beta",
+      "gamma",
+    ]);
+  });
+
+  it("`!const` inside an element body parses (reference accepts at any scope)", () => {
+    const src = `workspace {
+      model {
+        bank = softwareSystem "Bank" {
+          !const TEAM "Platform"
+          api = container "API"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["api"]).toBeDefined();
+  });
+
   it("body `tag` appends a single tag", () => {
     const src = `workspace {
       model {

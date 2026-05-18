@@ -232,6 +232,11 @@ class StructurizrParser extends CstParser {
       { ALT: () => this.SUBRULE(this.urlStmt) },
       { ALT: () => this.SUBRULE(this.propertiesBlock) },
       { ALT: () => this.SUBRULE(this.perspectivesBlock) },
+      // Reference accepts `!const` / `!var` at any scope —
+      // `StructurizrDslParser.java:1255-1265` applies no context
+      // guard. Element body must accept directives so a fixture with
+      // `softwareSystem "X" { !const Y "Z" }` parses cleanly.
+      { ALT: () => this.SUBRULE(this.directive) },
     ]);
   });
 
@@ -257,7 +262,10 @@ class StructurizrParser extends CstParser {
 
   private tagStmt = this.RULE("tagStmt", () => {
     this.CONSUME(Tag);
-    this.CONSUME(StringLiteral);
+    // Reference dispatch (`StructurizrDslParser.java:612`) routes both
+    // `tag` and `tags` to `ModelItemParser.parseTags` — they are
+    // aliases. Accept the same multi-arg + CSV form as tagsStmt.
+    this.AT_LEAST_ONE(() => this.CONSUME(StringLiteral));
   });
 
   private urlStmt = this.RULE("urlStmt", () => {
