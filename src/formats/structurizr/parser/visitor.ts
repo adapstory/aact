@@ -243,6 +243,9 @@ class StructurizrCstToAst extends BaseVisitor {
     if (ctx.directive?.[0]) {
       return this.visit(ctx.directive[0]) as ModelChildNode;
     }
+    if (ctx.propertiesBlock?.[0]) {
+      return this.visit(ctx.propertiesBlock[0]) as ModelChildNode;
+    }
     return undefined; // recovered / incomplete — caller filters
   }
 
@@ -877,6 +880,7 @@ interface ModelBodyItemCtx {
   readonly reopenDeclaration?: readonly [CstNode];
   readonly relationship?: readonly [CstNode];
   readonly directive?: readonly [CstNode];
+  readonly propertiesBlock?: readonly [CstNode];
 }
 
 interface ReopenDeclarationCtx {

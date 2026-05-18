@@ -119,6 +119,7 @@ export type ModelChildNode =
   | RelationshipNode
   | ReopenNode
   | DirectiveNode
+  | PropertiesBlock
   | InfoIssueBlock; // deploymentEnvironment, etc.
 
 /**

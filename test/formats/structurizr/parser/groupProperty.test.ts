@@ -33,6 +33,44 @@ describe("Structurizr parser — group → properties.group", () => {
     expect(model.boundaries["Payments"]).toBeUndefined();
   });
 
+  it("nested groups join names with structurizr.groupSeparator", () => {
+    // Reference: `GroupParser` reads `structurizr.groupSeparator` from
+    // the model's `properties { }` block and joins nested group
+    // names with it (`Outer/Inner` when separator is `/`).
+    const src = `workspace {
+      model {
+        properties {
+          "structurizr.groupSeparator" /
+        }
+        group "Outer" {
+          group "Inner" {
+            api = container "API"
+          }
+          db = container "DB"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["api"]?.properties?.group).toBe("Outer/Inner");
+    expect(model.containers["db"]?.properties?.group).toBe("Outer");
+  });
+
+  it("without separator, nested elements get the innermost group name only", () => {
+    const src = `workspace {
+      model {
+        group "Outer" {
+          group "Inner" {
+            api = container "API"
+          }
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["api"]?.properties?.group).toBe("Inner");
+  });
+
   it("preserves other properties alongside group", () => {
     const src = `workspace {
       model {

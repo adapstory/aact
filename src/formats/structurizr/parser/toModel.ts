@@ -59,6 +59,14 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
   // without disturbing the structural model.
   const parserIssues: ModelIssue[] = [];
 
+  // Reference parser reads `structurizr.groupSeparator` from the
+  // model's `properties { ... }` block before walking the body —
+  // nested groups need it to compose dotted names (`Outer/Inner`).
+  // Without a separator, the reference simply concatenates names
+  // (effectively no join); we mirror that by leaving the separator
+  // undefined and falling back to the innermost name.
+  const groupSeparator = readGroupSeparator(workspace);
+
   for (const model of pickModels(workspace)) {
     for (const child of model.children) {
       collectModelChild(
@@ -68,6 +76,7 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
         identifierMap,
         undefined,
         parserIssues,
+        { groupSeparator, currentGroupPath: undefined },
       );
     }
   }
@@ -86,6 +95,38 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
     issues: [...parserIssues, ...built.issues],
   };
 };
+
+/**
+ * Walk every model block looking for a `structurizr.groupSeparator`
+ * property entry. Reference parser exposes this as the join string
+ * for nested group names (`group "Outer" { group "Inner" { ... } }`
+ * becomes `properties.group = "Outer/Inner"` when separator is `/`).
+ */
+const readGroupSeparator = (workspace: WorkspaceNode): string | undefined => {
+  for (const model of pickModels(workspace)) {
+    for (const child of model.children) {
+      if (child.kind !== "properties") continue;
+      for (const entry of child.entries) {
+        if (entry.key.value === "structurizr.groupSeparator") {
+          return entry.value.value;
+        }
+      }
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Context that travels alongside collectModelChild / handleElement /
+ * handleGroup: configuration that affects how children are tagged
+ * (currently just the group-separator + the in-flight nested group
+ * name). Threaded by value so deep nesting doesn't accidentally
+ * mutate a shared parent.
+ */
+interface GroupContext {
+  readonly groupSeparator: string | undefined;
+  readonly currentGroupPath: string | undefined;
+}
 
 /**
  * Walk every model block and look for an `!impliedRelationships true`
@@ -232,6 +273,7 @@ const collectModelChild = (
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
   parserIssues: ModelIssue[],
+  groupCtx: GroupContext,
 ): void => {
   if (child.kind === "relationship") {
     handleRelationship(child, containers, identifierMap);
@@ -249,6 +291,7 @@ const collectModelChild = (
       identifierMap,
       parentIdentifierPath,
       parserIssues,
+      groupCtx,
     );
   }
   // Directives (include / const / var / identifiers /
@@ -291,8 +334,23 @@ const handleGroup = (
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
   parserIssues: ModelIssue[],
+  groupCtx: GroupContext,
 ): void => {
-  const groupName = group.name.value;
+  // Compose the group path. With a `structurizr.groupSeparator`
+  // property, nested groups join their names — `group "Outer" {
+  // group "Inner" { … } }` tags inner elements as
+  // `Outer<sep>Inner`. Without the separator the reference parser
+  // does not join (it would error in deployment contexts but is
+  // lenient here); we mirror by falling back to the innermost name.
+  const composedGroupName =
+    groupCtx.currentGroupPath && groupCtx.groupSeparator
+      ? `${groupCtx.currentGroupPath}${groupCtx.groupSeparator}${group.name.value}`
+      : group.name.value;
+  const nestedCtx: GroupContext = {
+    ...groupCtx,
+    currentGroupPath: composedGroupName,
+  };
+
   const containersBefore = containers.length;
   const boundariesBefore = boundaries.length;
   for (const member of group.members) {
@@ -306,19 +364,23 @@ const handleGroup = (
         identifierMap,
         parentIdentifierPath,
         parserIssues,
+        nestedCtx,
       );
     }
   }
-  // Tag every element that was newly added inside the group with
-  // `properties.group = <groupName>` so downstream consumers (rules,
-  // diagram renderers) can recognise the grouping. Groups themselves
-  // are not C4 elements — they're a visual / organisational hint, so
-  // they must not appear in the Model as a Container or Boundary.
+  // Tag every newly-added element with the composed group name —
+  // but only if it doesn't already carry a `properties.group`. A
+  // nested group will have stamped its own (deeper / longer) name
+  // first; the outer group's pass must not overwrite it. The check
+  // makes outer's tagging behave like a "fill-in-the-blanks" for
+  // elements declared directly in the outer scope.
   for (let i = containersBefore; i < containers.length; i++) {
-    containers[i] = withGroupProperty(containers[i], groupName);
+    if (containers[i].properties?.group !== undefined) continue;
+    containers[i] = withGroupProperty(containers[i], composedGroupName);
   }
   for (let i = boundariesBefore; i < boundaries.length; i++) {
-    boundaries[i] = withGroupProperty(boundaries[i], groupName);
+    if (boundaries[i].properties?.group !== undefined) continue;
+    boundaries[i] = withGroupProperty(boundaries[i], composedGroupName);
   }
 };
 
@@ -339,6 +401,7 @@ const handleBoundary = (
   selfIdentifierPath: string,
   name: string,
   parserIssues: ModelIssue[],
+  groupCtx: GroupContext,
 ): void => {
   const displayName = element.name.value;
   const childContainerNames: string[] = [];
@@ -352,6 +415,7 @@ const handleBoundary = (
       identifierMap,
       selfIdentifierPath,
       parserIssues,
+      groupCtx,
     );
     // The nested child's Model key is its own DSL identifier
     // (assignedIdentifier if present, else its display name). We
@@ -518,6 +582,7 @@ const handleElement = (
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
   parserIssues: ModelIssue[],
+  groupCtx: GroupContext,
 ): void => {
   const displayName = element.name.value;
   // Container.name is the DSL identifier (the short id authors write
@@ -570,6 +635,7 @@ const handleElement = (
       identifierMap,
       parentIdentifierPath,
       parserIssues,
+      groupCtx,
     );
     return;
   }
@@ -592,6 +658,7 @@ const handleElement = (
       selfIdentifierPath,
       lookupKey,
       parserIssues,
+      groupCtx,
     );
     return;
   }
