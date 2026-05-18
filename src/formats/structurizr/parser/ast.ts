@@ -105,10 +105,17 @@ export interface ModelNode extends RecoverableNode {
   readonly children: readonly ModelChildNode[];
 }
 
+/**
+ * Per grammar.md §1.x Elements, only `person` / `softwareSystem` /
+ * `group` should appear at model scope; `container` / `component` live
+ * inside `softwareSystem` / `container`. The parser is permissive
+ * (admits any element kind anywhere), and `toModel` enforces the
+ * nesting rules. This union therefore lists every element kind — a
+ * misplaced `container` at model scope surfaces as a `ModelIssue`
+ * later, not as a parse error here.
+ */
 export type ModelChildNode =
-  | PersonNode
-  | SoftwareSystemNode
-  | GroupNode
+  | ElementNode
   | RelationshipNode
   | DirectiveNode
   | InfoIssueBlock; // deploymentEnvironment, etc.
@@ -201,6 +208,12 @@ export interface GroupNode extends RecoverableNode {
 
 // ── Element body statements ─────────────────────────────────────────────
 
+/**
+ * Per-element-kind nesting (softwareSystem may contain container; container
+ * may contain component; person/component have no element children) is a
+ * `toModel` concern, not a parser one — so this union accepts every
+ * element kind. Misplaced elements surface as `ModelIssue` downstream.
+ */
 export type ElementBodyNode =
   // Metadata statements
   | DescriptionStatement
@@ -213,10 +226,8 @@ export type ElementBodyNode =
   // Element-scoped directives
   | ElementDocsDirective
   | ElementDecisionsDirective
-  // Nested elements
-  | ContainerNode
-  | ComponentNode
-  | GroupNode
+  // Nested elements (any kind — toModel enforces nesting rules)
+  | ElementNode
   // Relationships within the element body (`-> other` implicit or
   // `<src> -> other` explicit forms)
   | RelationshipNode;

@@ -159,7 +159,7 @@ class StructurizrParser extends CstParser {
   });
 }
 
-const parserInstance = new StructurizrParser();
+export const parserInstance = new StructurizrParser();
 
 /**
  * Parse a Structurizr DSL token stream. Returns the chevrotain CST plus
