@@ -84,13 +84,18 @@ export const Comma = createToken({ name: "Comma", pattern: /,/ });
 
 /**
  * Identifier per `IdentifiersRegister.IDENTIFIER_PATTERN`:
- * `\w[a-zA-Z0-9_-]*`. The reference allows hyphen after the first
- * character; forbids period inside a single identifier (period is the
- * hierarchical-reference separator at lookup time).
+ * `\w[a-zA-Z0-9_-]*`. The reference forbids period inside a single
+ * identifier — period is the hierarchical-reference separator at
+ * lookup time.
+ *
+ * We widen the lexical pattern to accept dotted form
+ * (`bank.api.controller`) as one token so the grammar stays simple;
+ * resolution code in toModel splits on `.` and walks the identifier
+ * map to map each segment to its display name.
  */
 export const Identifier = createToken({
   name: "Identifier",
-  pattern: /\w[a-zA-Z0-9_-]*/,
+  pattern: /\w[a-zA-Z0-9_.-]*/,
 });
 
 // ── Directives (start with `!`) ────────────────────────────────────────

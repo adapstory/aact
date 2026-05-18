@@ -53,7 +53,12 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
 
   for (const model of pickModels(workspace)) {
     for (const child of model.children) {
-      collectModelChild(child, containers, boundaries, identifierMap);
+      collectModelChild(
+        child,
+        containers,
+        boundaries,
+        identifierMap,
+      );
     }
   }
 
@@ -88,7 +93,7 @@ const collectModelChild = (
   containers: Container[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
-  parentBoundaryName: string | undefined,
+  parentIdentifierPath: string | undefined,
 ): void => {
   if (child.kind === "relationship") {
     handleRelationship(child, containers, identifierMap);
@@ -100,7 +105,7 @@ const collectModelChild = (
       containers,
       boundaries,
       identifierMap,
-      parentBoundaryName,
+      parentIdentifierPath,
     );
   }
   // Directives (include / const / var / identifiers /
@@ -141,7 +146,7 @@ const handleGroup = (
   containers: Container[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
-  parentBoundaryName: string | undefined,
+  parentIdentifierPath: string | undefined,
 ): void => {
   for (const member of group.members) {
     if (member.kind === "relationship") {
@@ -152,7 +157,7 @@ const handleGroup = (
         containers,
         boundaries,
         identifierMap,
-        parentBoundaryName,
+        parentIdentifierPath,
       );
     }
   }
@@ -164,6 +169,7 @@ const handleBoundary = (
   containers: Container[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
+  selfIdentifierPath: string,
 ): void => {
   const displayName = element.name.value;
   const childContainerNames: string[] = [];
@@ -175,7 +181,7 @@ const handleBoundary = (
       containers,
       boundaries,
       identifierMap,
-      displayName,
+      selfIdentifierPath,
     );
     const nestedName = child.name.value;
     if (boundaries.some((b) => b.name === nestedName)) {
@@ -189,13 +195,22 @@ const handleBoundary = (
       handleRelationship(child, containers, identifierMap, displayName);
     }
   }
+  // Aggregate the parent element's own body statements onto the
+  // Boundary. The reference parser treats softwareSystem/container
+  // promoted to a boundary as the same element with the same
+  // description/tags/url/properties — body statements should not
+  // disappear just because the element gained nested children.
+  const agg = aggregateBody(element);
   boundaries.push({
     name: displayName,
     label: displayName,
     kind: element.kind === "softwareSystem" ? "System" : "Container",
-    tags: [],
+    description: agg.description,
+    tags: agg.tags,
     containerNames: childContainerNames,
     boundaryNames: childBoundaryNames,
+    link: agg.link,
+    properties: agg.properties,
     sourceLocation: element.range,
   });
 };
@@ -318,11 +333,22 @@ const handleElement = (
   containers: Container[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
-  parentBoundaryName: string | undefined,
+  parentIdentifierPath: string | undefined,
 ): void => {
   const displayName = element.name.value;
   const lookupKey = element.assignedIdentifier?.name ?? displayName;
   identifierMap.set(lookupKey, displayName);
+  const selfIdentifierPath = parentIdentifierPath
+    ? `${parentIdentifierPath}.${lookupKey}`
+    : lookupKey;
+  // Record the qualified path too — `bank.api` resolves to the same
+  // displayName as the local `api`. Multiple nested boundaries can
+  // share local identifiers (`bank.api` vs `payments.api`); the
+  // qualified path disambiguates while the local key keeps backwards
+  // compatibility with un-prefixed references.
+  if (selfIdentifierPath !== lookupKey) {
+    identifierMap.set(selfIdentifierPath, displayName);
+  }
 
   if (element.kind === "group") {
     handleGroup(
@@ -330,7 +356,7 @@ const handleElement = (
       containers,
       boundaries,
       identifierMap,
-      parentBoundaryName,
+      parentIdentifierPath,
     );
     return;
   }
@@ -344,7 +370,14 @@ const handleElement = (
     nestedElements.length > 0;
 
   if (isBoundary) {
-    handleBoundary(element, children, containers, boundaries, identifierMap);
+    handleBoundary(
+      element,
+      children,
+      containers,
+      boundaries,
+      identifierMap,
+      selfIdentifierPath,
+    );
     return;
   }
   handleLeaf(element, children, containers, identifierMap);

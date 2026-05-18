@@ -157,7 +157,7 @@ describe("Structurizr parser — body statements + directives", () => {
     expect(parseErrors).toEqual([]);
   });
 
-  it("body statements come BEFORE nested elements in the same block", () => {
+  it("body statements on a promoted Boundary aggregate onto the Boundary", () => {
     const src = `workspace {
       model {
         bank = softwareSystem "Bank" {
@@ -170,10 +170,12 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    // Bank promoted to Boundary because of nested containers; the body
-    // statements (description, tag) currently drop on the boundary path
-    // — boundary body aggregation is the next chunk of work.
-    expect(model.boundaries["Bank"]).toBeDefined();
+    expect(model.boundaries["Bank"]).toEqual(
+      expect.objectContaining({
+        description: "The bank's internal system",
+        tags: ["core"],
+      }),
+    );
     expect(model.containers["API"]).toBeDefined();
     expect(model.containers["DB"]).toBeDefined();
   });

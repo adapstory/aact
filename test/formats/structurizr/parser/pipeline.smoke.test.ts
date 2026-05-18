@@ -127,6 +127,28 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     expect(totalRelations).toBe(5);
   });
 
+  it("resolves hierarchical refs `boundary.local` to nested elements", () => {
+    const src = `workspace {
+      model {
+        bank = softwareSystem "Bank" {
+          api = container "API"
+          db = container "Database"
+        }
+        client = person "Client"
+        client -> bank.api "calls"
+        bank.api -> bank.db "reads"
+      }
+    }`;
+    const { model, parseErrors } = parseSource(src, "hier.dsl");
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["Client"]?.relations).toEqual([
+      expect.objectContaining({ to: "API", description: "calls" }),
+    ]);
+    expect(model.containers["API"]?.relations).toEqual([
+      expect.objectContaining({ to: "Database", description: "reads" }),
+    ]);
+  });
+
   it("returns parseErrors (does not throw) on malformed input", () => {
     const { parseErrors } = parseSource(
       `workspace { model { unclosed`,
