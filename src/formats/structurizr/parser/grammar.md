@@ -88,41 +88,48 @@ fixtures (Big Bank, getting-started, multi-line, etc.).
 - perspective without explicit value records `""`
 - CustomElement (`element <name>` keyword) → Container with `["Element"]` tag
 
-### Open (NOTABLE — non-blocking for cutover)
+### Closed (NOTABLE — landed since the original inventory)
 
-- **Archetypes**: `archetypes { ... }` block + `--archetype->`
-  relationship form. Reference: `archetypesContext`. Once supported,
-  archetype defaults (description/technology/tags) propagate to
-  elements declared via the alias keyword.
-- **Selectors**: `!element`/`!elements`/`!relationship`/
-  `!relationships` with body — selector + property-modifier semantics.
-  Reference: `FindElement(s)Parser`, `FindRelationship(s)Parser`.
-- **String substitution**: `${NAME}` interpolation from `!const`/
-  `!var`/env into every string token. Reference:
-  `StructurizrDslParser:1385-1414`. Requires post-tokenize string
-  pass.
-- **Nested-group `structurizr.groupSeparator` join**: when the
-  property is set, child elements inside `group "Outer" { group "Inner" { … } }`
-  get `properties.group = "Outer/Inner"` instead of the inner-most
-  name only.
-- **Group as element-body property statement**: `component "X" { group "Layer" }`
-  should set `Component.properties.group = "Layer"` instead of
-  recording the group as a nested element. Today the group is dropped
-  because Components hold no element children in the Model anyway.
-- **Reopen with NEW nested elements**: `bank { newComponent = component "X" }`
-  silently drops the new child today; handleReopen only merges body
-  statements, not element children.
-- **Identifier re-registration error**: the reference throws when the
-  same element is registered under two different identifiers. We
-  silently overwrite the identifier map's value.
-- **Empty `""` vs `undefined`**: reference returns `""` for missing
-  description/technology/tags strings; our Model carries `undefined`
-  for absent values. Changing this affects the public Model contract
-  — deliberate divergence, deferred to a Model-API design pass.
-- **Workspace name/description in Model**: reference exposes
-  `Workspace.getName()` and `getDescription()`. Our Model has no
-  workspace metadata field — round-trip writers will need it. Deferred
-  to a Model-API design pass.
+- **`${...}` substitution** — pre-lex pass collects `!const`/`!var`
+  declarations and rewrites every `${NAME}` occurrence to a fixed
+  point (16 iterations).
+- **Nested-group `structurizr.groupSeparator` join** — toModel reads
+  the model property and joins nested group names.
+- **Group as element-body property statement** — `component "X" {
+group "Layer" }` sets `Component.properties.group = "Layer"`.
+- **Reopen with new nested elements** — `bank { newCont = container
+"X" }` adds the new element under the target Boundary.
+- **Identifier re-registration error** — emits a
+  `duplicate-identifier` ModelIssue (case-insensitive).
+- **Workspace name/description/extends** — surfaced in
+  `Model.workspace` as `{ name?, description?, extendsTarget? }`.
+- **Archetypes block** — declaration is stripped opaque so
+  archetype-bearing fixtures parse cleanly.
+- **Selectors `!element`/`!elements`/`!relationship`/
+  `!relationships`** — declaration blocks are stripped opaque so
+  selector-bearing fixtures parse cleanly.
+
+### Remaining gaps (deliberate)
+
+- **Archetype usage form** (`<alias> <id> "name"` in element
+  declaration position) — this is the inverse of the regular
+  `<id> = <kind> "name"` and requires grammar surgery. Today
+  alias usages in model bodies don't parse. The reference
+  `ArchetypesParser` builds an alias→base mapping that the
+  line-by-line parser uses to dispatch — bringing that to a
+  block-grammar chevrotain parser is a bigger refactor than the
+  current beta needs.
+- **Selector body propagation** — `!element <ref> { tag "x" }` should
+  attach the body to the selected element. The block is stripped
+  today (selector parsing without applying body), so users get a
+  clean parse but the linter doesn't see those tags. Reference:
+  `FindElement(s)Parser`, `ElementsParser` body statements.
+- **Empty `""` vs `undefined`** — reference returns `""` for missing
+  description/technology/relation.description. Our Model carries
+  `undefined`. Deliberate divergence: TS idioms favour `undefined`
+  for absent values and rules already handle both via truthy checks;
+  changing the Model contract is more disruptive than the fidelity
+  gain warrants.
 
 ## 1. In-scope productions
 

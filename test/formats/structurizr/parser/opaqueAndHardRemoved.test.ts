@@ -141,6 +141,53 @@ describe("Structurizr parser — auxiliary directives (!docs / !script / etc)", 
     expect(opaqueBlocks.some((b) => b.name.startsWith("!script"))).toBe(true);
   });
 
+  it("strips `!element <ref> { ... }` selector block", () => {
+    const src = `workspace {
+      model {
+        api = container "API"
+        !element api {
+          tag "auto"
+        }
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
+  it("strips `!relationships <selector> { ... }` selector block", () => {
+    const src = `workspace {
+      model {
+        a = container "A"
+        b = container "B"
+        a -> b
+        !relationships "*" {
+          tags "auto"
+        }
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
+  it("strips `archetypes { ... }` block (declaration parses cleanly)", () => {
+    // Reference fixture `archetypes.dsl` declares alias→base-kind
+    // mappings; aact does not yet support alias usages in the model
+    // body, but stripping the declaration block keeps the rest of
+    // the file parseable.
+    const src = `workspace {
+      model {
+        archetypes {
+          mobile = container "" "Xamarin"
+          web = container "" "Spring MVC"
+        }
+        api = container "API"
+      }
+    }`;
+    const { parseErrors, opaqueBlocks } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(opaqueBlocks.some((b) => b.name === "archetypes")).toBe(true);
+  });
+
   it("strips block `!plugin <id> { ... }` wholesale", () => {
     const src = `workspace {
       model {

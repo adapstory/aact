@@ -29,14 +29,19 @@ import { tokenMatcher } from "chevrotain";
 
 import type { SourceLocation } from "../../../model";
 import {
+  Archetypes,
   BangAdrs,
   BangComponents,
   BangConstantHardError,
   BangDecisions,
   BangDocs,
+  BangElementSelector,
+  BangElementsSelector,
   BangExtendHardError,
   BangPlugin,
   BangRefHardError,
+  BangRelationshipSelector,
+  BangRelationshipsSelector,
   BangScript,
   Branding,
   Component,
@@ -104,6 +109,13 @@ const OPAQUE_KEYWORDS = [
   Terminology,
   Themes,
   Theme,
+  // `archetypes { ... }` block — reference declares alias→base-kind
+  // mappings with default positional values here. aact strips the
+  // block so archetype-bearing fixtures parse; alias usages
+  // (`<alias> <id> "name"`) in the model body remain unrecognised by
+  // the grammar today (the inverse declaration form requires bigger
+  // grammar surgery — documented as a known gap in grammar.md).
+  Archetypes,
   // Block-form `!directives`: each opens a `{ ... }` body that the
   // linter does not interpret. Reference grammar lets these appear at
   // workspace or model scope; positional args (script language name,
@@ -111,6 +123,17 @@ const OPAQUE_KEYWORDS = [
   BangScript,
   BangPlugin,
   BangComponents,
+  // Selector blocks (`!element <ref> { ... }`, `!relationship <ref>
+  // { ... }`, and the plural `!elements` / `!relationships` with
+  // selector expressions). Reference parsers attach the body
+  // statements to the selected elements / relationships. aact strips
+  // the block so selector-bearing fixtures parse; applying the body
+  // to selected elements is a known follow-up (documented in
+  // grammar.md).
+  BangElementSelector,
+  BangElementsSelector,
+  BangRelationshipSelector,
+  BangRelationshipsSelector,
 ];
 
 /**
