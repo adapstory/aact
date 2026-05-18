@@ -10,6 +10,9 @@ importers:
       c12:
         specifier: 4.0.0-beta.2
         version: 4.0.0-beta.2(chokidar@5.0.0)(dotenv@17.4.2)(giget@3.2.0)(jiti@2.7.0)(magicast@0.5.2)
+      chevrotain:
+        specifier: ^12.0.0
+        version: 12.0.0
       citty:
         specifier: ^0.2.2
         version: 0.2.2
@@ -392,6 +395,36 @@ packages:
         integrity: sha512-sAWO3D8PFP6pBXdxxW93SQi/KQqqhE2AAHo3AgWfdtJXwO6bfK6/wUN81XnOZk0qRC6vHzUEKhjwVD9dtDWvxg==,
       }
     engines: { node: ">=18.18" }
+
+  "@chevrotain/cst-dts-gen@12.0.0":
+    resolution:
+      {
+        integrity: sha512-fSL4KXjTl7cDgf0B5Rip9Q05BOrYvkJV/RrBTE/bKDN096E4hN/ySpcBK5B24T76dlQ2i32Zc3PAE27jFnFrKg==,
+      }
+
+  "@chevrotain/gast@12.0.0":
+    resolution:
+      {
+        integrity: sha512-1ne/m3XsIT8aEdrvT33so0GUC+wkctpUPK6zU9IlOyJLUbR0rg4G7ZiApiJbggpgPir9ERy3FRjT6T7lpgetnQ==,
+      }
+
+  "@chevrotain/regexp-to-ast@12.0.0":
+    resolution:
+      {
+        integrity: sha512-p+EW9MaJwgaHguhoqwOtx/FwuGr+DnNn857sXWOi/mClXIkPGl3rn7hGNWvo31HA3vyeQxjqe+H36yZJwYU8cA==,
+      }
+
+  "@chevrotain/types@12.0.0":
+    resolution:
+      {
+        integrity: sha512-S+04vjFQKeuYw0/eW3U52LkAHQsB1ASxsPGsLPUyQgrZ2iNNibQrsidruDzjEX2JYfespXMG0eZmXlhA6z7nWA==,
+      }
+
+  "@chevrotain/utils@12.0.0":
+    resolution:
+      {
+        integrity: sha512-lB59uJoaGIfOOL9knQqQRfhl9g7x8/wqFkp13zTdkRu1huG9kg6IJs1O8hqj9rs6h7orGxHJUKb+mX3rPbWGhA==,
+      }
 
   "@commitlint/cli@20.4.1":
     resolution:
@@ -1443,6 +1476,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-parser/binding-linux-arm64-musl@0.128.0":
     resolution:
@@ -1452,6 +1486,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   "@oxc-parser/binding-linux-ppc64-gnu@0.128.0":
     resolution:
@@ -1461,6 +1496,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-parser/binding-linux-riscv64-gnu@0.128.0":
     resolution:
@@ -1470,6 +1506,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-parser/binding-linux-riscv64-musl@0.128.0":
     resolution:
@@ -1479,6 +1516,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   "@oxc-parser/binding-linux-s390x-gnu@0.128.0":
     resolution:
@@ -1488,6 +1526,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-parser/binding-linux-x64-gnu@0.128.0":
     resolution:
@@ -1497,6 +1536,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-parser/binding-linux-x64-musl@0.128.0":
     resolution:
@@ -1506,6 +1546,7 @@ packages:
     engines: { node: ^20.19.0 || >=22.12.0 }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   "@oxc-parser/binding-openharmony-arm64@0.128.0":
     resolution:
@@ -1620,6 +1661,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-resolver/binding-linux-arm64-musl@11.19.1":
     resolution:
@@ -1628,6 +1670,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   "@oxc-resolver/binding-linux-ppc64-gnu@11.19.1":
     resolution:
@@ -1636,6 +1679,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-resolver/binding-linux-riscv64-gnu@11.19.1":
     resolution:
@@ -1644,6 +1688,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-resolver/binding-linux-riscv64-musl@11.19.1":
     resolution:
@@ -1652,6 +1697,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   "@oxc-resolver/binding-linux-s390x-gnu@11.19.1":
     resolution:
@@ -1660,6 +1706,7 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-resolver/binding-linux-x64-gnu@11.19.1":
     resolution:
@@ -1668,6 +1715,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   "@oxc-resolver/binding-linux-x64-musl@11.19.1":
     resolution:
@@ -1676,6 +1724,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   "@oxc-resolver/binding-openharmony-arm64@11.19.1":
     resolution:
@@ -1905,6 +1954,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-arm-gnueabihf@4.60.3":
     resolution:
@@ -1913,6 +1963,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-arm-musleabihf@4.57.1":
     resolution:
@@ -1921,6 +1972,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-arm-musleabihf@4.60.3":
     resolution:
@@ -1929,6 +1981,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-arm64-gnu@4.57.1":
     resolution:
@@ -1937,6 +1990,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-arm64-gnu@4.60.3":
     resolution:
@@ -1945,6 +1999,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-arm64-musl@4.57.1":
     resolution:
@@ -1953,6 +2008,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-arm64-musl@4.60.3":
     resolution:
@@ -1961,6 +2017,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-loong64-gnu@4.57.1":
     resolution:
@@ -1969,6 +2026,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-loong64-gnu@4.60.3":
     resolution:
@@ -1977,6 +2035,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-loong64-musl@4.57.1":
     resolution:
@@ -1985,6 +2044,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-loong64-musl@4.60.3":
     resolution:
@@ -1993,6 +2053,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-ppc64-gnu@4.57.1":
     resolution:
@@ -2001,6 +2062,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-ppc64-gnu@4.60.3":
     resolution:
@@ -2009,6 +2071,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-ppc64-musl@4.57.1":
     resolution:
@@ -2017,6 +2080,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-ppc64-musl@4.60.3":
     resolution:
@@ -2025,6 +2089,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-riscv64-gnu@4.57.1":
     resolution:
@@ -2033,6 +2098,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-riscv64-gnu@4.60.3":
     resolution:
@@ -2041,6 +2107,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-riscv64-musl@4.57.1":
     resolution:
@@ -2049,6 +2116,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-riscv64-musl@4.60.3":
     resolution:
@@ -2057,6 +2125,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-s390x-gnu@4.57.1":
     resolution:
@@ -2065,6 +2134,7 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-s390x-gnu@4.60.3":
     resolution:
@@ -2073,6 +2143,7 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-x64-gnu@4.57.1":
     resolution:
@@ -2081,6 +2152,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-x64-gnu@4.60.3":
     resolution:
@@ -2089,6 +2161,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   "@rollup/rollup-linux-x64-musl@4.57.1":
     resolution:
@@ -2097,6 +2170,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-linux-x64-musl@4.60.3":
     resolution:
@@ -2105,6 +2179,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   "@rollup/rollup-openbsd-x64@4.57.1":
     resolution:
@@ -2453,6 +2528,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   "@unrs/resolver-binding-linux-arm64-musl@1.11.1":
     resolution:
@@ -2461,6 +2537,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   "@unrs/resolver-binding-linux-ppc64-gnu@1.11.1":
     resolution:
@@ -2469,6 +2546,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   "@unrs/resolver-binding-linux-riscv64-gnu@1.11.1":
     resolution:
@@ -2477,6 +2555,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   "@unrs/resolver-binding-linux-riscv64-musl@1.11.1":
     resolution:
@@ -2485,6 +2564,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   "@unrs/resolver-binding-linux-s390x-gnu@1.11.1":
     resolution:
@@ -2493,6 +2573,7 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   "@unrs/resolver-binding-linux-x64-gnu@1.11.1":
     resolution:
@@ -2501,6 +2582,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   "@unrs/resolver-binding-linux-x64-musl@1.11.1":
     resolution:
@@ -2509,6 +2591,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   "@unrs/resolver-binding-wasm32-wasi@1.11.1":
     resolution:
@@ -2942,6 +3025,13 @@ packages:
       {
         integrity: sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ==,
       }
+
+  chevrotain@12.0.0:
+    resolution:
+      {
+        integrity: sha512-csJvb+6kEiQaqo1woTdSAuOWdN0WTLIydkKrBnS+V5gZz0oqBrp4kQ35519QgK6TpBThiG3V1vNSHlIkv4AglQ==,
+      }
+    engines: { node: ">=22.0.0" }
 
   chokidar@5.0.0:
     resolution:
@@ -6680,6 +6770,21 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
+  "@chevrotain/cst-dts-gen@12.0.0":
+    dependencies:
+      "@chevrotain/gast": 12.0.0
+      "@chevrotain/types": 12.0.0
+
+  "@chevrotain/gast@12.0.0":
+    dependencies:
+      "@chevrotain/types": 12.0.0
+
+  "@chevrotain/regexp-to-ast@12.0.0": {}
+
+  "@chevrotain/types@12.0.0": {}
+
+  "@chevrotain/utils@12.0.0": {}
+
   "@commitlint/cli@20.4.1(@types/node@22.19.19)(typescript@5.9.3)":
     dependencies:
       "@commitlint/format": 20.4.0
@@ -8041,6 +8146,14 @@ snapshots:
       - magicast
 
   chardet@2.1.1: {}
+
+  chevrotain@12.0.0:
+    dependencies:
+      "@chevrotain/cst-dts-gen": 12.0.0
+      "@chevrotain/gast": 12.0.0
+      "@chevrotain/regexp-to-ast": 12.0.0
+      "@chevrotain/types": 12.0.0
+      "@chevrotain/utils": 12.0.0
 
   chokidar@5.0.0:
     dependencies:
