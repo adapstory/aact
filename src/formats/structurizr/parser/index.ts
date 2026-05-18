@@ -5,9 +5,9 @@
  *     → tokenise → parse → CST → AST → Model
  *     → LoadResult
  *
- * Phase 1: minimal subset (workspace + model + elements + explicit
- * relationships) per `parser.ts` skeleton. Phase 2 expands toward full
- * grammar.md coverage.
+ * Today's grammar coverage matches `parser.ts` (workspace + model +
+ * elements + body statements + directives + explicit relationships).
+ * Remaining grammar.md surface area lands incrementally.
  */
 
 import type { LoadResult } from "../../types";
@@ -32,10 +32,9 @@ export interface ChevrotainParseResult extends LoadResult {
  * every `SourceLocation` for downstream diagnostics; it does NOT need
  * to exist on disk.
  *
- * Returns the produced `Model` (Phase-1 stub — workspace + elements +
- * relations only) and an aggregated error list. Lexer and parser
- * errors do not throw; they are returned so the caller can surface
- * diagnostics in one pass.
+ * Returns the produced `Model` and an aggregated error list. Lexer
+ * and parser errors do not throw; they are returned so the caller can
+ * surface diagnostics in one pass.
  */
 export const parseSource = (
   text: string,

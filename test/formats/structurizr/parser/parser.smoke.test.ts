@@ -11,7 +11,7 @@ const parse = (src: string) => {
   };
 };
 
-describe("Structurizr parser — Phase 1 smoke", () => {
+describe("Structurizr parser — smoke", () => {
   it("parses an empty workspace + model without errors", () => {
     const { lexerErrors, parserErrors, cst } = parse(`workspace { model {} }`);
     expect(lexerErrors).toEqual([]);
@@ -95,7 +95,7 @@ describe("Structurizr parser — Phase 1 smoke", () => {
 
   it("real-world fixture (big-bank-plc model section) parses cleanly", () => {
     // The real big-bank fixture has views { ... } and deploymentEnvironment
-    // blocks which Phase 1 doesn't model — we use a model-only subset
+    // blocks the parser doesn't model yet — we use a model-only subset
     // adapted from the upstream test fixture.
     const src = `workspace "Big Bank plc" "Internet Banking System" {
       model {
@@ -137,7 +137,7 @@ describe("Structurizr parser — Phase 1 smoke", () => {
 
     // Drill into the CST tree: workspaceFile → workspaceBlock → model →
     // modelBodyItem → elementDeclaration → elementHeader → SoftwareSystem.
-    // Just smoke — toCstVisitor lands in Phase 2.
+    // CST shape smoke; the visitor/toModel pipeline is covered separately.
     expect(cst.children.workspaceBlock?.length ?? 0).toBeGreaterThan(0);
   });
 });

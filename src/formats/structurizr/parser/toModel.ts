@@ -1,16 +1,17 @@
 /**
  * AST → Model mapping for the Structurizr DSL chevrotain parser.
  *
- * Phase 1 stub: maps the subset of AST nodes that the parser emits today
- * (workspace + model + elements + explicit relationships) into the canonical
- * `Model` shape. Source positions captured by the lexer propagate to
- * `sourceLocation` on every Container / Boundary / Relation that lands
- * in the Model.
+ * Maps the subset of AST nodes the parser emits today (workspace +
+ * model + elements + element body statements + directives + explicit
+ * relationships) into the canonical `Model` shape. Source positions
+ * captured by the lexer propagate to `sourceLocation` on every
+ * Container / Boundary / Relation that lands in the Model.
  *
- * Phase 2 will extend this with:
- *   - Element body statements (description / technology / tags / url /
- *     properties / perspectives) — they're parsed but currently ignored
- *   - Implicit-source relationships
+ * Open work (tracked in grammar.md):
+ *   - Boundary-form body aggregation (today the `softwareSystem "X" {
+ *     description "..." ...; nested } ` path drops body statements
+ *     because aggregateBody is leaf-only)
+ *   - Implicit-source relationships inside element bodies
  *   - Archetype default propagation
  *   - Opaque blocks → `LoadResult.raw`
  *   - Deployment family → ModelIssue severity=info
@@ -33,10 +34,11 @@ import type {
 } from "./ast";
 
 /**
- * Convert a parsed Workspace AST into a `LoadResult`. The current Phase 1
- * stub emits a Model containing only the elements and explicit relations
- * that the parser recognises; Phase 2 will populate body-statement data
- * and `LoadResult.raw`.
+ * Convert a parsed Workspace AST into a `LoadResult`. Today the Model
+ * contains the elements, body-statement data, and explicit relations
+ * the parser recognises. `LoadResult.raw` (opaque blocks) and
+ * ModelIssues (deployment family, hard-removed constructs) land in
+ * later passes.
  */
 export const toModel = (workspace: WorkspaceNode): LoadResult => {
   const containers: Container[] = [];
@@ -51,12 +53,7 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
 
   for (const model of pickModels(workspace)) {
     for (const child of model.children) {
-      collectModelChild(
-        child,
-        containers,
-        boundaries,
-        identifierMap,
-      );
+      collectModelChild(child, containers, boundaries, identifierMap);
     }
   }
 
@@ -67,8 +64,8 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
   });
 };
 
-/** Workspaces in our Phase-1 parser have at most one model block, but
- * the AST permits MANY for forward-compat. */
+/** Workspaces have at most one model block, but the AST permits MANY
+ * for forward-compatibility. */
 const pickModels = (workspace: WorkspaceNode): readonly ModelNode[] =>
   workspace.body.filter((b): b is ModelNode => b.kind === "model");
 
@@ -106,9 +103,10 @@ const collectModelChild = (
       parentBoundaryName,
     );
   }
-  // Phase 2 wires directives (include / const / var / identifiers /
-  // impliedRelationships) and `infoIssueBlock` diagnostics. For now they
-  // silently fall through — present in the AST, not in the Model.
+  // Directives (include / const / var / identifiers /
+  // impliedRelationships) and `infoIssueBlock` diagnostics are present
+  // in the AST today but don't yet feed into the Model — they'll land
+  // alongside `LoadResult.raw` and ModelIssue wiring.
 };
 
 /**
@@ -116,14 +114,14 @@ const collectModelChild = (
  * (softwareSystem → System_Boundary; container with nested components →
  * Container_Boundary; otherwise → Container).
  *
- * Phase-1 simplification: every leaf element becomes a Container with
- * the appropriate `kind`. softwareSystem at model scope becomes a
- * Boundary if it has nested containers; otherwise a System Container.
+ * Simplification: every leaf element becomes a Container with the
+ * appropriate `kind`. softwareSystem at model scope becomes a Boundary
+ * if it has nested containers; otherwise a System Container.
  */
 /**
  * `GroupNode` has `members` instead of `body` — handle separately.
- * Phase 2 will route group children into the parent's grouping
- * properties; Phase 1 just inlines them at the current scope.
+ * Group children are inlined at the current scope today; a future pass
+ * will route them into the parent's grouping properties.
  */
 const elementChildren = (
   element: ElementNode,
@@ -236,47 +234,47 @@ const aggregateBody = (
 
   for (const item of element.body) {
     switch (item.kind) {
-    case "description": {
-    description = item.value.value;
-    break;
-    }
-    case "technology": {
-    technology = item.value.value;
-    break;
-    }
-    case "tags": {
-    tags.push(...splitTags(item.value.value));
-    break;
-    }
-    case "tag": {
-    tags.push(item.value.value.trim());
-    break;
-    }
-    case "url": {
-    link = item.value.value;
-    break;
-    }
-    case "properties": {
-      properties = properties ?? {};
-      for (const entry of item.entries) {
-        properties[entry.key.value] = entry.value.value;
+      case "description": {
+        description = item.value.value;
+        break;
       }
-    
-    break;
-    }
-    case "perspectives": {
-      properties = properties ?? {};
-      for (const entry of item.entries) {
-        const key = `perspective.${entry.name.name}`;
-        properties[key] = entry.description.value;
-        if (entry.value) {
-          properties[`${key}.value`] = entry.value.value;
+      case "technology": {
+        technology = item.value.value;
+        break;
+      }
+      case "tags": {
+        tags.push(...splitTags(item.value.value));
+        break;
+      }
+      case "tag": {
+        tags.push(item.value.value.trim());
+        break;
+      }
+      case "url": {
+        link = item.value.value;
+        break;
+      }
+      case "properties": {
+        properties = properties ?? {};
+        for (const entry of item.entries) {
+          properties[entry.key.value] = entry.value.value;
         }
+
+        break;
       }
-    
-    break;
-    }
-    // No default
+      case "perspectives": {
+        properties = properties ?? {};
+        for (const entry of item.entries) {
+          const key = `perspective.${entry.name.name}`;
+          properties[key] = entry.description.value;
+          if (entry.value) {
+            properties[`${key}.value`] = entry.value.value;
+          }
+        }
+
+        break;
+      }
+      // No default
     }
   }
   // De-dupe tags while preserving order.
@@ -368,8 +366,8 @@ const kindFromAstKind = (k: ElementNode["kind"]): ContainerKind => {
     }
     case "group": {
       // Groups have no Container counterpart — they're visual grouping.
-      // Phase 1 surfaces them as plain Containers; Phase 2 will route
-      // them to Container.properties["group"] instead.
+      // Today they surface as plain Containers; the future pass will
+      // route them to Container.properties["group"] instead.
       return "Container";
     }
   }

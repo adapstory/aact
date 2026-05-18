@@ -6,10 +6,11 @@
  * captured by chevrotain's `positionTracking: "full"` lexer are
  * promoted to `SourceLocation` on every AST node.
  *
- * Phase 1 scope (matches parser.ts skeleton):
+ * Scope (matches parser.ts):
  *
  *   - Workspace + Model
  *   - Person / SoftwareSystem / Container / Component / Group elements
+ *   - Element body statements + directives
  *   - Explicit relationships
  */
 
@@ -318,8 +319,8 @@ class StructurizrCstToAst extends BaseVisitor {
 
   elementBody(ctx: ElementBodyCtx): ElementBodyNode[] {
     const items: ElementBodyNode[] = [];
-    // Phase 2: body statements come first in the alternative list so
-    // the visitor walks them too. The CST may have any combination.
+    // Body statements come first in the alternative list so the visitor
+    // walks them too. The CST may have any combination.
     if (ctx.bodyStatement) {
       for (const stmt of ctx.bodyStatement) {
         const node = this.visit(stmt) as ElementBodyNode | undefined;
@@ -339,7 +340,7 @@ class StructurizrCstToAst extends BaseVisitor {
     return items;
   }
 
-  // ── Body statements (Phase 2) ──────────────────────────────────────
+  // ── Body statements ────────────────────────────────────────────────
 
   bodyStatement(ctx: BodyStatementCtx): ElementBodyNode | undefined {
     if (ctx.descriptionStmt?.[0]) {
@@ -499,7 +500,7 @@ class StructurizrCstToAst extends BaseVisitor {
     };
   }
 
-  // ── Directives (Phase 2) ───────────────────────────────────────────
+  // ── Directives ─────────────────────────────────────────────────────
 
   directive(ctx: {
     includeDirective?: [CstNode];
@@ -581,7 +582,7 @@ class StructurizrCstToAst extends BaseVisitor {
     const scopeToken = ctx.scope[0];
     return {
       kind: "identifiers" as const,
-      scope: (scopeToken.image === "hierarchical" ? "hierarchical" : "flat"),
+      scope: scopeToken.image === "hierarchical" ? "hierarchical" : "flat",
       range: rangeFromTokens(keyword, scopeToken, this.file),
     };
   }

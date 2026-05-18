@@ -2,7 +2,7 @@ import { parseSource } from "../../../../src/formats/structurizr/parser";
 
 const parse = (src: string) => parseSource(src, "test.dsl");
 
-describe("Structurizr parser — Phase 2 body statements + directives", () => {
+describe("Structurizr parser — body statements + directives", () => {
   it("body `description` overrides header positional", () => {
     const src = `workspace {
       model {
@@ -110,7 +110,7 @@ describe("Structurizr parser — Phase 2 body statements + directives", () => {
     });
   });
 
-  it("supports !const at model scope (parsed, ignored in Phase 2)", () => {
+  it("supports !const at model scope (parsed, currently no toModel effect)", () => {
     const src = `workspace {
       model {
         !const MY_TAG "platform"
@@ -170,10 +170,9 @@ describe("Structurizr parser — Phase 2 body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    // Bank promoted to Boundary because of nested containers; body
-    // statements (description, tag) apply to the boundary's
-    // pre-promotion form. Phase 2 stub: aggregateBody only runs on leaf
-    // path. Boundary form drops body statements (Phase 3 will fix).
+    // Bank promoted to Boundary because of nested containers; the body
+    // statements (description, tag) currently drop on the boundary path
+    // — boundary body aggregation is the next chunk of work.
     expect(model.boundaries["Bank"]).toBeDefined();
     expect(model.containers["API"]).toBeDefined();
     expect(model.containers["DB"]).toBeDefined();

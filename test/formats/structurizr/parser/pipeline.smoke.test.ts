@@ -1,6 +1,6 @@
 import { parseSource } from "../../../../src/formats/structurizr/parser";
 
-describe("Structurizr parser pipeline — Phase 1 smoke (CST → AST → Model)", () => {
+describe("Structurizr parser pipeline (CST → AST → Model)", () => {
   it("produces an empty Model from an empty workspace+model", () => {
     const { model, parseErrors } = parseSource(
       `workspace { model {} }`,

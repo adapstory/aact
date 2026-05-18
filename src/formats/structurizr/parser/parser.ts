@@ -1,28 +1,28 @@
 /**
- * Structurizr DSL parser — Phase 1 skeleton (chevrotain CstParser).
+ * Structurizr DSL parser (chevrotain CstParser).
  *
- * Recognises the minimum useful subset from `grammar.md` so a real-world
- * fixture's model section parses without errors:
+ * Recognises the subset of `grammar.md` needed to take a real-world
+ * fixture's model section through to a populated Model:
  *
  *   - workspace [name] [description] [extends "..."] { body }
  *   - model { body }
  *   - person / softwareSystem / container / component / group element
- *     declarations (with optional `id =` prefix and `{ body }`)
+ *     declarations (optional `id =` prefix, optional `{ body }`)
+ *   - element body statements (description / technology / tags / tag /
+ *     url / properties / perspectives)
  *   - <id> -> <id> [description] [technology] [tags] explicit relationships
+ *   - `!include` / `!const` / `!var` / `!identifiers` /
+ *     `!impliedRelationships` directives at workspace/model scope
  *
- * Out of scope for Phase 1 (added incrementally in Phase 2):
+ * Not yet recognised (tracked in grammar.md):
  *
- *   - Element body statements (description / technology / tags / url /
- *     properties / perspectives / metadata / !docs / !decisions)
- *   - Implicit-source `-> <id> ...` form
- *   - The `-/>` no-relationship form (deployment-scope only — handled
- *     when the deployment block lands)
+ *   - Implicit-source `-> <id> ...` form inside element bodies
+ *   - The `-/>` no-relationship form (deployment-scope only)
  *   - Archetypes alias declarations
- *   - All !directives (!include / !const / !var / !identifiers /
- *     !impliedRelationships)
  *   - Opaque blocks (views / styles / configuration / branding /
- *     terminology / themes) — Phase 2 will balance-brace-skip these
+ *     terminology / themes) — balance-brace skip lands next
  *   - Deployment family (parsed-then-info-issue)
+ *   - Hard-removed reference errors (!ref / !extend / !constant / enterprise)
  *
  * Adding a rule:
  *   1. Add `this.RULE("name", () => { ... })`.
@@ -141,9 +141,9 @@ class StructurizrParser extends CstParser {
   });
 
   /**
-   * Element body — Phase 2: full body statements (description /
-   * technology / tags / tag / url / properties / perspectives) plus
-   * nested elements + relationships.
+   * Element body — full body statements (description / technology /
+   * tags / tag / url / properties / perspectives) plus nested elements
+   * and relationships.
    *
    * Order matters: `bodyStatement` is tried first so an unprefixed
    * `description "..."` line is recognised as a body statement, not as
@@ -161,7 +161,7 @@ class StructurizrParser extends CstParser {
     this.CONSUME(RBrace);
   });
 
-  // ── Body statements (Phase 2) ─────────────────────────────────────
+  // ── Body statements ───────────────────────────────────────────────
 
   private bodyStatement = this.RULE("bodyStatement", () => {
     this.OR([
@@ -242,7 +242,7 @@ class StructurizrParser extends CstParser {
     this.OPTION(() => this.CONSUME2(StringLiteral, { LABEL: "value" }));
   });
 
-  // ── Directives (Phase 2) ──────────────────────────────────────────
+  // ── Directives ────────────────────────────────────────────────────
 
   private directive = this.RULE("directive", () => {
     this.OR([
@@ -319,7 +319,7 @@ export const parserInstance = new StructurizrParser();
 
 /**
  * Parse a Structurizr DSL token stream. Returns the chevrotain CST plus
- * the parser error array. `toModel` (Phase 1 stub, next) walks the CST.
+ * the parser error array. The visitor + `toModel` walk the CST.
  */
 export const parseStructurizrDsl = (
   tokens: readonly IToken[],

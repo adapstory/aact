@@ -124,7 +124,7 @@ The aact parser MUST extract the keyword→base-type mapping from any
 `archetypes { ... }` block before parsing the model body. Archetype
 defaults (description/technology/tags etc.) may be applied during
 toModel as initial values for elements declared via the alias — TBD
-based on Phase 2 implementation.
+when archetype support lands.
 
 ### Relationships
 
