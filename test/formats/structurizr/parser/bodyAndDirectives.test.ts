@@ -116,6 +116,46 @@ describe("Structurizr parser — body statements + directives", () => {
     });
   });
 
+  it("parses !const and !var BEFORE the workspace block", () => {
+    const src = `!const ORG "Acme"
+!var VERSION "1.0"
+workspace {
+  model {
+    api = container "API"
+  }
+}`;
+    const { parseErrors, model } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["API"]).toBeDefined();
+  });
+
+  it("parses workspace-scope !const before model { }", () => {
+    const src = `workspace {
+      !const ORG_TAG "platform"
+      !var ENV "prod"
+      model {
+        api = container "API"
+      }
+    }`;
+    const { parseErrors, model } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["API"]).toBeDefined();
+  });
+
+  it("parses workspace-scope properties { } block", () => {
+    const src = `workspace {
+      properties {
+        "structurizr.dsl.source" "false"
+      }
+      model {
+        api = container "API"
+      }
+    }`;
+    const { parseErrors, model } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["API"]).toBeDefined();
+  });
+
   it("supports !const with a triple-quoted text block value", () => {
     const src = `workspace {
       model {

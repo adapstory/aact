@@ -80,7 +80,17 @@ class StructurizrParser extends CstParser {
   // ── Entry point ────────────────────────────────────────────────────
 
   public workspaceFile = this.RULE("workspaceFile", () => {
+    // Top-level directives may appear before and after the workspace
+    // block — reference fixtures (test.dsl) put `!const`/`!var` at
+    // the very top of the file for substitution into the workspace
+    // metadata that follows.
+    this.MANY1(() =>
+      this.SUBRULE(this.directive, { LABEL: "leadingDirective" }),
+    );
     this.SUBRULE(this.workspaceBlock);
+    this.MANY2(() =>
+      this.SUBRULE1(this.directive, { LABEL: "trailingDirective" }),
+    );
   });
 
   // ── workspace [name] [description] [extends "..."] { body } ────────
@@ -91,13 +101,23 @@ class StructurizrParser extends CstParser {
     this.OPTION2(() => this.CONSUME2(StringLiteral, { LABEL: "description" }));
     this.OPTION3(() => {
       this.CONSUME(Extends);
-      this.OR([
+      this.OR1([
         { ALT: () => this.CONSUME3(StringLiteral, { LABEL: "extendsTarget" }) },
         { ALT: () => this.CONSUME(Identifier, { LABEL: "extendsTargetPath" }) },
       ]);
     });
     this.CONSUME(LBrace);
-    this.MANY(() => this.SUBRULE(this.modelBlock));
+    // Workspace-scope body — directives, `properties { ... }`, and
+    // `model { ... }` blocks may appear in any order. Reference
+    // fixtures put workspace-level directives before `model {}` to
+    // declare constants used inside the model.
+    this.MANY(() => {
+      this.OR2([
+        { ALT: () => this.SUBRULE(this.modelBlock) },
+        { ALT: () => this.SUBRULE(this.directive) },
+        { ALT: () => this.SUBRULE(this.propertiesBlock) },
+      ]);
+    });
     this.CONSUME(RBrace);
   });
 
