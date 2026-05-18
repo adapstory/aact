@@ -1,8 +1,37 @@
 import fs from "node:fs/promises";
 
-import { defineCommand } from "citty";
-import consola from "consola";
 import path from "pathe";
+
+import type { Renderer } from "../output";
+import type { ExecuteResult } from "../run";
+import { cliCommand } from "../run";
+import { jsonArg } from "../sharedArgs";
+
+// -----------------------------------------------------------------------------
+// Public data shape (envelope.data for `aact init`)
+// -----------------------------------------------------------------------------
+
+export type InitFileKind = "config" | "architecture";
+
+export interface InitCreated {
+  readonly path: string;
+  readonly kind: InitFileKind;
+}
+
+export interface InitSkipped {
+  readonly path: string;
+  readonly kind: InitFileKind;
+  readonly reason: "exists";
+}
+
+export interface InitData {
+  readonly created: readonly InitCreated[];
+  readonly skipped: readonly InitSkipped[];
+}
+
+// -----------------------------------------------------------------------------
+// Templates (unchanged — preserved verbatim from prior behaviour)
+// -----------------------------------------------------------------------------
 
 // Type-only import keeps the template runnable via `npx aact check` without
 // a local `npm install aact` — jiti/c12 erase `import type` at parse time.
@@ -82,43 +111,86 @@ Rel(orders, orders_db, "PostgreSQL")
 const configFileName = "aact.config.ts";
 const architectureFileName = "architecture.puml";
 
-const writeIfNew = async (
-  filePath: string,
-  content: string,
-  label: string,
-): Promise<boolean> => {
+// -----------------------------------------------------------------------------
+// Pure executor
+// -----------------------------------------------------------------------------
+
+interface FileSpec {
+  readonly kind: InitFileKind;
+  readonly fileName: string;
+  readonly content: string;
+}
+
+const fileSpecs: readonly FileSpec[] = [
+  { kind: "config", fileName: configFileName, content: configTemplate },
+  {
+    kind: "architecture",
+    fileName: architectureFileName,
+    content: architectureTemplate,
+  },
+];
+
+const fileExists = async (target: string): Promise<boolean> => {
   try {
-    await fs.access(filePath);
-    consola.warn(`${label} already exists. Skipping.`);
-    return false;
-  } catch {
-    await fs.writeFile(filePath, content);
-    consola.success(`Created ${label}`);
+    await fs.access(target);
     return true;
+  } catch {
+    return false;
   }
 };
 
-export const init = defineCommand({
+export const executeInit = async (): Promise<ExecuteResult<InitData>> => {
+  const cwd = process.cwd();
+  const created: InitCreated[] = [];
+  const skipped: InitSkipped[] = [];
+
+  for (const spec of fileSpecs) {
+    const target = path.resolve(cwd, spec.fileName);
+    if (await fileExists(target)) {
+      skipped.push({ path: target, kind: spec.kind, reason: "exists" });
+      continue;
+    }
+    await fs.writeFile(target, spec.content);
+    created.push({ path: target, kind: spec.kind });
+  }
+
+  return {
+    data: { created, skipped },
+    exitCode: 0,
+  };
+};
+
+// -----------------------------------------------------------------------------
+// Text rendering — mirrors current consola.success / warn / info messages
+// -----------------------------------------------------------------------------
+
+export const renderInitText: Renderer<InitData> = (envelope, sink) => {
+  const { data } = envelope;
+
+  for (const skip of data.skipped) {
+    sink.write(`⚠ ${path.basename(skip.path)} already exists. Skipping.\n`);
+  }
+  for (const create of data.created) {
+    sink.write(`✔ Created ${path.basename(create.path)}\n`);
+  }
+
+  if (data.created.length > 0) {
+    sink.write(
+      "Next: run `aact check` to see violations, then `aact check --fix` to auto-fix.\n",
+    );
+  }
+};
+
+// -----------------------------------------------------------------------------
+// Command definition
+// -----------------------------------------------------------------------------
+
+export const init = cliCommand({
+  name: "init",
   meta: {
     description: "Create aact.config.ts and a starter architecture file",
   },
-  async run() {
-    const cwd = process.cwd();
-    const configCreated = await writeIfNew(
-      path.resolve(cwd, configFileName),
-      configTemplate,
-      configFileName,
-    );
-    const archCreated = await writeIfNew(
-      path.resolve(cwd, architectureFileName),
-      architectureTemplate,
-      architectureFileName,
-    );
-
-    if (configCreated || archCreated) {
-      consola.info(
-        "Next: run `aact check` to see violations, then `aact check --fix` to auto-fix.",
-      );
-    }
-  },
+  args: { ...jsonArg },
+  renderText: renderInitText,
+  execute: () => executeInit(),
 });

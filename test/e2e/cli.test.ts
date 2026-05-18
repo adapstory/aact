@@ -81,6 +81,34 @@ describe("aact init", () => {
     );
     expect(config).toBe("// user-modified");
   });
+
+  it("--json emits envelope with created paths", async () => {
+    const result = await runCli(["init", "--json"]);
+    expect(result.exitCode).toBe(0);
+
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe("init");
+
+    const data = envelope.data as Record<string, unknown>;
+    const created = data.created as Array<Record<string, unknown>>;
+    expect(created).toHaveLength(2);
+    expect(created.map((c) => c.kind).sort()).toEqual([
+      "architecture",
+      "config",
+    ]);
+  });
+
+  it("--json reports skipped entries on second run", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["init", "--json"]);
+    expect(result.exitCode).toBe(0);
+
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const data = envelope.data as Record<string, unknown>;
+    expect((data.created as unknown[]).length).toBe(0);
+    expect((data.skipped as unknown[]).length).toBe(2);
+  });
 });
 
 describe("aact check", () => {
