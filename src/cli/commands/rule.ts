@@ -1,102 +1,149 @@
 import { defineCommand } from "citty";
 import { colors } from "consola/utils";
 
+import type { AactConfig } from "../../config";
 import { ruleRegistry } from "../../rules/registry";
-import type { RuleDefinition } from "../../rules/types";
 import { loadAndValidateConfig } from "../loadConfig";
+import type { Renderer } from "../output";
+import { ToolError } from "../output";
+import type { ExecuteResult } from "../run";
+import { cliCommand } from "../run";
+import { configArg, jsonArg } from "../sharedArgs";
 
-interface EffectiveRule {
-  readonly rule: RuleDefinition;
+// -----------------------------------------------------------------------------
+// Public data shape (envelope.data for `aact rule list`)
+// -----------------------------------------------------------------------------
+
+export interface RuleInfo {
+  readonly name: string;
+  readonly description: string;
   readonly source: "built-in" | "custom";
   readonly enabled: boolean;
+  readonly hasFix: boolean;
 }
 
-const buildEffectiveSet = async (): Promise<EffectiveRule[]> => {
-  const out: EffectiveRule[] = [];
-  let config;
-  try {
-    config = await loadAndValidateConfig();
-  } catch {
-    // No config — show built-ins только, all enabled by default
-    return ruleRegistry.map((rule) => ({
-      rule,
-      source: "built-in" as const,
-      enabled: true,
-    }));
-  }
+export interface RuleListSummary {
+  readonly enabled: number;
+  readonly total: number;
+}
 
-  const rules = config.rules;
-  const isEnabled = (name: string): boolean => rules?.[name] !== false;
+export interface RuleListData {
+  readonly rules: readonly RuleInfo[];
+  readonly summary: RuleListSummary;
+}
 
+// -----------------------------------------------------------------------------
+// Pure executor
+// -----------------------------------------------------------------------------
+
+export interface RuleListArgs {
+  readonly config?: string;
+}
+
+const isEnabled = (rules: AactConfig["rules"], name: string): boolean =>
+  rules?.[name] !== false;
+
+const collectRules = (config: AactConfig | null): RuleInfo[] => {
+  const out: RuleInfo[] = [];
   for (const rule of ruleRegistry) {
-    out.push({ rule, source: "built-in", enabled: isEnabled(rule.name) });
+    out.push({
+      name: rule.name,
+      description: rule.description,
+      source: "built-in",
+      enabled: isEnabled(config?.rules, rule.name),
+      hasFix: typeof rule.fix === "function",
+    });
   }
-  for (const rule of config.customRules ?? []) {
-    out.push({ rule, source: "custom", enabled: isEnabled(rule.name) });
+  for (const rule of config?.customRules ?? []) {
+    out.push({
+      name: rule.name,
+      description: rule.description,
+      source: "custom",
+      enabled: isEnabled(config?.rules, rule.name),
+      hasFix: typeof rule.fix === "function",
+    });
   }
   return out;
 };
 
-const listAction = defineCommand({
-  meta: { description: "List all effective rules (built-in + custom)" },
-  args: {
-    json: {
-      type: "boolean",
-      description: "Output in JSON format",
-    },
-  },
-  async run({ args }) {
-    const effective = await buildEffectiveSet();
-
-    if (args.json) {
-      console.log(
-        JSON.stringify(
-          effective.map((e) => ({
-            name: e.rule.name,
-            description: e.rule.description,
-            source: e.source,
-            enabled: e.enabled,
-            hasFix: typeof e.rule.fix === "function",
-          })),
-          undefined,
-          2,
-        ),
-      );
-      return;
+/**
+ * Loads config if present, ignores `config.missingSource` (built-ins-only
+ * fallback) but re-throws every other ToolError so a broken/corrupted
+ * config surfaces as exit 2 instead of silently hiding behind built-ins.
+ */
+const loadConfigOptional = async (
+  configPath: string | undefined,
+): Promise<AactConfig | null> => {
+  try {
+    return await loadAndValidateConfig(configPath);
+  } catch (error) {
+    if (error instanceof ToolError && error.kind === "config.missingSource") {
+      return null;
     }
+    throw error;
+  }
+};
 
-    const groups: Record<"built-in" | "custom", EffectiveRule[]> = {
-      "built-in": [],
-      custom: [],
-    };
-    for (const e of effective) groups[e.source].push(e);
+export const executeRuleList = async (
+  args: RuleListArgs,
+): Promise<ExecuteResult<RuleListData>> => {
+  const config = await loadConfigOptional(args.config);
+  const rules = collectRules(config);
+  const enabled = rules.filter((r) => r.enabled).length;
+  return {
+    data: { rules, summary: { enabled, total: rules.length } },
+    exitCode: 0,
+  };
+};
 
-    const renderGroup = (label: string, items: EffectiveRule[]): void => {
-      if (items.length === 0) return;
-      console.log(colors.bold(label));
-      const maxName = Math.max(...items.map((i) => i.rule.name.length));
-      for (const { rule, enabled } of items) {
-        const status = enabled ? colors.green("●") : colors.dim("○");
-        const fix = rule.fix ? colors.dim(" [fix]") : "";
-        const name = enabled
-          ? colors.bold(rule.name.padEnd(maxName))
-          : colors.dim(rule.name.padEnd(maxName));
-        console.log(
-          `  ${status}  ${name}  ${colors.dim(rule.description)}${fix}`,
-        );
-      }
-      console.log();
-    };
+// -----------------------------------------------------------------------------
+// Text rendering — mirrors current grouped table output
+// -----------------------------------------------------------------------------
 
-    renderGroup("Built-in", groups["built-in"]);
-    renderGroup("Custom", groups.custom);
+const renderGroup = (
+  label: string,
+  items: readonly RuleInfo[],
+  sink: NodeJS.WritableStream,
+): void => {
+  if (items.length === 0) return;
+  sink.write(colors.bold(label) + "\n");
+  const maxName = Math.max(...items.map((i) => i.name.length));
+  for (const rule of items) {
+    const status = rule.enabled ? colors.green("●") : colors.dim("○");
+    const fix = rule.hasFix ? colors.dim(" [fix]") : "";
+    const name = rule.enabled
+      ? colors.bold(rule.name.padEnd(maxName))
+      : colors.dim(rule.name.padEnd(maxName));
+    sink.write(`  ${status}  ${name}  ${colors.dim(rule.description)}${fix}\n`);
+  }
+  sink.write("\n");
+};
 
-    const enabled = effective.filter((e) => e.enabled).length;
-    const total = effective.length;
-    console.log(
-      colors.dim(`${enabled}/${total} rules enabled · ● enabled · ○ disabled`),
-    );
-  },
+export const renderRuleListText: Renderer<RuleListData> = (envelope, sink) => {
+  const { data } = envelope;
+  const builtIns = data.rules.filter((r) => r.source === "built-in");
+  const customs = data.rules.filter((r) => r.source === "custom");
+
+  renderGroup("Built-in", builtIns, sink);
+  renderGroup("Custom", customs, sink);
+
+  sink.write(
+    colors.dim(
+      `${data.summary.enabled}/${data.summary.total} rules enabled · ● enabled · ○ disabled\n`,
+    ),
+  );
+};
+
+// -----------------------------------------------------------------------------
+// Command definition
+// -----------------------------------------------------------------------------
+
+const listAction = cliCommand({
+  name: "rule list",
+  meta: { description: "List all effective rules (built-in + custom)" },
+  args: { ...configArg, ...jsonArg },
+  renderText: renderRuleListText,
+  execute: (ctx) => executeRuleList(ctx.args as RuleListArgs),
 });
 
 export const rule = defineCommand({

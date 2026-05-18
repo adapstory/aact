@@ -386,14 +386,40 @@ export default {
     expect(output).toContain("noLegacy");
   });
 
-  it("emits JSON when --json flag set", async () => {
+  it("emits a v1 envelope with rules[] when --json flag set", async () => {
     const result = await runCli(["rule", "list", "--json"]);
     expect(result.exitCode).toBe(0);
-    const parsed = JSON.parse(result.stdout);
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed[0]).toHaveProperty("name");
-    expect(parsed[0]).toHaveProperty("source");
-    expect(parsed[0]).toHaveProperty("enabled");
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe("rule list");
+
+    const data = envelope.data as Record<string, unknown>;
+    const rules = data.rules as Array<Record<string, unknown>>;
+    expect(Array.isArray(rules)).toBe(true);
+    expect(rules[0]).toHaveProperty("name");
+    expect(rules[0]).toHaveProperty("source");
+    expect(rules[0]).toHaveProperty("enabled");
+    expect(rules[0]).toHaveProperty("hasFix");
+
+    const summary = data.summary as Record<string, unknown>;
+    expect(summary.total).toBeGreaterThan(0);
+  });
+
+  it("--config exits 2 when config file is broken (no silent fallback)", async () => {
+    await fs.writeFile(
+      path.join(workDir, "broken.config.ts"),
+      "export default { source: 123 };",
+    );
+    const result = await runCli([
+      "rule",
+      "list",
+      "--config",
+      "./broken.config.ts",
+      "--json",
+    ]);
+    expect(result.exitCode).toBe(2);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.exitCode).toBe(2);
   });
 });
 

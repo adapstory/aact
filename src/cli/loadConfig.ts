@@ -136,12 +136,20 @@ const parseConfig = (
   }
 };
 
+const isAbsent = (raw: unknown): boolean => {
+  if (!raw) return true;
+  // c12 returns {} when no config file is found in cwd / parents. Treat as
+  // absent so commands that tolerate "no config" (like `rule list`) can
+  // differentiate from a real schema-invalid config.
+  return typeof raw === "object" && Object.keys(raw).length === 0;
+};
+
 export const loadAndValidateConfig = async (
   configPath?: string,
 ): Promise<AactConfig> => {
   const raw = await loadRawConfig(configPath);
 
-  if (!raw) {
+  if (isAbsent(raw)) {
     throw new ToolError(
       "config.missingSource",
       "No aact config found. Create an aact.config.ts file (run `aact init` to scaffold).",
