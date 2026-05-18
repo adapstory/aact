@@ -26,10 +26,12 @@ import type {
 import { buildModel } from "../../../model";
 import type { LoadResult } from "../../types";
 import type {
+  ElementBodyNode,
   ElementNode,
   ModelChildNode,
   ModelNode,
   RelationshipNode,
+  ReopenNode,
   WorkspaceNode,
 } from "./ast";
 
@@ -53,12 +55,7 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
 
   for (const model of pickModels(workspace)) {
     for (const child of model.children) {
-      collectModelChild(
-        child,
-        containers,
-        boundaries,
-        identifierMap,
-      );
+      collectModelChild(child, containers, boundaries, identifierMap);
     }
   }
 
@@ -97,6 +94,10 @@ const collectModelChild = (
 ): void => {
   if (child.kind === "relationship") {
     handleRelationship(child, containers, identifierMap);
+    return;
+  }
+  if (child.kind === "reopen") {
+    handleReopen(child, containers, boundaries, identifierMap);
     return;
   }
   if (ELEMENT_KINDS.has(child.kind)) {
@@ -451,6 +452,177 @@ const handleRelationship = (
     ...sourceContainer,
     relations: [...sourceContainer.relations, relation],
   };
+};
+
+/**
+ * Re-open form: `existing { body }`. Find the previously declared
+ * element by identifier (possibly hierarchical: `bank.api`) and merge
+ * its body statements into the existing Container or Boundary.
+ * Relationships inside the reopen body get the resolved target as
+ * their implicit source.
+ */
+const handleReopen = (
+  reopen: ReopenNode,
+  containers: Container[],
+  boundaries: Boundary[],
+  identifierMap: Map<string, string>,
+): void => {
+  const targetDisplay =
+    identifierMap.get(reopen.target.name) ?? reopen.target.name;
+
+  const bodyStatements = reopen.body.filter(
+    (b): b is Exclude<ElementBodyNode, ElementNode | RelationshipNode> =>
+      b.kind !== "relationship" && !ELEMENT_KINDS.has(b.kind),
+  );
+  const relationships = reopen.body.filter(
+    (b): b is RelationshipNode => b.kind === "relationship",
+  );
+
+  const containerIdx = containers.findIndex((c) => c.name === targetDisplay);
+  if (containerIdx !== -1) {
+    containers[containerIdx] = mergeContainerBody(
+      containers[containerIdx],
+      bodyStatements,
+    );
+    for (const rel of relationships) {
+      handleRelationship(rel, containers, identifierMap, targetDisplay);
+    }
+    return;
+  }
+
+  const boundaryIdx = boundaries.findIndex((b) => b.name === targetDisplay);
+  if (boundaryIdx !== -1) {
+    boundaries[boundaryIdx] = mergeBoundaryBody(
+      boundaries[boundaryIdx],
+      bodyStatements,
+    );
+    for (const rel of relationships) {
+      handleRelationship(rel, containers, identifierMap, targetDisplay);
+    }
+  }
+  // Target not found — silently drop. The reference parser would have
+  // already errored on an unresolved identifier inside an element scope.
+};
+
+/**
+ * Apply body-statement deltas (description / technology / tags / url /
+ * properties) to an existing Container. Used by the reopen path.
+ */
+const mergeContainerBody = (
+  c: Container,
+  statements: readonly Exclude<
+    ElementBodyNode,
+    ElementNode | RelationshipNode
+  >[],
+): Container => {
+  const delta = aggregateBodyStatements(statements);
+  return {
+    ...c,
+    description: delta.description ?? c.description,
+    technology: delta.technology ?? c.technology,
+    tags: dedupeTags([...c.tags, ...delta.tags]),
+    link: delta.link ?? c.link,
+    properties: mergeProperties(c.properties, delta.properties),
+  };
+};
+
+const mergeBoundaryBody = (
+  b: Boundary,
+  statements: readonly Exclude<
+    ElementBodyNode,
+    ElementNode | RelationshipNode
+  >[],
+): Boundary => {
+  const delta = aggregateBodyStatements(statements);
+  return {
+    ...b,
+    description: delta.description ?? b.description,
+    tags: dedupeTags([...b.tags, ...delta.tags]),
+    link: delta.link ?? b.link,
+    properties: mergeProperties(b.properties, delta.properties),
+  };
+};
+
+const mergeProperties = (
+  base: Readonly<Record<string, string>> | undefined,
+  delta: Record<string, string> | undefined,
+): Record<string, string> | undefined => {
+  if (!base && !delta) return undefined;
+  return { ...base, ...delta };
+};
+
+const dedupeTags = (tags: readonly string[]): string[] => {
+  const seen = new Set<string>();
+  return tags.filter((t) => (seen.has(t) ? false : (seen.add(t), true)));
+};
+
+/**
+ * Aggregate a list of body statements into a normalised delta.
+ * Mirrors the relevant cases from aggregateBody but without an
+ * element header to seed defaults from.
+ */
+const aggregateBodyStatements = (
+  statements: readonly Exclude<
+    ElementBodyNode,
+    ElementNode | RelationshipNode
+  >[],
+): {
+  description: string | undefined;
+  technology: string | undefined;
+  tags: string[];
+  link: string | undefined;
+  properties: Record<string, string> | undefined;
+} => {
+  let description: string | undefined;
+  let technology: string | undefined;
+  const tags: string[] = [];
+  let link: string | undefined;
+  let properties: Record<string, string> | undefined;
+
+  for (const item of statements) {
+    switch (item.kind) {
+      case "description": {
+        description = item.value.value;
+        break;
+      }
+      case "technology": {
+        technology = item.value.value;
+        break;
+      }
+      case "tags": {
+        tags.push(...splitTags(item.value.value));
+        break;
+      }
+      case "tag": {
+        tags.push(item.value.value.trim());
+        break;
+      }
+      case "url": {
+        link = item.value.value;
+        break;
+      }
+      case "properties": {
+        properties = properties ?? {};
+        for (const entry of item.entries) {
+          properties[entry.key.value] = entry.value.value;
+        }
+        break;
+      }
+      case "perspectives": {
+        properties = properties ?? {};
+        for (const entry of item.entries) {
+          const key = `perspective.${entry.name.name}`;
+          properties[key] = entry.description.value;
+          if (entry.value) {
+            properties[`${key}.value`] = entry.value.value;
+          }
+        }
+        break;
+      }
+      // No default
+    }
+  }
+  return { description, technology, tags, link, properties };
 };
 
 /**

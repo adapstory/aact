@@ -109,9 +109,19 @@ class StructurizrParser extends CstParser {
   private modelBodyItem = this.RULE("modelBodyItem", () => {
     this.OR([
       { ALT: () => this.SUBRULE(this.elementDeclaration) },
+      { ALT: () => this.SUBRULE(this.reopenDeclaration) },
       { ALT: () => this.SUBRULE(this.relationship) },
       { ALT: () => this.SUBRULE(this.directive) },
     ]);
+  });
+
+  // Re-open form: `existing { body }` — attach more body statements,
+  // nested elements, or relationships to a previously declared
+  // element. Disambiguated from `id = element` and `id -> id` by the
+  // `{` following the identifier.
+  private reopenDeclaration = this.RULE("reopenDeclaration", () => {
+    this.CONSUME(Identifier, { LABEL: "target" });
+    this.SUBRULE(this.elementBody);
   });
 
   // ── elementDeclaration: optional `id =` + header + optional body ──

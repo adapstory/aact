@@ -117,8 +117,29 @@ export interface ModelNode extends RecoverableNode {
 export type ModelChildNode =
   | ElementNode
   | RelationshipNode
+  | ReopenNode
   | DirectiveNode
   | InfoIssueBlock; // deploymentEnvironment, etc.
+
+/**
+ * Re-open a previously declared element to attach more body
+ * statements / nested elements / relationships. Source form:
+ *
+ *   api {
+ *     description "Updated"
+ *     -> db "writes"
+ *   }
+ *
+ * The `target` identifier (possibly hierarchical: `bank.api`) resolves
+ * via the same identifier map used for relationship endpoints; toModel
+ * merges body statements into the existing Container or Boundary.
+ */
+export interface ReopenNode extends RecoverableNode {
+  readonly kind: "reopen";
+  readonly target: IdentifierRef;
+  readonly body: readonly ElementBodyNode[];
+  readonly range: SourceLocation;
+}
 
 // ── Elements ────────────────────────────────────────────────────────────
 

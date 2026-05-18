@@ -171,6 +171,9 @@ class StructurizrCstToAst extends BaseVisitor {
     if (ctx.elementDeclaration?.[0]) {
       return this.visit(ctx.elementDeclaration[0]) as ElementNode;
     }
+    if (ctx.reopenDeclaration?.[0]) {
+      return this.visit(ctx.reopenDeclaration[0]) as ModelChildNode;
+    }
     if (ctx.relationship?.[0]) {
       return this.visit(ctx.relationship[0]) as RelationshipNode;
     }
@@ -178,6 +181,22 @@ class StructurizrCstToAst extends BaseVisitor {
       return this.visit(ctx.directive[0]) as ModelChildNode;
     }
     return undefined; // recovered / incomplete — caller filters
+  }
+
+  reopenDeclaration(ctx: ReopenDeclarationCtx): ModelChildNode {
+    const targetToken = ctx.target[0];
+    const body = this.visit(ctx.elementBody[0]) as ElementBodyNode[];
+    const closeToken = findClosingBrace(ctx.elementBody[0]);
+    return {
+      kind: "reopen",
+      target: {
+        kind: "identifierRef",
+        name: targetToken.image,
+        range: rangeFromToken(targetToken, this.file),
+      },
+      body,
+      range: rangeFromTokens(targetToken, closeToken ?? targetToken, this.file),
+    };
   }
 
   elementDeclaration(ctx: ElementDeclarationCtx): ElementNode {
@@ -619,9 +638,7 @@ class StructurizrCstToAst extends BaseVisitor {
     // Relationship / NoRelationship arrays — fall back through all
     // possibilities so we always recover the arrow token.
     const arrowToken =
-      (ctx.arrow)?.[0] ??
-      ctx.Relationship?.[0] ??
-      ctx.NoRelationship?.[0];
+      ctx.arrow?.[0] ?? ctx.Relationship?.[0] ?? ctx.NoRelationship?.[0];
 
     const lastToken =
       ctx.tags?.[0] ??
@@ -702,8 +719,14 @@ interface ModelBlockCtx {
 
 interface ModelBodyItemCtx {
   readonly elementDeclaration?: readonly [CstNode];
+  readonly reopenDeclaration?: readonly [CstNode];
   readonly relationship?: readonly [CstNode];
   readonly directive?: readonly [CstNode];
+}
+
+interface ReopenDeclarationCtx {
+  readonly target: readonly [IToken];
+  readonly elementBody: readonly [CstNode];
 }
 
 interface ElementDeclarationCtx {
