@@ -79,7 +79,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "svc")?.tags).toEqual(["acl"]);
+    expect(getContainer(model, "Svc")?.tags).toEqual(["acl"]);
   });
 
   it("swaps from/to for Rel_Back relations", async () => {
@@ -95,7 +95,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "b")?.relations[0].to).toBe("a");
+    expect(getContainer(model, "B")?.relations[0].to).toBe("A");
   });
 
   it("leaves non-Rel_Back relations untouched", async () => {
@@ -110,7 +110,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].to).toBe("b");
+    expect(getContainer(model, "A")?.relations[0].to).toBe("B");
   });
 
   it("recognises ContainerDb kind from PUML", async () => {
@@ -123,7 +123,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "orders_db")?.kind).toBe("ContainerDb");
+    expect(getContainer(model, "Orders DB")?.kind).toBe("ContainerDb");
   });
 
   it("recognises System_Ext as kind=System + external=true", async () => {
@@ -136,7 +136,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    const ext = getContainer(model, "ext");
+    const ext = getContainer(model, "External System");
     expect(ext?.kind).toBe("System");
     expect(ext?.external).toBe(true);
   });
@@ -151,7 +151,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "parser")?.kind).toBe("Component");
+    expect(getContainer(model, "Parser")?.kind).toBe("Component");
   });
 
   it("renders System kind from PUML", async () => {
@@ -164,7 +164,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "core")?.kind).toBe("System");
+    expect(getContainer(model, "Core System")?.kind).toBe("System");
   });
 
   it("renders Person kind from PUML", async () => {
@@ -177,7 +177,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "user")?.kind).toBe("Person");
+    expect(getContainer(model, "End User")?.kind).toBe("Person");
   });
 
   it.each([
@@ -211,7 +211,7 @@ describe("PlantUML load — unit", () => {
           "@enduml",
         ].join("\n"),
       );
-      expect(getContainer(model, "elem")?.kind).toBe(expectedKind);
+      expect(getContainer(model, "Label")?.kind).toBe(expectedKind);
     },
   );
 
@@ -225,7 +225,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "svc")?.technology).toBeUndefined();
+    expect(getContainer(model, "Svc")?.technology).toBeUndefined();
   });
 
   it("Container with technology arg preserves it", async () => {
@@ -238,7 +238,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "svc")?.technology).toBe("Spring Boot");
+    expect(getContainer(model, "Svc")?.technology).toBe("Spring Boot");
   });
 
   it("Person ignores technology slot (Context, no techn field)", async () => {
@@ -253,7 +253,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "user")?.technology).toBeUndefined();
+    expect(getContainer(model, "User")?.technology).toBeUndefined();
   });
 
   it("Container with explicit description fills the description field", async () => {
@@ -266,7 +266,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "svc")?.description).toBe("Detailed purpose");
+    expect(getContainer(model, "Svc")?.description).toBe("Detailed purpose");
   });
 
   it("Container without description has empty-string description (covers el.descr || '')", async () => {
@@ -279,7 +279,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "svc")?.description).toBe("");
+    expect(getContainer(model, "Svc")?.description).toBe("");
   });
 
   it("Rel preserves description from label arg", async () => {
@@ -294,7 +294,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].description).toBe("calls");
+    expect(getContainer(model, "A")?.relations[0].description).toBe("calls");
   });
 
   it("Rel without technology has technology=undefined (covers rel.techn || undefined)", async () => {
@@ -309,7 +309,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].technology).toBeUndefined();
+    expect(getContainer(model, "A")?.relations[0].technology).toBeUndefined();
   });
 
   it("Rel without label has description=undefined", async () => {
@@ -324,7 +324,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].description).toBeUndefined();
+    expect(getContainer(model, "A")?.relations[0].description).toBeUndefined();
   });
 
   it("Rel preserves technology from techn arg", async () => {
@@ -339,7 +339,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].technology).toBe("REST");
+    expect(getContainer(model, "A")?.relations[0].technology).toBe("REST");
   });
 
   it("Rel without tags has tags=[] (covers parseCsvTags empty)", async () => {
@@ -354,7 +354,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].tags).toEqual([]);
+    expect(getContainer(model, "A")?.relations[0].tags).toEqual([]);
   });
 
   it("Comment elements are ignored by normalizeRelBack (covers instanceof Comment continue)", async () => {
@@ -373,7 +373,7 @@ describe("PlantUML load — unit", () => {
       ].join("\n"),
     );
     // Rel_Back(a,b) → swap → b → a
-    expect(getContainer(model, "b")?.relations[0].to).toBe("a");
+    expect(getContainer(model, "B")?.relations[0].to).toBe("A");
   });
 
   it("non-Rel_Back relation in normalizeRelBack scope stays untouched (instanceof Stdlib_C4_Dynamic_Rel guard)", async () => {
@@ -388,8 +388,8 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].to).toBe("b");
-    expect(getContainer(model, "b")?.relations ?? []).toHaveLength(0);
+    expect(getContainer(model, "A")?.relations[0].to).toBe("B");
+    expect(getContainer(model, "B")?.relations ?? []).toHaveLength(0);
   });
 
   it.each([
@@ -416,7 +416,7 @@ describe("PlantUML load — unit", () => {
           "@enduml",
         ].join("\n"),
       );
-      expect(model.boundaries.b1?.kind).toBe(expectedKind);
+      expect(model.boundaries["Boundary"]?.kind).toBe(expectedKind);
     },
   );
 
@@ -432,7 +432,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].tags).toEqual([
+    expect(getContainer(model, "A")?.relations[0].tags).toEqual([
       "async",
       "audit",
     ]);
@@ -450,7 +450,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].technology).toBe("REST");
+    expect(getContainer(model, "A")?.relations[0].technology).toBe("REST");
   });
 
   it("each new container starts with an empty relations array", async () => {
@@ -463,7 +463,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations).toEqual([]);
+    expect(getContainer(model, "A")?.relations).toEqual([]);
   });
 
   it("model.containers Record is sorted alphabetically (buildModel guarantee)", async () => {
@@ -478,7 +478,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(Object.keys(model.containers)).toEqual(["a_svc", "m_svc", "z_svc"]);
+    expect(Object.keys(model.containers)).toEqual(["A", "M", "Z"]);
   });
 
   it("includes only declared containers in a boundary, not unrelated ones", async () => {
@@ -494,9 +494,9 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    const orders = model.boundaries.orders;
-    expect(orders.containerNames).toEqual(["orders_api"]);
-    expect(orders.containerNames).not.toContain("outside");
+    const orders = model.boundaries["Orders"];
+    expect(orders.containerNames).toEqual(["Orders API"]);
+    expect(orders.containerNames).not.toContain("Outside");
   });
 
   it("nests boundaries — child boundary names land under parent.boundaryNames", async () => {
@@ -513,7 +513,7 @@ describe("PlantUML load — unit", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(model.boundaries.platform?.boundaryNames).toContain("orders");
+    expect(model.boundaries["Platform"]?.boundaryNames).toContain("Orders");
   });
 
   it("does NOT push spurious self-relations for isolated containers (no Rel)", async () => {
@@ -585,7 +585,7 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "svc")?.link).toBe(
+    expect(getContainer(model, "Svc")?.link).toBe(
       "https://wiki.example.com/svc",
     );
   });
@@ -601,8 +601,8 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
       ].join("\n"),
     );
     // sprite present, tags empty → sprite preserved (not fallback'нут как tags)
-    expect(getContainer(model, "svc")?.sprite).toBe("java-logo");
-    expect(getContainer(model, "svc")?.tags).toEqual([]);
+    expect(getContainer(model, "Svc")?.sprite).toBe("java-logo");
+    expect(getContainer(model, "Svc")?.tags).toEqual([]);
   });
 
   it("BiRel expands to two directed Rel — a→b AND b→a", async () => {
@@ -619,12 +619,12 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
         "@enduml",
       ].join("\n"),
     );
-    const a = getContainer(model, "svc_a")!;
-    const b = getContainer(model, "svc_b")!;
+    const a = getContainer(model, "A")!;
+    const b = getContainer(model, "B")!;
     expect(a.relations).toHaveLength(1);
-    expect(a.relations[0].to).toBe("svc_b");
+    expect(a.relations[0].to).toBe("B");
     expect(b.relations).toHaveLength(1);
-    expect(b.relations[0].to).toBe("svc_a");
+    expect(b.relations[0].to).toBe("A");
     // Both relations carry the same attributes (label, technology, tags).
     expect(a.relations[0].description).toBe("talks to");
     expect(b.relations[0].description).toBe("talks to");
@@ -644,8 +644,8 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
           "@enduml",
         ].join("\n"),
       );
-      expect(getContainer(model, "svc_a")?.relations[0].to).toBe("svc_b");
-      expect(getContainer(model, "svc_b")?.relations[0].to).toBe("svc_a");
+      expect(getContainer(model, "A")?.relations[0].to).toBe("B");
+      expect(getContainer(model, "B")?.relations[0].to).toBe("A");
     },
   );
 
@@ -661,8 +661,8 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations).toHaveLength(1);
-    expect(getContainer(model, "b")?.relations).toHaveLength(0);
+    expect(getContainer(model, "A")?.relations).toHaveLength(1);
+    expect(getContainer(model, "B")?.relations).toHaveLength(0);
   });
 
   it("Relation.link preserved from $link= named arg", async () => {
@@ -677,7 +677,7 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0].link).toBe(
+    expect(getContainer(model, "A")?.relations[0].link).toBe(
       "https://api.docs/v1",
     );
   });
@@ -694,7 +694,7 @@ describe("PlantUML load — F2 fidelity (link, sprite, BiRel)", () => {
         "@enduml",
       ].join("\n"),
     );
-    expect(model.boundaries.orders?.link).toBe("https://wiki/orders");
+    expect(model.boundaries["Orders"]?.link).toBe("https://wiki/orders");
   });
 });
 
@@ -733,10 +733,12 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
         "@enduml",
       ].join("\n"),
     );
-    // Container loaded, но properties stay undefined (parser drops the
-    // SetPropertyHeader/AddProperty side-effects). Документировано.
-    expect(getContainer(model, "svc")).toBeDefined();
-    expect(getContainer(model, "svc")?.properties).toBeUndefined();
+    // Container loaded; the only property the loader emits is the
+    // `plantuml.alias` round-trip key — SetPropertyHeader/AddProperty
+    // side-effects are dropped by plantuml-parser. Документировано.
+    const svc = getContainer(model, "Svc");
+    expect(svc).toBeDefined();
+    expect(svc?.properties).toEqual({ "plantuml.alias": "svc" });
   });
 
   it("KNOWN GAP: Boundary description не expose'ится parser'ом — Boundary.description undefined", async () => {
@@ -755,8 +757,8 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
         "@enduml",
       ].join("\n"),
     );
-    expect(model.boundaries.orders).toBeDefined();
-    expect(model.boundaries.orders?.description).toBeUndefined();
+    expect(model.boundaries["Orders"]).toBeDefined();
+    expect(model.boundaries["Orders"]?.description).toBeUndefined();
   });
 
   // ── plantuml-parser 0.4 adapter — gaps closed by pre-transform ──
@@ -777,8 +779,8 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
     );
     // Without the pre-transform, $index= made plantuml-parser drop the entire
     // relation. Now both relations load AND carry their order.
-    const a = getContainer(model, "a")!;
-    const b = getContainer(model, "b")!;
+    const a = getContainer(model, "A")!;
+    const b = getContainer(model, "B")!;
     expect(a.relations).toHaveLength(1);
     expect(b.relations).toHaveLength(1);
     expect(a.relations[0]?.order).toBe(1);
@@ -797,7 +799,7 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
         "@enduml",
       ].join("\n"),
     );
-    expect(getContainer(model, "a")?.relations[0]?.order).toBe(3);
+    expect(getContainer(model, "A")?.relations[0]?.order).toBe(3);
   });
 
   it("$index= with a non-numeric value degrades to undefined (no NaN)", async () => {
@@ -813,8 +815,8 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
       ].join("\n"),
     );
     // Relation still loads; order is undefined rather than NaN.
-    expect(getContainer(model, "a")?.relations).toHaveLength(1);
-    expect(getContainer(model, "a")?.relations[0]?.order).toBeUndefined();
+    expect(getContainer(model, "A")?.relations).toHaveLength(1);
+    expect(getContainer(model, "A")?.relations[0]?.order).toBeUndefined();
   });
 
   // Component_Boundary tests removed — it is NOT in the C4-PlantUML stdlib

@@ -141,7 +141,10 @@ const buildContainer = (
   );
 
   return {
-    name: el.alias,
+    // C4 semantic: `name` is the human-readable display name (the
+    // PUML `label` arg). The short alias (`api`, `db`) is stashed in
+    // properties so the fix layer can locate the element in source.
+    name: el.label,
     label: el.label,
     kind,
     external,
@@ -154,10 +157,14 @@ const buildContainer = (
     sprite: spriteNamedValue ?? cleanSlot(el.sprite, ...ALL_MARKERS),
     relations: [],
     link: linkValue ?? cleanSlot(el.link, ...ALL_MARKERS),
+    properties: Object.freeze({ "plantuml.alias": el.alias }),
   };
 };
 
-const buildRelation = (rel: Stdlib_C4_Dynamic_Rel): Relation => {
+const buildRelation = (
+  rel: Stdlib_C4_Dynamic_Rel,
+  aliasToName: ReadonlyMap<string, string>,
+): Relation => {
   // Same marker-strip logic — Rel signature: from, to, label, techn, descr,
   // sprite, tags, link. Any named arg может оказаться в любой positional.
   const relSlots = [
@@ -179,7 +186,9 @@ const buildRelation = (rel: Stdlib_C4_Dynamic_Rel): Relation => {
       : undefined;
 
   return {
-    to: rel.to,
+    // Resolve the alias-form `rel.to` to its display name so edges
+    // index Containers by the same key as the rest of the Model.
+    to: aliasToName.get(rel.to) ?? rel.to,
     description: cleanSlot(rel.label, ...ALL_MARKERS) || undefined,
     technology: cleanSlot(rel.techn, ...ALL_MARKERS),
     tags:
@@ -206,7 +215,7 @@ const buildBoundary = (
   const linkValue = extractMarked(LINK_MARKER, el.tags, el.link);
 
   return {
-    name: el.alias,
+    name: el.label,
     label: el.label,
     kind: parseBoundaryMacro(el.type_.name),
     tags:
@@ -216,6 +225,7 @@ const buildBoundary = (
     containerNames: childContainers,
     boundaryNames: childBoundaries,
     link: linkValue ?? cleanSlot(el.link, ...ALL_MARKERS),
+    properties: Object.freeze({ "plantuml.alias": el.alias }),
   };
 };
 
@@ -227,12 +237,16 @@ const isC4Element = (
 
 const collectBoundaryChildren = (
   el: Stdlib_C4_Boundary,
+  aliasToName: ReadonlyMap<string, string>,
 ): { containers: string[]; boundaries: string[] } => {
   const containers: string[] = [];
   const boundaries: string[] = [];
   for (const child of el.elements) {
-    if (isC4Element(child)) containers.push(child.alias);
-    else if (child instanceof Stdlib_C4_Boundary) boundaries.push(child.alias);
+    if (isC4Element(child)) {
+      containers.push(aliasToName.get(child.alias) ?? child.alias);
+    } else if (child instanceof Stdlib_C4_Boundary) {
+      boundaries.push(aliasToName.get(child.alias) ?? child.alias);
+    }
   }
   return { containers, boundaries };
 };
@@ -259,15 +273,18 @@ const pushRelation = (
 const populateRelations = (
   elements: readonly UMLElement[],
   acc: Record<string, Container>,
+  aliasToName: ReadonlyMap<string, string>,
 ): void => {
   for (const el of elements) {
     if (!(el instanceof Stdlib_C4_Dynamic_Rel)) continue;
-    pushRelation(acc, el.from, buildRelation(el));
+    const fromName = aliasToName.get(el.from) ?? el.from;
+    pushRelation(acc, fromName, buildRelation(el, aliasToName));
     if (el.type_.name.startsWith("BiRel")) {
+      const toName = aliasToName.get(el.to) ?? el.to;
       pushRelation(
         acc,
-        el.to,
-        buildRelation({ ...el, from: el.to, to: el.from }),
+        toName,
+        buildRelation({ ...el, from: el.to, to: el.from }, aliasToName),
       );
     }
   }
@@ -275,12 +292,13 @@ const populateRelations = (
 
 const collectChildBoundaryNames = (
   boundaryElements: readonly Stdlib_C4_Boundary[],
+  aliasToName: ReadonlyMap<string, string>,
 ): Set<string> => {
   const childOfBoundary = new Set<string>();
   for (const b of boundaryElements) {
     for (const child of b.elements) {
       if (child instanceof Stdlib_C4_Boundary) {
-        childOfBoundary.add(child.alias);
+        childOfBoundary.add(aliasToName.get(child.alias) ?? child.alias);
       }
     }
   }
@@ -296,25 +314,45 @@ export const load = async (filePath: string): Promise<LoadResult> => {
 
   normalizeRelBack(elements);
 
-  // Pass 1: containers (Person/System/Container/Component variants)
-  const containerByAlias: Record<string, Container> = Object.create(
+  // Pass 0: alias → display-name index. PUML uses an alias (`api`,
+  // `db`) as the inline reference but the Model keys everything by
+  // display name (`"API"`, `"DB"`). We build the index in one sweep
+  // over containers + boundaries so the rest of the loader can map
+  // alias references on either side of a relation or boundary edge.
+  const aliasToName = new Map<string, string>();
+  for (const el of elements) {
+    if (isC4Element(el) || el instanceof Stdlib_C4_Boundary) {
+      aliasToName.set(el.alias, el.label);
+    }
+  }
+
+  // Pass 1: containers (Person/System/Container/Component variants),
+  // keyed by display name in the working dict.
+  const containerByName: Record<string, Container> = Object.create(
     null,
   ) as Record<string, Container>;
   for (const el of elements) {
-    if (isC4Element(el)) containerByAlias[el.alias] = buildContainer(el);
+    if (isC4Element(el)) containerByName[el.label] = buildContainer(el);
   }
 
-  // Pass 2: relations (с BiRel expansion)
-  populateRelations(elements, containerByAlias);
+  // Pass 2: relations (с BiRel expansion); rel.to / rel.from resolve
+  // through `aliasToName`.
+  populateRelations(elements, containerByName, aliasToName);
 
-  // Pass 3: boundaries + root detection
+  // Pass 3: boundaries + root detection — boundary children also
+  // resolve through `aliasToName`.
   const boundaryElements = elements.filter(
     (el): el is Stdlib_C4_Boundary => el instanceof Stdlib_C4_Boundary,
   );
-  const childOfBoundary = collectChildBoundaryNames(boundaryElements);
+  const childOfBoundary = collectChildBoundaryNames(
+    boundaryElements,
+    aliasToName,
+  );
   const boundaries = boundaryElements.map((b) => {
-    const { containers, boundaries: childBoundaries } =
-      collectBoundaryChildren(b);
+    const { containers, boundaries: childBoundaries } = collectBoundaryChildren(
+      b,
+      aliasToName,
+    );
     return buildBoundary(b, containers, childBoundaries);
   });
   const rootBoundaryNames = boundaries
@@ -322,7 +360,7 @@ export const load = async (filePath: string): Promise<LoadResult> => {
     .filter((name) => !childOfBoundary.has(name));
 
   return buildModel({
-    containers: Object.values(containerByAlias),
+    containers: Object.values(containerByName),
     boundaries,
     rootBoundaryNames,
   });

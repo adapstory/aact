@@ -22,20 +22,24 @@ import {
   STRUCTURIZR_TAG_ASYNC,
 } from "./types";
 
-/** Resolve human-readable name через `structurizr.dsl.identifier` property,
- * fallback на raw id. Это позволяет правилам ссылаться на читаемые имена. */
+/** DSL identifier (the short id used in DSL source like `orders_crud =
+ * container "Orders CRUD"`). Stored on `Container.properties` for the
+ * fix layer to round-trip; not used as the Model's primary key — that's
+ * the human-readable display name (`Orders CRUD`). */
 const dslId = (id: string, properties?: StructurizrProperties): string =>
   properties?.["structurizr.dsl.identifier"] ?? id;
 
 /**
  * Composite properties bag: user-defined + group (как prefix `group`) +
- * perspectives (как `perspective.<name>` + опциональный `perspective.<name>.value`).
+ * perspectives (как `perspective.<name>` + опциональный `perspective.<name>.value`)
+ * + `structurizr.dsl.identifier` (DSL short id for round-trip with fix).
  *
  * Solution Architect добавляет perspectives (security/scalability/ops view)
  * к одной модели — сохраняем для round-trip без потерь. Без этого rules не
  * увидят что у container'а есть security-related metadata.
  */
 const toProperties = (
+  dslIdentifier: string,
   base: StructurizrProperties | undefined,
   group?: string,
   perspectives?: Record<string, { description: string; value?: string }>,
@@ -53,7 +57,10 @@ const toProperties = (
       if (p.value !== undefined) out[`perspective.${name}.value`] = p.value;
     }
   }
-  if (Object.keys(out).length === 0) return undefined;
+  // The DSL identifier always lands in properties so the fix layer
+  // can locate the element in workspace.dsl regardless of which
+  // loader produced the Model.
+  out["structurizr.dsl.identifier"] = dslIdentifier;
   return Object.freeze(out);
 };
 
@@ -62,7 +69,7 @@ const isExternal = (system: StructurizrSoftwareSystem): boolean =>
   (system.tags?.includes(STRUCTURIZR_LOCATION_EXTERNAL) ?? false);
 
 const buildPersonContainer = (p: StructurizrPerson): Container => ({
-  name: dslId(p.id, p.properties),
+  name: p.name,
   label: p.name,
   kind: "Person",
   external: false,
@@ -70,13 +77,18 @@ const buildPersonContainer = (p: StructurizrPerson): Container => ({
   tags: parseCsvTags(p.tags),
   relations: [],
   link: p.url,
-  properties: toProperties(p.properties, p.group, p.perspectives),
+  properties: toProperties(
+    dslId(p.id, p.properties),
+    p.properties,
+    p.group,
+    p.perspectives,
+  ),
 });
 
 const buildExternalSystemContainer = (
   s: StructurizrSoftwareSystem,
 ): Container => ({
-  name: dslId(s.id, s.properties),
+  name: s.name,
   label: s.name,
   kind: "System",
   external: true,
@@ -84,11 +96,16 @@ const buildExternalSystemContainer = (
   tags: parseCsvTags(s.tags),
   relations: [],
   link: s.url,
-  properties: toProperties(s.properties, s.group, s.perspectives),
+  properties: toProperties(
+    dslId(s.id, s.properties),
+    s.properties,
+    s.group,
+    s.perspectives,
+  ),
 });
 
 const buildContainer = (c: StructurizrContainer): Container => ({
-  name: dslId(c.id, c.properties),
+  name: c.name,
   label: c.name,
   kind: inferKindFromTechnology(c.technology, c.name),
   external: false,
@@ -97,19 +114,29 @@ const buildContainer = (c: StructurizrContainer): Container => ({
   tags: parseCsvTags(c.tags),
   relations: [],
   link: c.url,
-  properties: toProperties(c.properties, c.group, c.perspectives),
+  properties: toProperties(
+    dslId(c.id, c.properties),
+    c.properties,
+    c.group,
+    c.perspectives,
+  ),
 });
 
 const buildSystemBoundary = (s: StructurizrSoftwareSystem): Boundary => ({
-  name: dslId(s.id, s.properties),
+  name: s.name,
   label: s.name,
   kind: "System",
   description: s.description,
   tags: parseCsvTags(s.tags),
-  containerNames: (s.containers ?? []).map((c) => dslId(c.id, c.properties)),
+  containerNames: (s.containers ?? []).map((c) => c.name),
   boundaryNames: [],
   link: s.url,
-  properties: toProperties(s.properties, s.group, s.perspectives),
+  properties: toProperties(
+    dslId(s.id, s.properties),
+    s.properties,
+    s.group,
+    s.perspectives,
+  ),
 });
 
 const buildRelation = (
@@ -127,8 +154,31 @@ const buildRelation = (
     technology: rel.technology,
     tags,
     link: rel.url,
-    properties: toProperties(rel.properties, undefined, rel.perspectives),
+    properties: toRelationProperties(rel.properties, rel.perspectives),
   };
+};
+
+/** Relations don't have a DSL identifier of their own — the fix layer
+ * locates them via source/destination names. So their properties bag
+ * doesn't include `structurizr.dsl.identifier`. */
+const toRelationProperties = (
+  base: StructurizrProperties | undefined,
+  perspectives?: Record<string, { description: string; value?: string }>,
+): Relation["properties"] => {
+  const out: Record<string, string> = {};
+  if (base) {
+    for (const [k, v] of Object.entries(base)) {
+      if (typeof v === "string") out[k] = v;
+    }
+  }
+  if (perspectives) {
+    for (const [name, p] of Object.entries(perspectives)) {
+      out[`perspective.${name}`] = p.description;
+      if (p.value !== undefined) out[`perspective.${name}.value`] = p.value;
+    }
+  }
+  if (Object.keys(out).length === 0) return undefined;
+  return Object.freeze(out);
 };
 
 interface ElementWithRelations {
@@ -170,6 +220,11 @@ export const load = async (filePath: string): Promise<LoadResult> => {
   /** Subset of idToName — только те id'шники которые мапятся в Container
    * (не Boundary). Relations можно push'ать только сюда. */
   const idToContainerName = new Map<string, string>();
+
+  // idToName maps workspace.json element IDs → display names (the
+  // primary key the linter uses everywhere). idToContainerName
+  // narrows that to the IDs which resolved to a Container (not a
+  // Boundary), since relations only attach to Containers.
 
   // Pass 1: people
   for (const person of workspace.model.people ?? []) {

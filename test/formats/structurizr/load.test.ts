@@ -73,7 +73,7 @@ describe("structurizr load — DSL identifier", () => {
     expect(Object.values(model.boundaries)).toHaveLength(0);
   });
 
-  it("uses structurizr.dsl.identifier as the container name when present", async () => {
+  it("stores structurizr.dsl.identifier in properties for round-trip", async () => {
     const model = await loadWorkspace({
       model: {
         softwareSystems: [
@@ -94,11 +94,17 @@ describe("structurizr load — DSL identifier", () => {
         people: [],
       },
     });
-    expect(model.boundaries.my_system).toBeDefined();
-    expect(model.boundaries.my_system?.containerNames).toContain("my_svc");
+    expect(model.boundaries.Sys).toBeDefined();
+    expect(model.boundaries.Sys?.containerNames).toContain("Svc");
+    expect(model.boundaries.Sys?.properties).toMatchObject({
+      "structurizr.dsl.identifier": "my_system",
+    });
+    expect(getContainer(model, "Svc")?.properties).toMatchObject({
+      "structurizr.dsl.identifier": "my_svc",
+    });
   });
 
-  it("falls back to raw id when no DSL identifier property is set", async () => {
+  it("falls back to raw id as DSL identifier when property is not set", async () => {
     const model = await loadWorkspace({
       model: {
         softwareSystems: [
@@ -107,7 +113,10 @@ describe("structurizr load — DSL identifier", () => {
         people: [],
       },
     });
-    expect(model.boundaries.sys_raw).toBeDefined();
+    expect(model.boundaries.Sys).toBeDefined();
+    expect(model.boundaries.Sys?.properties).toMatchObject({
+      "structurizr.dsl.identifier": "sys_raw",
+    });
   });
 
   it("model.containers Record is sorted alphabetically", async () => {
@@ -127,7 +136,7 @@ describe("structurizr load — DSL identifier", () => {
         people: [],
       },
     });
-    expect(Object.keys(model.containers)).toEqual(["a", "m", "z"]);
+    expect(Object.keys(model.containers)).toEqual(["A", "M", "Z"]);
   });
 });
 
@@ -148,7 +157,7 @@ describe("structurizr load — kind inference from technology", () => {
   for (const tech of ["PostgreSQL", "MySQL", "Redis", "MongoDB"]) {
     it(`marks ${tech}-tech container as ContainerDb`, async () => {
       const model = await loadWorkspace(dbContainer(tech));
-      expect(getContainer(model, "c")?.kind).toBe("ContainerDb");
+      expect(getContainer(model, "svc")?.kind).toBe("ContainerDb");
     });
   }
 
@@ -165,9 +174,9 @@ describe("structurizr load — kind inference from technology", () => {
         people: [],
       },
     });
-    // Container.name = dslId(id) = "c"; label = "orders_db".
+    // Container.name = display name "orders_db".
     // inferKindFromTechnology checks label/name suffix.
-    expect(getContainer(model, "c")?.kind).toBe("ContainerDb");
+    expect(getContainer(model, "orders_db")?.kind).toBe("ContainerDb");
   });
 
   it("marks container with name ending in 'database' as ContainerDb", async () => {
@@ -185,7 +194,7 @@ describe("structurizr load — kind inference from technology", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "x")?.kind).toBe("ContainerDb");
+    expect(getContainer(model, "orders database")?.kind).toBe("ContainerDb");
   });
 
   it("does NOT mark unrelated container as ContainerDb", async () => {
@@ -208,7 +217,7 @@ describe("structurizr load — kind inference from technology", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.kind).toBe("Container");
+    expect(getContainer(model, "orders_api")?.kind).toBe("Container");
   });
 });
 
@@ -230,12 +239,12 @@ describe("structurizr load — tags parsing", () => {
     const model = await loadWorkspace(
       containerWith("svc", "tag1, tag2 , tag3"),
     );
-    expect(getContainer(model, "c")?.tags).toEqual(["tag1", "tag2", "tag3"]);
+    expect(getContainer(model, "svc")?.tags).toEqual(["tag1", "tag2", "tag3"]);
   });
 
   it("filters out empty tags from the source list", async () => {
     const model = await loadWorkspace(containerWith("svc", "a,,b,"));
-    expect(getContainer(model, "c")?.tags).toEqual(["a", "b"]);
+    expect(getContainer(model, "svc")?.tags).toEqual(["a", "b"]);
   });
 
   it("v3 NO LONGER enriches tags from names (crud→repo, acl→acl)", async () => {
@@ -243,7 +252,7 @@ describe("structurizr load — tags parsing", () => {
     // explicitly. Container with label "orders_crud_service" must NOT get
     // an auto-tag "repo".
     const model = await loadWorkspace(containerWith("orders_crud_service"));
-    expect(getContainer(model, "c")?.tags).toEqual([]);
+    expect(getContainer(model, "orders_crud_service")?.tags).toEqual([]);
   });
 });
 
@@ -274,7 +283,7 @@ describe("structurizr load — relations", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].technology).toBe("REST");
+    expect(getContainer(model, "A")?.relations[0].technology).toBe("REST");
   });
 
   it("appends 'async' tag when interactionStyle is Asynchronous", async () => {
@@ -303,7 +312,7 @@ describe("structurizr load — relations", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].tags).toEqual([
+    expect(getContainer(model, "A")?.relations[0].tags).toEqual([
       "audit",
       "async",
     ]);
@@ -331,7 +340,7 @@ describe("structurizr load — relations", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].tags).not.toContain("async");
+    expect(getContainer(model, "A")?.relations[0].tags).not.toContain("async");
   });
 
   it("dangling destinationId surfaces in issues (no throw)", async () => {
@@ -384,7 +393,7 @@ describe("structurizr load — relations", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].tags).toEqual([
+    expect(getContainer(model, "A")?.relations[0].tags).toEqual([
       "audit",
       "urgent",
     ]);
@@ -406,7 +415,7 @@ describe("structurizr load — external systems", () => {
         people: [],
       },
     });
-    const ext = getContainer(model, "ext");
+    const ext = getContainer(model, "External");
     expect(ext?.kind).toBe("System");
     expect(ext?.external).toBe(true);
   });
@@ -420,7 +429,7 @@ describe("structurizr load — external systems", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "ext")?.external).toBe(true);
+    expect(getContainer(model, "External")?.external).toBe(true);
   });
 
   it("external system tags parse from comma-separated string", async () => {
@@ -438,7 +447,10 @@ describe("structurizr load — external systems", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "ext")?.tags).toEqual(["Critical", "Vendor"]);
+    expect(getContainer(model, "External")?.tags).toEqual([
+      "Critical",
+      "Vendor",
+    ]);
   });
 
   it("external system description falls back to empty string", async () => {
@@ -450,7 +462,7 @@ describe("structurizr load — external systems", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "ext")?.description).toBe("");
+    expect(getContainer(model, "Ext")?.description).toBe("");
   });
 });
 
@@ -468,7 +480,7 @@ describe("structurizr load — defaults & resilience", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.description).toBe("");
+    expect(getContainer(model, "svc")?.description).toBe("");
   });
 
   it("does NOT throw on components (v3 silently drops them)", async () => {
@@ -509,7 +521,7 @@ describe("structurizr load — defaults & resilience", () => {
         people: [],
       },
     });
-    expect(model.boundaries.sys1?.containerNames).toEqual([]);
+    expect(model.boundaries.Sys?.containerNames).toEqual([]);
   });
 
   it("handles workspace with no `people` field", async () => {
@@ -541,7 +553,7 @@ describe("structurizr load — people", () => {
         ],
       },
     });
-    expect(getContainer(model, "p1")?.tags).toEqual(["vip", "admin"]);
+    expect(getContainer(model, "User")?.tags).toEqual(["vip", "admin"]);
   });
 
   it("processes people as kind=Person", async () => {
@@ -559,7 +571,7 @@ describe("structurizr load — people", () => {
         ],
       },
     });
-    const person = getContainer(model, "p1");
+    const person = getContainer(model, "Operator");
     expect(person?.kind).toBe("Person");
     expect(person?.description).toBe("Ops user");
     expect(person?.tags).toEqual(["internal", "admin"]);
@@ -584,8 +596,8 @@ describe("structurizr load — people", () => {
         ],
       },
     });
-    // Relation target = dslId of destinationId = "svc" (raw id, no DSL property).
-    expect(getContainer(model, "user")?.relations[0].to).toBe("svc");
+    // Relation target = display name of destinationId = "Svc".
+    expect(getContainer(model, "User")?.relations[0].to).toBe("Svc");
   });
 });
 
@@ -610,9 +622,10 @@ describe("structurizr load — properties forwarding", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.properties).toEqual({
+    expect(getContainer(model, "Svc")?.properties).toEqual({
       archetype: "Microservice",
       owner: "team-a",
+      "structurizr.dsl.identifier": "c",
     });
   });
 
@@ -642,10 +655,15 @@ describe("structurizr load — properties forwarding", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.properties).toEqual({ good: "value" });
+    expect(getContainer(model, "Svc")?.properties).toEqual({
+      good: "value",
+      "structurizr.dsl.identifier": "c",
+    });
   });
 
-  it("returns undefined for container with no properties", async () => {
+  it("always carries structurizr.dsl.identifier even with no user properties", async () => {
+    // v3 contract: properties bag is never undefined for elements — at minimum
+    // it holds `structurizr.dsl.identifier` so the fix layer can round-trip.
     const model = await loadWorkspace({
       model: {
         softwareSystems: [
@@ -658,10 +676,12 @@ describe("structurizr load — properties forwarding", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.properties).toBeUndefined();
+    expect(getContainer(model, "Svc")?.properties).toEqual({
+      "structurizr.dsl.identifier": "c",
+    });
   });
 
-  it("returns undefined when all properties filtered out (entries.length===0)", async () => {
+  it("falls back to dsl.identifier only when all user props filter out", async () => {
     const model = await loadWorkspace({
       model: {
         softwareSystems: [
@@ -683,7 +703,9 @@ describe("structurizr load — properties forwarding", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.properties).toBeUndefined();
+    expect(getContainer(model, "Svc")?.properties).toEqual({
+      "structurizr.dsl.identifier": "c",
+    });
   });
 });
 
@@ -714,7 +736,7 @@ describe("structurizr load — relation field preservation", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].description).toBe("calls");
+    expect(getContainer(model, "A")?.relations[0].description).toBe("calls");
   });
 
   it("description=undefined when not provided in rel", async () => {
@@ -737,7 +759,7 @@ describe("structurizr load — relation field preservation", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].description).toBeUndefined();
+    expect(getContainer(model, "A")?.relations[0].description).toBeUndefined();
   });
 });
 
@@ -756,7 +778,7 @@ describe("structurizr load — boundary metadata", () => {
         people: [],
       },
     });
-    expect(model.boundaries[1]?.tags).toEqual(["domain", "public"]);
+    expect(model.boundaries.Sys?.tags).toEqual(["domain", "public"]);
   });
 
   it("internal SoftwareSystem relationships are silently dropped (documented limitation)", async () => {
@@ -782,7 +804,7 @@ describe("structurizr load — boundary metadata", () => {
       },
     });
     expect(allContainers(model)).toHaveLength(0);
-    expect(model.boundaries.sys_a?.containerNames).toEqual([]);
+    expect(model.boundaries["Sys A"]?.containerNames).toEqual([]);
   });
 
   it("multiple internal SoftwareSystems each become a root boundary", async () => {
@@ -803,8 +825,8 @@ describe("structurizr load — boundary metadata", () => {
         people: [],
       },
     });
-    expect(model.rootBoundaryNames).toContain("alpha");
-    expect(model.rootBoundaryNames).toContain("beta");
+    expect(model.rootBoundaryNames).toContain("Alpha");
+    expect(model.rootBoundaryNames).toContain("Beta");
   });
 });
 
@@ -829,7 +851,9 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.link).toBe("https://wiki.example.com/svc");
+    expect(getContainer(model, "Svc")?.link).toBe(
+      "https://wiki.example.com/svc",
+    );
   });
 
   it("Person.url → Person.link", async () => {
@@ -846,7 +870,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         ],
       },
     });
-    expect(getContainer(model, "u")?.link).toBe("https://hr.example.com/u");
+    expect(getContainer(model, "User")?.link).toBe("https://hr.example.com/u");
   });
 
   it("Internal SoftwareSystem.url → Boundary.link", async () => {
@@ -863,7 +887,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(model.boundaries.sys?.link).toBe("https://wiki.example.com/sys");
+    expect(model.boundaries.Sys?.link).toBe("https://wiki.example.com/sys");
   });
 
   it("External SoftwareSystem.url → Container.link", async () => {
@@ -881,7 +905,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "ext")?.link).toBe("https://api.external.com");
+    expect(getContainer(model, "Ext")?.link).toBe("https://api.external.com");
   });
 
   it("Relation.url → Relation.link", async () => {
@@ -909,7 +933,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].link).toBe(
+    expect(getContainer(model, "A")?.relations[0].link).toBe(
       "https://api.example.com/v1",
     );
   });
@@ -934,7 +958,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.properties).toMatchObject({
+    expect(getContainer(model, "Svc")?.properties).toMatchObject({
       group: "platform-team",
     });
   });
@@ -966,7 +990,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "c")?.properties).toMatchObject({
+    expect(getContainer(model, "Svc")?.properties).toMatchObject({
       "perspective.Security": "Sensitive PII data",
       "perspective.Security.value": "high",
       "perspective.Performance": "Read-heavy workload",
@@ -1001,7 +1025,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].properties).toMatchObject({
+    expect(getContainer(model, "A")?.relations[0].properties).toMatchObject({
       sla: "99.9",
       protocol: "https",
     });
@@ -1034,7 +1058,7 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
         people: [],
       },
     });
-    expect(getContainer(model, "a")?.relations[0].properties).toMatchObject({
+    expect(getContainer(model, "A")?.relations[0].properties).toMatchObject({
       "perspective.Security": "Uses TLS 1.3",
     });
   });

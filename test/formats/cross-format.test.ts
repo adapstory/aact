@@ -157,8 +157,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    const pumlDb = pumlModel.containers.orders_db;
-    const structDb = structModel.containers.orders_db;
+    const pumlDb = pumlModel.containers["Orders DB"];
+    const structDb = structModel.containers["Orders DB"];
     expect(pumlDb.kind).toBe("ContainerDb");
     expect(structDb.kind).toBe("ContainerDb");
     expect(pumlDb.external).toBe(structDb.external);
@@ -191,8 +191,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    const pumlExt = pumlModel.containers.payments;
-    const structExt = structModel.containers.payments;
+    const pumlExt = pumlModel.containers["Payment Provider"];
+    const structExt = structModel.containers["Payment Provider"];
     expect(pumlExt.kind).toBe("System");
     expect(structExt.kind).toBe("System");
     expect(pumlExt.external).toBe(true);
@@ -219,8 +219,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    expect(pumlModel.containers.user.kind).toBe("Person");
-    expect(structModel.containers.user.kind).toBe("Person");
+    expect(pumlModel.containers["End User"].kind).toBe("Person");
+    expect(structModel.containers["End User"].kind).toBe("Person");
   });
 
   it("Relations: technology and tags preserved both sides", async () => {
@@ -265,8 +265,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    const pumlRel = pumlModel.containers.a.relations[0];
-    const structRel = structModel.containers.a.relations[0];
+    const pumlRel = pumlModel.containers["A"].relations[0];
+    const structRel = structModel.containers["A"].relations[0];
     expect(pumlRel.technology).toBe(structRel.technology);
     expect([...pumlRel.tags].toSorted()).toEqual(
       [...structRel.tags].toSorted(),
@@ -315,8 +315,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    expect(pumlModel.containers.a.relations[0].tags).toContain("async");
-    expect(structModel.containers.a.relations[0].tags).toContain("async");
+    expect(pumlModel.containers["A"].relations[0].tags).toContain("async");
+    expect(structModel.containers["A"].relations[0].tags).toContain("async");
   });
 
   it("Boundary: PUML System_Boundary ↔ Structurizr internal SoftwareSystem", async () => {
@@ -356,11 +356,11 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    expect(Object.keys(pumlModel.boundaries)).toEqual(["orders"]);
-    expect(Object.keys(structModel.boundaries)).toEqual(["orders"]);
-    expect([...pumlModel.boundaries.orders.containerNames].toSorted()).toEqual(
-      [...structModel.boundaries.orders.containerNames].toSorted(),
-    );
+    expect(Object.keys(pumlModel.boundaries)).toEqual(["Orders"]);
+    expect(Object.keys(structModel.boundaries)).toEqual(["Orders"]);
+    expect(
+      [...pumlModel.boundaries["Orders"].containerNames].toSorted(),
+    ).toEqual([...structModel.boundaries["Orders"].containerNames].toSorted());
   });
 
   it("Cross-boundary relation: equal edge set in both formats", async () => {
@@ -441,8 +441,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    expect([...pumlModel.containers.svc.tags].toSorted()).toEqual(
-      [...structModel.containers.svc.tags].toSorted(),
+    expect([...pumlModel.containers["Svc"].tags].toSorted()).toEqual(
+      [...structModel.containers["Svc"].tags].toSorted(),
     );
   });
 });
