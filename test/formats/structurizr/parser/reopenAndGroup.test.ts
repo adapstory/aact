@@ -97,6 +97,28 @@ describe("Structurizr parser — re-open form", () => {
     expect(model.containers["api"]).toBeDefined();
   });
 
+  it("reopen on a Boundary attaches new nested elements to its containerNames", () => {
+    const src = `workspace {
+      model {
+        bank = softwareSystem "Bank" {
+          api = container "API"
+        }
+        bank {
+          db = container "Database"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    // The new container exists in the Model.
+    expect(model.containers["db"]?.label).toBe("Database");
+    // The Boundary's containerNames now includes both the original
+    // child and the reopen-introduced one.
+    expect(model.boundaries["bank"]?.containerNames).toEqual(
+      expect.arrayContaining(["api", "db"]),
+    );
+  });
+
   it("hierarchical reopen target resolves via dotted identifier map", () => {
     const src = `workspace {
       model {

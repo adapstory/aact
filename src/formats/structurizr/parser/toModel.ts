@@ -280,7 +280,14 @@ const collectModelChild = (
     return;
   }
   if (child.kind === "reopen") {
-    handleReopen(child, containers, boundaries, identifierMap);
+    handleReopen(
+      child,
+      containers,
+      boundaries,
+      identifierMap,
+      parserIssues,
+      groupCtx,
+    );
     return;
   }
   if (ELEMENT_KINDS.has(child.kind)) {
@@ -775,6 +782,8 @@ const handleReopen = (
   containers: Container[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
+  parserIssues: ModelIssue[],
+  groupCtx: GroupContext,
 ): void => {
   const targetDisplay =
     identifierMap.get(reopen.target.name.toLowerCase()) ?? reopen.target.name;
@@ -786,6 +795,13 @@ const handleReopen = (
   const relationships = reopen.body.filter(
     (b): b is RelationshipNode => b.kind === "relationship",
   );
+  // Reopen may also introduce NEW nested element declarations:
+  //   `bank { db = container "DB" }` adds `db` under `bank`. Reference
+  //   parser walks them through the regular element handler with the
+  //   target as the parent identifier path; we mirror that.
+  const newElements = reopen.body.filter((b): b is ElementNode =>
+    ELEMENT_KINDS.has(b.kind),
+  );
 
   const containerIdx = containers.findIndex((c) => c.name === targetDisplay);
   if (containerIdx !== -1) {
@@ -795,6 +811,21 @@ const handleReopen = (
     );
     for (const rel of relationships) {
       handleRelationship(rel, containers, identifierMap, targetDisplay);
+    }
+    // New child element on a leaf Container — process it as a
+    // standalone element. Reference would promote the Container to a
+    // Boundary; we land elements at model scope and let the user
+    // re-declare as Boundary if they need promotion.
+    for (const child of newElements) {
+      handleElement(
+        child,
+        containers,
+        boundaries,
+        identifierMap,
+        targetDisplay,
+        parserIssues,
+        groupCtx,
+      );
     }
     return;
   }
@@ -807,6 +838,39 @@ const handleReopen = (
     );
     for (const rel of relationships) {
       handleRelationship(rel, containers, identifierMap, targetDisplay);
+    }
+    // New nested elements: process them, then patch the target
+    // Boundary's containerNames / boundaryNames lists to include
+    // the newcomers so the structural Model stays consistent.
+    const containersBefore = containers.length;
+    const boundariesBefore = boundaries.length;
+    for (const child of newElements) {
+      handleElement(
+        child,
+        containers,
+        boundaries,
+        identifierMap,
+        targetDisplay,
+        parserIssues,
+        groupCtx,
+      );
+    }
+    if (
+      containers.length > containersBefore ||
+      boundaries.length > boundariesBefore
+    ) {
+      const addedContainerNames = containers
+        .slice(containersBefore)
+        .map((c) => c.name);
+      const addedBoundaryNames = boundaries
+        .slice(boundariesBefore)
+        .map((b) => b.name);
+      const target = boundaries[boundaryIdx];
+      boundaries[boundaryIdx] = {
+        ...target,
+        containerNames: [...target.containerNames, ...addedContainerNames],
+        boundaryNames: [...target.boundaryNames, ...addedBoundaryNames],
+      };
     }
   }
   // Target not found — silently drop. The reference parser would have
