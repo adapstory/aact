@@ -36,8 +36,15 @@ import { CstParser } from "chevrotain";
 
 import {
   allTokens,
+  BangConst,
+  BangIdentifiers,
+  BangImpliedRelationships,
+  BangInclude,
+  BangIncludeUrl,
+  BangVar,
   Component,
   Container,
+  Description,
   Equals,
   Extends,
   Group,
@@ -45,10 +52,16 @@ import {
   LBrace,
   Model,
   Person,
+  Perspectives,
+  Properties,
   RBrace,
   Relationship,
   SoftwareSystem,
   StringLiteral,
+  Tag,
+  Tags,
+  Technology,
+  Url,
   Workspace,
 } from "./tokens";
 
@@ -95,6 +108,7 @@ class StructurizrParser extends CstParser {
     this.OR([
       { ALT: () => this.SUBRULE(this.elementDeclaration) },
       { ALT: () => this.SUBRULE(this.relationship) },
+      { ALT: () => this.SUBRULE(this.directive) },
     ]);
   });
 
@@ -127,21 +141,163 @@ class StructurizrParser extends CstParser {
   });
 
   /**
-   * Phase-1 placeholder element body: only nested elements and
-   * relationships. Body statements (description / technology / tags /
-   * url / properties / perspectives / !docs / !decisions) land in
-   * Phase 2.
+   * Element body — Phase 2: full body statements (description /
+   * technology / tags / tag / url / properties / perspectives) plus
+   * nested elements + relationships.
+   *
+   * Order matters: `bodyStatement` is tried first so an unprefixed
+   * `description "..."` line is recognised as a body statement, not as
+   * the start of a relationship.
    */
   private elementBody = this.RULE("elementBody", () => {
     this.CONSUME(LBrace);
     this.MANY(() => {
       this.OR([
+        { ALT: () => this.SUBRULE(this.bodyStatement) },
         { ALT: () => this.SUBRULE(this.elementDeclaration) },
         { ALT: () => this.SUBRULE(this.relationship) },
       ]);
     });
     this.CONSUME(RBrace);
   });
+
+  // ── Body statements (Phase 2) ─────────────────────────────────────
+
+  private bodyStatement = this.RULE("bodyStatement", () => {
+    this.OR([
+      { ALT: () => this.SUBRULE(this.descriptionStmt) },
+      { ALT: () => this.SUBRULE(this.technologyStmt) },
+      { ALT: () => this.SUBRULE(this.tagsStmt) },
+      { ALT: () => this.SUBRULE(this.tagStmt) },
+      { ALT: () => this.SUBRULE(this.urlStmt) },
+      { ALT: () => this.SUBRULE(this.propertiesBlock) },
+      { ALT: () => this.SUBRULE(this.perspectivesBlock) },
+    ]);
+  });
+
+  private descriptionStmt = this.RULE("descriptionStmt", () => {
+    this.CONSUME(Description);
+    this.CONSUME(StringLiteral);
+  });
+
+  private technologyStmt = this.RULE("technologyStmt", () => {
+    this.CONSUME(Technology);
+    this.CONSUME(StringLiteral);
+  });
+
+  private tagsStmt = this.RULE("tagsStmt", () => {
+    this.CONSUME(Tags);
+    this.CONSUME(StringLiteral);
+  });
+
+  private tagStmt = this.RULE("tagStmt", () => {
+    this.CONSUME(Tag);
+    this.CONSUME(StringLiteral);
+  });
+
+  private urlStmt = this.RULE("urlStmt", () => {
+    this.CONSUME(Url);
+    this.CONSUME(StringLiteral);
+  });
+
+  /**
+   * `properties { <key> <value> ... }`. Per grammar.md §1.4 values may
+   * be unquoted bare tokens or quoted strings. We accept either form
+   * for each value slot.
+   */
+  private propertiesBlock = this.RULE("propertiesBlock", () => {
+    this.CONSUME(Properties);
+    this.CONSUME(LBrace);
+    this.MANY(() => this.SUBRULE(this.propertyEntry));
+    this.CONSUME(RBrace);
+  });
+
+  private propertyEntry = this.RULE("propertyEntry", () => {
+    // Key is either a quoted string or a bare identifier.
+    this.OR1([
+      { ALT: () => this.CONSUME1(StringLiteral, { LABEL: "key" }) },
+      { ALT: () => this.CONSUME1(Identifier, { LABEL: "key" }) },
+    ]);
+    this.OR2([
+      { ALT: () => this.CONSUME2(StringLiteral, { LABEL: "value" }) },
+      { ALT: () => this.CONSUME2(Identifier, { LABEL: "value" }) },
+    ]);
+  });
+
+  /**
+   * `perspectives { <name> <description> [value] ... }` — exactly 2
+   * or 3 tokens per line per `PerspectiveParser.java`. Name is an
+   * identifier; description and optional value are strings.
+   */
+  private perspectivesBlock = this.RULE("perspectivesBlock", () => {
+    this.CONSUME(Perspectives);
+    this.CONSUME(LBrace);
+    this.MANY(() => this.SUBRULE(this.perspectiveEntry));
+    this.CONSUME(RBrace);
+  });
+
+  private perspectiveEntry = this.RULE("perspectiveEntry", () => {
+    this.CONSUME(Identifier, { LABEL: "name" });
+    this.CONSUME1(StringLiteral, { LABEL: "description" });
+    this.OPTION(() => this.CONSUME2(StringLiteral, { LABEL: "value" }));
+  });
+
+  // ── Directives (Phase 2) ──────────────────────────────────────────
+
+  private directive = this.RULE("directive", () => {
+    this.OR([
+      { ALT: () => this.SUBRULE(this.includeDirective) },
+      { ALT: () => this.SUBRULE(this.constDirective) },
+      { ALT: () => this.SUBRULE(this.varDirective) },
+      { ALT: () => this.SUBRULE(this.identifiersDirective) },
+      { ALT: () => this.SUBRULE(this.impliedRelationshipsDirective) },
+    ]);
+  });
+
+  private includeDirective = this.RULE("includeDirective", () => {
+    this.OR([
+      { ALT: () => this.CONSUME(BangInclude) },
+      { ALT: () => this.CONSUME(BangIncludeUrl) },
+    ]);
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral) },
+      { ALT: () => this.CONSUME(Identifier) },
+    ]);
+  });
+
+  private constDirective = this.RULE("constDirective", () => {
+    this.CONSUME(BangConst);
+    this.CONSUME(Identifier, { LABEL: "name" });
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: "value" }) },
+      { ALT: () => this.CONSUME1(Identifier, { LABEL: "value" }) },
+    ]);
+  });
+
+  private varDirective = this.RULE("varDirective", () => {
+    this.CONSUME(BangVar);
+    this.CONSUME(Identifier, { LABEL: "name" });
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: "value" }) },
+      { ALT: () => this.CONSUME1(Identifier, { LABEL: "value" }) },
+    ]);
+  });
+
+  private identifiersDirective = this.RULE("identifiersDirective", () => {
+    this.CONSUME(BangIdentifiers);
+    this.CONSUME(Identifier, { LABEL: "scope" });
+  });
+
+  private impliedRelationshipsDirective = this.RULE(
+    "impliedRelationshipsDirective",
+    () => {
+      this.CONSUME(BangImpliedRelationships);
+      this.OR([
+        { ALT: () => this.CONSUME(StringLiteral, { LABEL: "value" }) },
+        { ALT: () => this.CONSUME1(Identifier, { LABEL: "value" }) },
+      ]);
+    },
+  );
 
   // ── <id> -> <id> [description] [technology] [tags] ─────────────────
 

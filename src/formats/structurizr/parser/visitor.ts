@@ -173,6 +173,9 @@ class StructurizrCstToAst extends BaseVisitor {
     if (ctx.relationship?.[0]) {
       return this.visit(ctx.relationship[0]) as RelationshipNode;
     }
+    if (ctx.directive?.[0]) {
+      return this.visit(ctx.directive[0]) as ModelChildNode;
+    }
     return undefined; // recovered / incomplete — caller filters
   }
 
@@ -315,6 +318,14 @@ class StructurizrCstToAst extends BaseVisitor {
 
   elementBody(ctx: ElementBodyCtx): ElementBodyNode[] {
     const items: ElementBodyNode[] = [];
+    // Phase 2: body statements come first in the alternative list so
+    // the visitor walks them too. The CST may have any combination.
+    if (ctx.bodyStatement) {
+      for (const stmt of ctx.bodyStatement) {
+        const node = this.visit(stmt) as ElementBodyNode | undefined;
+        if (node) items.push(node);
+      }
+    }
     if (ctx.elementDeclaration) {
       for (const decl of ctx.elementDeclaration) {
         items.push(this.visit(decl) as ElementNode);
@@ -326,6 +337,275 @@ class StructurizrCstToAst extends BaseVisitor {
       }
     }
     return items;
+  }
+
+  // ── Body statements (Phase 2) ──────────────────────────────────────
+
+  bodyStatement(ctx: BodyStatementCtx): ElementBodyNode | undefined {
+    if (ctx.descriptionStmt?.[0]) {
+      return this.visit(ctx.descriptionStmt[0]) as ElementBodyNode;
+    }
+    if (ctx.technologyStmt?.[0]) {
+      return this.visit(ctx.technologyStmt[0]) as ElementBodyNode;
+    }
+    if (ctx.tagsStmt?.[0]) {
+      return this.visit(ctx.tagsStmt[0]) as ElementBodyNode;
+    }
+    if (ctx.tagStmt?.[0]) {
+      return this.visit(ctx.tagStmt[0]) as ElementBodyNode;
+    }
+    if (ctx.urlStmt?.[0]) {
+      return this.visit(ctx.urlStmt[0]) as ElementBodyNode;
+    }
+    if (ctx.propertiesBlock?.[0]) {
+      return this.visit(ctx.propertiesBlock[0]) as ElementBodyNode;
+    }
+    if (ctx.perspectivesBlock?.[0]) {
+      return this.visit(ctx.perspectivesBlock[0]) as ElementBodyNode;
+    }
+    return undefined;
+  }
+
+  descriptionStmt(ctx: { Description: [IToken]; StringLiteral: [IToken] }) {
+    const keyword = ctx.Description[0];
+    const value = ctx.StringLiteral[0];
+    return {
+      kind: "description" as const,
+      value: this.stringFromToken(value),
+      range: rangeFromTokens(keyword, value, this.file),
+    };
+  }
+
+  technologyStmt(ctx: { Technology: [IToken]; StringLiteral: [IToken] }) {
+    const keyword = ctx.Technology[0];
+    const value = ctx.StringLiteral[0];
+    return {
+      kind: "technology" as const,
+      value: this.stringFromToken(value),
+      range: rangeFromTokens(keyword, value, this.file),
+    };
+  }
+
+  tagsStmt(ctx: { Tags: [IToken]; StringLiteral: [IToken] }) {
+    const keyword = ctx.Tags[0];
+    const value = ctx.StringLiteral[0];
+    return {
+      kind: "tags" as const,
+      value: this.stringFromToken(value),
+      range: rangeFromTokens(keyword, value, this.file),
+    };
+  }
+
+  tagStmt(ctx: { Tag: [IToken]; StringLiteral: [IToken] }) {
+    const keyword = ctx.Tag[0];
+    const value = ctx.StringLiteral[0];
+    return {
+      kind: "tag" as const,
+      value: this.stringFromToken(value),
+      range: rangeFromTokens(keyword, value, this.file),
+    };
+  }
+
+  urlStmt(ctx: { Url: [IToken]; StringLiteral: [IToken] }) {
+    const keyword = ctx.Url[0];
+    const value = ctx.StringLiteral[0];
+    return {
+      kind: "url" as const,
+      value: this.stringFromToken(value),
+      range: rangeFromTokens(keyword, value, this.file),
+    };
+  }
+
+  propertiesBlock(ctx: {
+    Properties: [IToken];
+    LBrace: [IToken];
+    RBrace?: [IToken];
+    propertyEntry?: CstNode[];
+  }) {
+    const keyword = ctx.Properties[0];
+    const close = ctx.RBrace?.[0] ?? keyword;
+    const entries = (ctx.propertyEntry ?? []).map(
+      (e) => this.visit(e) as ReturnType<StructurizrCstToAst["propertyEntry"]>,
+    );
+    return {
+      kind: "properties" as const,
+      entries,
+      range: rangeFromTokens(keyword, close, this.file),
+    };
+  }
+
+  propertyEntry(ctx: { key: [IToken]; value: [IToken] }) {
+    const keyToken = ctx.key[0];
+    const valueToken = ctx.value[0];
+    const isStringValue = valueToken.tokenType.name === "StringLiteral";
+    const isStringKey = keyToken.tokenType.name === "StringLiteral";
+    return {
+      kind: "propertyEntry" as const,
+      key: {
+        kind: "string" as const,
+        value: isStringKey
+          ? unwrapStringLiteral(keyToken.image)
+          : keyToken.image,
+        range: rangeFromToken(keyToken, this.file),
+      },
+      value: {
+        kind: "string" as const,
+        value: isStringValue
+          ? unwrapStringLiteral(valueToken.image)
+          : valueToken.image,
+        range: rangeFromToken(valueToken, this.file),
+      },
+      range: rangeFromTokens(keyToken, valueToken, this.file),
+    };
+  }
+
+  perspectivesBlock(ctx: {
+    Perspectives: [IToken];
+    LBrace: [IToken];
+    RBrace?: [IToken];
+    perspectiveEntry?: CstNode[];
+  }) {
+    const keyword = ctx.Perspectives[0];
+    const close = ctx.RBrace?.[0] ?? keyword;
+    const entries = (ctx.perspectiveEntry ?? []).map(
+      (e) =>
+        this.visit(e) as ReturnType<StructurizrCstToAst["perspectiveEntry"]>,
+    );
+    return {
+      kind: "perspectives" as const,
+      entries,
+      range: rangeFromTokens(keyword, close, this.file),
+    };
+  }
+
+  perspectiveEntry(ctx: {
+    name: [IToken];
+    description: [IToken];
+    value?: [IToken];
+  }) {
+    const nameToken = ctx.name[0];
+    const descToken = ctx.description[0];
+    const valueToken = ctx.value?.[0];
+    return {
+      kind: "perspectiveEntry" as const,
+      name: {
+        kind: "identifier" as const,
+        name: nameToken.image,
+        range: rangeFromToken(nameToken, this.file),
+      },
+      description: this.stringFromToken(descToken),
+      value: valueToken ? this.stringFromToken(valueToken) : undefined,
+      range: rangeFromTokens(nameToken, valueToken ?? descToken, this.file),
+    };
+  }
+
+  // ── Directives (Phase 2) ───────────────────────────────────────────
+
+  directive(ctx: {
+    includeDirective?: [CstNode];
+    constDirective?: [CstNode];
+    varDirective?: [CstNode];
+    identifiersDirective?: [CstNode];
+    impliedRelationshipsDirective?: [CstNode];
+  }) {
+    const node =
+      ctx.includeDirective?.[0] ??
+      ctx.constDirective?.[0] ??
+      ctx.varDirective?.[0] ??
+      ctx.identifiersDirective?.[0] ??
+      ctx.impliedRelationshipsDirective?.[0];
+    return node ? this.visit(node) : undefined;
+  }
+
+  includeDirective(ctx: {
+    BangInclude?: [IToken];
+    BangIncludeUrl?: [IToken];
+    StringLiteral?: [IToken];
+    Identifier?: [IToken];
+  }) {
+    const keyword = (ctx.BangInclude?.[0] ?? ctx.BangIncludeUrl?.[0])!;
+    const valueToken = (ctx.StringLiteral?.[0] ?? ctx.Identifier?.[0])!;
+    const targetValue =
+      valueToken.tokenType.name === "StringLiteral"
+        ? unwrapStringLiteral(valueToken.image)
+        : valueToken.image;
+    return {
+      kind: "include" as const,
+      target: {
+        kind: "string" as const,
+        value: targetValue,
+        range: rangeFromToken(valueToken, this.file),
+      },
+      range: rangeFromTokens(keyword, valueToken, this.file),
+    };
+  }
+
+  constDirective(ctx: {
+    BangConst: [IToken];
+    name: [IToken];
+    value: [IToken];
+  }) {
+    const keyword = ctx.BangConst[0];
+    const nameToken = ctx.name[0];
+    const valueToken = ctx.value[0];
+    return {
+      kind: "const" as const,
+      name: {
+        kind: "string" as const,
+        value: nameToken.image,
+        range: rangeFromToken(nameToken, this.file),
+      },
+      value: this.stringFromToken(valueToken),
+      range: rangeFromTokens(keyword, valueToken, this.file),
+    };
+  }
+
+  varDirective(ctx: { BangVar: [IToken]; name: [IToken]; value: [IToken] }) {
+    const keyword = ctx.BangVar[0];
+    const nameToken = ctx.name[0];
+    const valueToken = ctx.value[0];
+    return {
+      kind: "var" as const,
+      name: {
+        kind: "string" as const,
+        value: nameToken.image,
+        range: rangeFromToken(nameToken, this.file),
+      },
+      value: this.stringFromToken(valueToken),
+      range: rangeFromTokens(keyword, valueToken, this.file),
+    };
+  }
+
+  identifiersDirective(ctx: { BangIdentifiers: [IToken]; scope: [IToken] }) {
+    const keyword = ctx.BangIdentifiers[0];
+    const scopeToken = ctx.scope[0];
+    return {
+      kind: "identifiers" as const,
+      scope: (scopeToken.image === "hierarchical" ? "hierarchical" : "flat"),
+      range: rangeFromTokens(keyword, scopeToken, this.file),
+    };
+  }
+
+  impliedRelationshipsDirective(ctx: {
+    BangImpliedRelationships: [IToken];
+    value: [IToken];
+  }) {
+    const keyword = ctx.BangImpliedRelationships[0];
+    const valueToken = ctx.value[0];
+    const valueText =
+      valueToken.tokenType.name === "StringLiteral"
+        ? unwrapStringLiteral(valueToken.image)
+        : valueToken.image;
+    return {
+      kind: "impliedRelationships" as const,
+      bangPrefix: true,
+      value: {
+        kind: "string" as const,
+        value: valueText,
+        range: rangeFromToken(valueToken, this.file),
+      },
+      range: rangeFromTokens(keyword, valueToken, this.file),
+    };
   }
 
   relationship(ctx: RelationshipCtx): RelationshipNode {
@@ -409,6 +689,7 @@ interface ModelBlockCtx {
 interface ModelBodyItemCtx {
   readonly elementDeclaration?: readonly [CstNode];
   readonly relationship?: readonly [CstNode];
+  readonly directive?: readonly [CstNode];
 }
 
 interface ElementDeclarationCtx {
@@ -434,8 +715,19 @@ interface ElementHeaderCtx {
 interface ElementBodyCtx {
   readonly LBrace: readonly [IToken];
   readonly RBrace: readonly [IToken];
+  readonly bodyStatement?: readonly CstNode[];
   readonly elementDeclaration?: readonly CstNode[];
   readonly relationship?: readonly CstNode[];
+}
+
+interface BodyStatementCtx {
+  readonly descriptionStmt?: readonly [CstNode];
+  readonly technologyStmt?: readonly [CstNode];
+  readonly tagsStmt?: readonly [CstNode];
+  readonly tagStmt?: readonly [CstNode];
+  readonly urlStmt?: readonly [CstNode];
+  readonly propertiesBlock?: readonly [CstNode];
+  readonly perspectivesBlock?: readonly [CstNode];
 }
 
 interface RelationshipCtx {

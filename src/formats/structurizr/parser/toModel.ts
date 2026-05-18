@@ -51,7 +51,12 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
 
   for (const model of pickModels(workspace)) {
     for (const child of model.children) {
-      collectModelChild(child, containers, boundaries, identifierMap);
+      collectModelChild(
+        child,
+        containers,
+        boundaries,
+        identifierMap,
+      );
     }
   }
 
@@ -197,6 +202,91 @@ const handleBoundary = (
   });
 };
 
+/**
+ * Aggregate body statements (description / technology / tags / tag /
+ * url / properties / perspectives) into Container field values. Body
+ * statements OVERRIDE header positional values per the reference parser
+ * (each `description "X"` call replaces the previous value).
+ */
+const aggregateBody = (
+  element: Exclude<ElementNode, { kind: "group" }>,
+): {
+  description: string | undefined;
+  technology: string | undefined;
+  tags: string[];
+  link: string | undefined;
+  properties: Record<string, string> | undefined;
+} => {
+  let description: string | undefined =
+    element.kind === "person" ||
+    element.kind === "softwareSystem" ||
+    element.kind === "container" ||
+    element.kind === "component"
+      ? element.headerDescription?.value
+      : undefined;
+  let technology: string | undefined =
+    element.kind === "container" || element.kind === "component"
+      ? element.headerTechnology?.value
+      : undefined;
+  const tags: string[] = [];
+  if (element.headerTags?.value)
+    tags.push(...splitTags(element.headerTags.value));
+  let link: string | undefined;
+  let properties: Record<string, string> | undefined;
+
+  for (const item of element.body) {
+    switch (item.kind) {
+    case "description": {
+    description = item.value.value;
+    break;
+    }
+    case "technology": {
+    technology = item.value.value;
+    break;
+    }
+    case "tags": {
+    tags.push(...splitTags(item.value.value));
+    break;
+    }
+    case "tag": {
+    tags.push(item.value.value.trim());
+    break;
+    }
+    case "url": {
+    link = item.value.value;
+    break;
+    }
+    case "properties": {
+      properties = properties ?? {};
+      for (const entry of item.entries) {
+        properties[entry.key.value] = entry.value.value;
+      }
+    
+    break;
+    }
+    case "perspectives": {
+      properties = properties ?? {};
+      for (const entry of item.entries) {
+        const key = `perspective.${entry.name.name}`;
+        properties[key] = entry.description.value;
+        if (entry.value) {
+          properties[`${key}.value`] = entry.value.value;
+        }
+      }
+    
+    break;
+    }
+    // No default
+    }
+  }
+  // De-dupe tags while preserving order.
+  const seen = new Set<string>();
+  const dedupedTags = tags.filter((t) =>
+    seen.has(t) ? false : (seen.add(t), true),
+  );
+  return { description, technology, tags: dedupedTags, link, properties };
+};
+
 const handleLeaf = (
   element: Exclude<ElementNode, { kind: "group" }>,
   children: readonly (ElementNode | RelationshipNode)[],
@@ -204,19 +294,18 @@ const handleLeaf = (
   identifierMap: Map<string, string>,
 ): void => {
   const displayName = element.name.value;
-  const technology =
-    element.kind === "container" || element.kind === "component"
-      ? element.headerTechnology?.value
-      : undefined;
+  const agg = aggregateBody(element);
   containers.push({
     name: displayName,
     label: displayName,
     kind: kindFromAstKind(element.kind),
     external: false,
-    description: "",
-    tags: [],
-    technology,
+    description: agg.description ?? "",
+    tags: agg.tags,
+    technology: agg.technology,
     relations: [],
+    link: agg.link,
+    properties: agg.properties,
     sourceLocation: element.range,
   });
   for (const child of children) {
