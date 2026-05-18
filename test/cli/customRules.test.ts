@@ -1,14 +1,15 @@
 import { loadConfig } from "c12";
-import consola from "consola";
 
+import { executeCheck } from "../../src/cli/commands/check";
 import { loadAndValidateConfig } from "../../src/cli/loadConfig";
 import { loadModel } from "../../src/cli/loadModel";
+import type { AactConfig } from "../../src/config";
 import { plantumlSyntax } from "../../src/formats/plantuml/syntax";
 import { loadFormat } from "../../src/formats/registry";
 import type { Format } from "../../src/formats/types";
 import type { Model } from "../../src/model";
-import type {RuleDefinition} from "../../src/rules/types";
-import { defineRule  } from "../../src/rules/types";
+import type { RuleDefinition } from "../../src/rules/types";
+import { defineRule } from "../../src/rules/types";
 import { makeModel } from "../helpers/makeModel";
 
 vi.mock("c12", () => ({
@@ -20,23 +21,19 @@ vi.mock("node:fs/promises", () => ({
   writeFile: vi.fn(),
 }));
 
-vi.mock("../../src/cli/loadModel", () => ({
-  loadModel: vi.fn(),
-}));
+vi.mock("../../src/cli/loadModel", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../src/cli/loadModel")
+  >("../../src/cli/loadModel");
+  return {
+    ...actual,
+    loadModel: vi.fn(),
+  };
+});
 
 vi.mock("../../src/formats/registry", () => ({
   loadFormat: vi.fn(),
   knownFormatNames: () => ["plantuml", "structurizr", "kubernetes"],
-}));
-
-vi.mock("consola", () => ({
-  default: {
-    success: vi.fn(),
-    error: vi.fn(),
-    log: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
 }));
 
 const mockLoadConfig = vi.mocked(loadConfig);
@@ -105,14 +102,10 @@ const setupConfig = (config: Record<string, unknown>): void => {
   });
 };
 
-const runCheck = async (args: Record<string, unknown> = {}): Promise<void> => {
-  const mod = await import("../../src/cli/commands/check");
-  await (
-    mod.check as unknown as {
-      run: (ctx: { args: Record<string, unknown> }) => Promise<void>;
-    }
-  ).run({ args });
-};
+const buildConfig = (overrides: Partial<AactConfig> = {}): AactConfig => ({
+  source: { type: "plantuml", path: "test.puml" },
+  ...overrides,
+});
 
 describe("defineRule", () => {
   it("returns the same rule object (identity)", () => {
@@ -189,67 +182,52 @@ describe("loadAndValidateConfig — customRules shape validation", () => {
   });
 });
 
-describe("check command — customRules integration", () => {
-  let exitSpy: ReturnType<typeof vi.spyOn>;
-
+describe("executeCheck — customRules integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadFormat.mockResolvedValue(fakeFormat());
-    // Built-in rules могут fire'нуть на test models и вызвать process.exit —
-    // mock'аем чтобы не падать в тестах, которые проверяют другую ortho.
-    exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
   });
 
   it("runs custom rule and reports violations", async () => {
-    setupConfig({ customRules: [noLegacyRule] });
     mockLoadModel.mockResolvedValue({ model: taggedModel(), issues: [] });
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await runCheck({ format: "json" });
-
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    const output = JSON.parse(spy.mock.calls[0][0] as string);
-    const noLegacy = output.results.find(
-      (r: { rule: string }) => r.rule === "noLegacy",
+    const result = await executeCheck(
+      buildConfig({ customRules: [noLegacyRule] }),
+      {},
     );
+
+    expect(result.exitCode).toBe(1);
+    const noLegacy = result.data.violations.find((v) => v.rule === "noLegacy");
     expect(noLegacy).toBeDefined();
-    expect(noLegacy.passed).toBe(false);
-    expect(noLegacy.violations).toHaveLength(1);
-    expect(noLegacy.violations[0].container).toBe("svc_a");
+    expect(noLegacy?.container).toBe("svc_a");
   });
 
   it("auto-enables customRules without rules.<name> entry", async () => {
-    setupConfig({ customRules: [noLegacyRule] });
     mockLoadModel.mockResolvedValue({ model: taggedModel(), issues: [] });
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await runCheck({ format: "json" });
+    const result = await executeCheck(
+      buildConfig({ customRules: [noLegacyRule] }),
+      {},
+    );
 
-    const output = JSON.parse(spy.mock.calls[0][0] as string);
-    expect(output.results.map((r: { rule: string }) => r.rule)).toContain(
-      "noLegacy",
+    expect(result.data.violations.some((v) => v.rule === "noLegacy")).toBe(
+      true,
     );
   });
 
   it("disables custom rule via rules.<name>: false", async () => {
-    setupConfig({
-      customRules: [noLegacyRule],
-      rules: { noLegacy: false, acl: false, acyclic: false },
-    });
     mockLoadModel.mockResolvedValue({ model: taggedModel(), issues: [] });
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await runCheck({ format: "json" });
+    const result = await executeCheck(
+      buildConfig({
+        customRules: [noLegacyRule],
+        rules: { noLegacy: false, acl: false, acyclic: false },
+      }),
+      {},
+    );
 
-    const output = JSON.parse(spy.mock.calls[0][0] as string);
-    expect(output.results.map((r: { rule: string }) => r.rule)).not.toContain(
-      "noLegacy",
+    expect(result.data.violations.some((v) => v.rule === "noLegacy")).toBe(
+      false,
     );
   });
 
@@ -263,15 +241,15 @@ describe("check command — customRules integration", () => {
         return [];
       },
     });
-
-    setupConfig({
-      customRules: [captureRule],
-      rules: { captureTag: { tag: "deprecated" } },
-    });
     mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
-    vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await runCheck({ format: "json" });
+    await executeCheck(
+      buildConfig({
+        customRules: [captureRule],
+        rules: { captureTag: { tag: "deprecated" } },
+      }),
+      {},
+    );
 
     expect(captured[0]?.tag).toBe("deprecated");
   });
@@ -282,58 +260,69 @@ describe("check command — customRules integration", () => {
       description: "collides",
       check: () => [],
     });
-    setupConfig({ customRules: [collide] });
     mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
 
-    await expect(runCheck()).rejects.toThrow(
-      /conflicts with existing built-in/,
-    );
+    await expect(
+      executeCheck(buildConfig({ customRules: [collide] }), {}),
+    ).rejects.toThrow(/conflicts with existing built-in/);
   });
 
   it("throws when two customRules share name", async () => {
     const a = defineRule({ name: "dup", description: "a", check: () => [] });
     const b = defineRule({ name: "dup", description: "b", check: () => [] });
-    setupConfig({ customRules: [a, b] });
     mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
 
-    await expect(runCheck()).rejects.toThrow(/conflicts with existing custom/);
+    await expect(
+      executeCheck(buildConfig({ customRules: [a, b] }), {}),
+    ).rejects.toThrow(/conflicts with existing custom/);
   });
 
-  it("warns on unknown rule name in rules but does not crash", async () => {
-    setupConfig({ rules: { typoRule: true } });
+  it("emits config.unknownRule diagnostic for unknown rule names", async () => {
     mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
-    vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await runCheck({ format: "json" });
-
-    expect(consola.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Unknown rule "typoRule"'),
+    const result = await executeCheck(
+      buildConfig({ rules: { typoRule: true } }),
+      {},
     );
+
+    expect(
+      result.diagnostics?.some(
+        (d) =>
+          d.kind === "config.unknownRule" && d.message.includes('"typoRule"'),
+      ),
+    ).toBe(true);
   });
 
-  it("does not warn for unknown rules when entry IS a customRule", async () => {
-    setupConfig({
-      customRules: [noLegacyRule],
-      rules: { noLegacy: { tag: "legacy" } },
-    });
+  it("does not emit unknownRule diagnostic when entry IS a customRule", async () => {
     mockLoadModel.mockResolvedValue({ model: cleanModel(), issues: [] });
-    vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await runCheck({ format: "json" });
-
-    expect(consola.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('Unknown rule "noLegacy"'),
+    const result = await executeCheck(
+      buildConfig({
+        customRules: [noLegacyRule],
+        rules: { noLegacy: { tag: "legacy" } },
+      }),
+      {},
     );
+
+    expect(
+      result.diagnostics?.some(
+        (d) =>
+          d.kind === "config.unknownRule" && d.message.includes('"noLegacy"'),
+      ),
+    ).toBe(false);
   });
 
-  it("collects fixes from custom rule with fix capability", async () => {
-    setupConfig({ customRules: [noLegacyWithFixRule] });
+  it("collects fixes from custom rule with fix capability in dry-run", async () => {
     mockLoadModel.mockResolvedValue({ model: taggedModel(), issues: [] });
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await runCheck({ fix: true, "dry-run": true });
+    const result = await executeCheck(
+      buildConfig({ customRules: [noLegacyWithFixRule] }),
+      { "dry-run": true },
+    );
 
-    const allOutput = spy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(allOutput).toContain("noLegacyFix");
+    expect(
+      result.data.suggestedFixes.some((f) => f.rule === "noLegacyFix"),
+    ).toBe(true);
+    expect(result.data.mode).toBe("dry-run");
   });
 });

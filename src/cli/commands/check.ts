@@ -1,7 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-import { defineCommand } from "citty";
-import consola from "consola";
 import { box, colors } from "consola/utils";
 import path from "pathe";
 
@@ -13,23 +11,55 @@ import type { Model } from "../../model";
 import { applyEdits } from "../../rules/lib/applyEdits";
 import { ruleRegistry } from "../../rules/registry";
 import type { FixResult, RuleDefinition, Violation } from "../../rules/types";
-import { loadAndValidateConfig } from "../loadConfig";
-import { loadModel } from "../loadModel";
+import { issueToDiagnostic, loadModel } from "../loadModel";
+import type { Diagnostic, ExitCode, Renderer } from "../output";
+import type { ExecuteResult } from "../run";
+import { cliCommandWithConfig } from "../run";
+import { configArg, jsonArg } from "../sharedArgs";
 
-// eslint-disable-next-line n/no-process-exit
-const exitWithViolations = (): never => process.exit(1);
+// -----------------------------------------------------------------------------
+// Public data shape (envelope.data for `aact check`)
+// -----------------------------------------------------------------------------
+
+export interface CheckViolation {
+  readonly rule: string;
+  readonly container: string;
+  readonly message: string;
+  /** v1: always "error". Per-rule severity will be additive in a future bump. */
+  readonly severity: "error";
+}
+
+export interface CheckSummary {
+  readonly failed: number;
+  readonly passed: number;
+  readonly total: number;
+}
+
+export interface CheckFixesApplied {
+  readonly count: number;
+  readonly remaining: number;
+  readonly writePath: string;
+}
+
+export type CheckMode = "check" | "dry-run" | "fix";
+
+export interface CheckData {
+  readonly mode: CheckMode;
+  readonly violations: readonly CheckViolation[];
+  readonly suggestedFixes: readonly FixResult[];
+  readonly summary: CheckSummary;
+  readonly fixesApplied?: CheckFixesApplied;
+}
+
+// -----------------------------------------------------------------------------
+// Internal rule plumbing (kept pure: no consola, no console.log)
+// -----------------------------------------------------------------------------
 
 interface RuleResult {
   readonly name: string;
   readonly violations: readonly Violation[];
 }
 
-/**
- * Build merged registry from built-ins + customRules. Conflicts (custom rule
- * shares name with built-in или с другим custom) — activation error, никакого
- * silent override. Это force'ит namespace discipline для plugin authors —
- * prefix unique (adapstoryBffBoundary, mermaidLegend etc.).
- */
 const buildEffectiveRules = (
   customRules?: readonly RuleDefinition[],
 ): readonly RuleDefinition[] => {
@@ -53,31 +83,30 @@ const buildEffectiveRules = (
   return merged;
 };
 
-/**
- * Warn on rule names в `config.rules` которые не зарегистрированы (built-in
- * или custom). Backward-safe — typo не падает CLI, просто игнорируется
- * с явным сообщением.
- */
-const warnUnknownRuleNames = (
+const collectUnknownRuleDiagnostics = (
   rules: AactConfig["rules"],
   effective: readonly RuleDefinition[],
-): void => {
-  if (!rules) return;
+): Diagnostic[] => {
+  if (!rules) return [];
   const known = new Set(effective.map((r) => r.name));
+  const out: Diagnostic[] = [];
   for (const key of Object.keys(rules)) {
     if (!known.has(key)) {
-      consola.warn(
-        `Unknown rule "${key}" in config.rules — ignored. ` +
-          `Did you forget to add it to customRules?`,
-      );
+      out.push({
+        kind: "config.unknownRule",
+        message: `Unknown rule "${key}" in config.rules — ignored. Did you forget to add it to customRules?`,
+        severity: "warning",
+        context: { rule: key },
+      });
     }
   }
+  return out;
 };
 
 const getRuleConfigValue = (
   rules: AactConfig["rules"],
   ruleName: string,
-): unknown => (rules)?.[ruleName];
+): unknown => rules?.[ruleName];
 
 const runRules = (
   model: Model,
@@ -85,46 +114,58 @@ const runRules = (
   effective: readonly RuleDefinition[],
 ): RuleResult[] => {
   const results: RuleResult[] = [];
-
   for (const rule of effective) {
     const configValue = getRuleConfigValue(rules, rule.name);
     if (configValue === false) continue;
     const options = typeof configValue === "object" ? configValue : undefined;
     results.push({ name: rule.name, violations: rule.check(model, options) });
   }
-
   return results;
 };
 
+interface FixCapabilityResolution {
+  readonly capability: FixCapability | null;
+  readonly diagnostic?: Diagnostic;
+}
+
 const resolveFixCapability = async (
   config: AactConfig,
-): Promise<FixCapability | null> => {
+): Promise<FixCapabilityResolution> => {
   const format = await loadFormat(config.source.type);
   if (!canFix(format)) {
-    consola.warn(`Format "${format.name}" doesn't support --fix`);
-    return null;
+    return {
+      capability: null,
+      diagnostic: {
+        kind: "format.unsupportedFix",
+        message: `Format "${format.name}" doesn't support --fix`,
+        severity: "warning",
+        context: { format: format.name },
+      },
+    };
   }
   if (config.source.type === "structurizr" && !config.source.writePath) {
-    consola.warn(
-      "To use --fix with structurizr, add source.writePath pointing to your workspace.dsl",
-    );
-    return null;
+    return {
+      capability: null,
+      diagnostic: {
+        kind: "format.missingWritePath",
+        message:
+          "To use --fix with structurizr, add source.writePath pointing to your workspace.dsl",
+        severity: "warning",
+      },
+    };
   }
-  return format.fix;
+  return { capability: format.fix };
 };
 
-// Fixes from all enabled rules are collected in registry order and applied
-// to the source as a single batch. Model is not re-checked between rules.
 const generateFixes = (
   model: Model,
-  results: RuleResult[],
+  results: readonly RuleResult[],
   rules: AactConfig["rules"],
   syntax: SourceSyntax,
   effective: readonly RuleDefinition[],
 ): FixResult[] => {
   const ruleByName = new Map(effective.map((r) => [r.name, r]));
   const fixes: FixResult[] = [];
-
   for (const result of results) {
     if (result.violations.length === 0) continue;
     const ruleDef = ruleByName.get(result.name);
@@ -135,94 +176,219 @@ const generateFixes = (
       ...(ruleDef.fix?.(model, result.violations, syntax, options) ?? []),
     );
   }
-
   return fixes;
 };
 
-const formatText = (
+const flattenViolations = (
   results: readonly RuleResult[],
-  effective: readonly RuleDefinition[],
-): void => {
-  const failed = results.filter((r) => r.violations.length > 0);
-  const passed = results.filter((r) => r.violations.length === 0);
-
-  for (const result of failed) {
-    const count = result.violations.length;
-    const label = count === 1 ? "violation" : "violations";
-    const countLabel = colors.red(`${count} ${label}`);
-    console.log(`${colors.bold(colors.red(result.name))}  ${countLabel}`);
-
-    const maxLen = Math.max(
-      ...result.violations.map((v) => v.container.length),
-    );
+): CheckViolation[] => {
+  const out: CheckViolation[] = [];
+  for (const result of results) {
     for (const v of result.violations) {
-      console.log(`  ${colors.bold(v.container.padEnd(maxLen))}  ${v.message}`);
+      out.push({
+        rule: result.name,
+        container: v.container,
+        message: v.message,
+        severity: "error",
+      });
     }
-    console.log();
+  }
+  return out;
+};
+
+const buildSummary = (results: readonly RuleResult[]): CheckSummary => {
+  let failed = 0;
+  let passed = 0;
+  let total = 0;
+  for (const r of results) {
+    if (r.violations.length === 0) passed += 1;
+    else {
+      failed += 1;
+      total += r.violations.length;
+    }
+  }
+  return { failed, passed, total };
+};
+
+interface ApplyFixesResult {
+  readonly remaining: number;
+  readonly writePath: string;
+}
+
+const applyFixes = async (
+  config: AactConfig,
+  fixes: readonly FixResult[],
+  effective: readonly RuleDefinition[],
+): Promise<ApplyFixesResult> => {
+  const writePath = path.resolve(config.source.writePath ?? config.source.path);
+  let source = await readFile(writePath, "utf8");
+  for (const fix of fixes) source = applyEdits(source, fix.edits);
+  await writeFile(writePath, source, "utf8");
+
+  const isDslFix =
+    !!config.source.writePath && config.source.writePath !== config.source.path;
+  if (isDslFix) {
+    // Cannot re-check Structurizr DSL until user regenerates workspace.json.
+    return { remaining: 0, writePath };
   }
 
-  if (passed.length > 0) {
-    console.log(
-      `${colors.dim("Passed")}  ${passed.map((r) => colors.green(r.name)).join(colors.dim(" · "))}`,
-    );
-    console.log();
+  const { model: reModel } = await loadModel(config);
+  const reResults = runRules(reModel, config.rules, effective);
+  const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
+  return { remaining, writePath };
+};
+
+// -----------------------------------------------------------------------------
+// Pure executor (testable without citty / process.exit)
+// -----------------------------------------------------------------------------
+
+export interface CheckArgs {
+  readonly fix?: boolean;
+  readonly "dry-run"?: boolean;
+}
+
+const resolveMode = (args: CheckArgs): CheckMode => {
+  if (args["dry-run"]) return "dry-run";
+  if (args.fix) return "fix";
+  return "check";
+};
+
+const computeExitCode = (
+  violationsCount: number,
+  fixesApplied: CheckFixesApplied | undefined,
+): ExitCode => {
+  if (fixesApplied) return fixesApplied.remaining > 0 ? 1 : 0;
+  return violationsCount > 0 ? 1 : 0;
+};
+
+export const executeCheck = async (
+  config: AactConfig,
+  args: CheckArgs,
+): Promise<ExecuteResult<CheckData>> => {
+  const diagnostics: Diagnostic[] = [];
+  const effective = buildEffectiveRules(config.customRules);
+  diagnostics.push(...collectUnknownRuleDiagnostics(config.rules, effective));
+
+  const { model, issues } = await loadModel(config);
+  for (const issue of issues) diagnostics.push(issueToDiagnostic(issue));
+
+  const results = runRules(model, config.rules, effective);
+  const violations = flattenViolations(results);
+  const summary = buildSummary(results);
+  const mode = resolveMode(args);
+
+  let suggestedFixes: readonly FixResult[] = [];
+  if (violations.length > 0) {
+    const fixCap = await resolveFixCapability(config);
+    if (fixCap.diagnostic) diagnostics.push(fixCap.diagnostic);
+    if (fixCap.capability) {
+      suggestedFixes = generateFixes(
+        model,
+        results,
+        config.rules,
+        fixCap.capability.syntax,
+        effective,
+      );
+    }
   }
 
-  const total = failed.reduce((n, r) => n + r.violations.length, 0);
-  if (total === 0) {
-    console.log(
+  let fixesApplied: CheckFixesApplied | undefined;
+  if (mode === "fix" && suggestedFixes.length > 0) {
+    const result = await applyFixes(config, suggestedFixes, effective);
+    fixesApplied = {
+      count: suggestedFixes.length,
+      remaining: result.remaining,
+      writePath: result.writePath,
+    };
+  }
+
+  return {
+    data: {
+      mode,
+      violations,
+      suggestedFixes,
+      summary,
+      ...(fixesApplied ? { fixesApplied } : {}),
+    },
+    exitCode: computeExitCode(violations.length, fixesApplied),
+    diagnostics,
+  };
+};
+
+// -----------------------------------------------------------------------------
+// Text rendering
+// -----------------------------------------------------------------------------
+
+const renderGithubAnnotations = (
+  data: CheckData,
+  sink: NodeJS.WritableStream,
+): void => {
+  for (const v of data.violations) {
+    sink.write(`::error title=${v.rule}::${v.container}: ${v.message}\n`);
+  }
+};
+
+const renderViolationsTable = (
+  data: CheckData,
+  sink: NodeJS.WritableStream,
+): void => {
+  const failedRules = new Map<string, CheckViolation[]>();
+  for (const v of data.violations) {
+    const list = failedRules.get(v.rule) ?? [];
+    list.push(v);
+    failedRules.set(v.rule, list);
+  }
+
+  for (const [rule, vs] of failedRules) {
+    const label = vs.length === 1 ? "violation" : "violations";
+    const countLabel = colors.red(`${vs.length} ${label}`);
+    sink.write(`${colors.bold(colors.red(rule))}  ${countLabel}\n`);
+    const maxLen = Math.max(...vs.map((v) => v.container.length));
+    for (const v of vs) {
+      sink.write(
+        `  ${colors.bold(v.container.padEnd(maxLen))}  ${v.message}\n`,
+      );
+    }
+    sink.write("\n");
+  }
+};
+
+const renderBoxSummary = (
+  data: CheckData,
+  fixableCount: number,
+  sink: NodeJS.WritableStream,
+): void => {
+  if (data.summary.total === 0) {
+    sink.write(
       box(colors.green("No violations found."), {
         title: colors.green("✓ check"),
         style: { borderColor: "green" },
-      }),
+      }) + "\n",
     );
     return;
   }
 
-  const fixableRules = failed.filter(
-    (r) =>
-      typeof effective.find((rd) => rd.name === r.name)?.fix === "function",
-  ).length;
-  const violationsLabel = total === 1 ? "violation" : "violations";
-  const rulesLabel = failed.length === 1 ? "rule" : "rules";
+  const violationsLabel = data.summary.total === 1 ? "violation" : "violations";
+  const rulesLabel = data.summary.failed === 1 ? "rule" : "rules";
   const fixableHas =
-    fixableRules === 1 ? "rule has auto-fix" : "rules have auto-fix";
+    fixableCount === 1 ? "rule has auto-fix" : "rules have auto-fix";
   const fixableLine =
-    fixableRules > 0
-      ? "\n" + colors.dim(`${fixableRules} ${fixableHas} — run with --fix`)
+    fixableCount > 0
+      ? "\n" + colors.dim(`${fixableCount} ${fixableHas} — run with --fix`)
       : "";
   const headline =
-    colors.red(`${total} ${violationsLabel}`) +
+    colors.red(`${data.summary.total} ${violationsLabel}`) +
     " " +
     colors.dim("in") +
     " " +
-    colors.red(`${failed.length} ${rulesLabel}`) +
+    colors.red(`${data.summary.failed} ${rulesLabel}`) +
     fixableLine;
-  console.log(
+  sink.write(
     box(headline, {
       title: colors.red("✗ check"),
       style: { borderColor: "red" },
-    }),
+    }) + "\n",
   );
-};
-
-const formatJson = (results: readonly RuleResult[]): void => {
-  const output = {
-    results: results.map((r) => ({
-      rule: r.name,
-      passed: r.violations.length === 0,
-      violations: r.violations,
-    })),
-  };
-  console.log(JSON.stringify(output, undefined, 2));
-};
-
-const formatGithub = (results: readonly RuleResult[]): void => {
-  for (const result of results) {
-    for (const v of result.violations) {
-      console.log(`::error title=${result.name}::${v.container}: ${v.message}`);
-    }
-  }
 };
 
 const prefixContent = (content: string, first: string, rest: string): string =>
@@ -231,210 +397,95 @@ const prefixContent = (content: string, first: string, rest: string): string =>
     .map((line, i) => (i === 0 ? first + line : rest + line))
     .join("\n");
 
-const formatFixes = (fixes: readonly FixResult[]): void => {
+const renderFixes = (
+  fixes: readonly FixResult[],
+  sink: NodeJS.WritableStream,
+): void => {
   for (const fix of fixes) {
     const ruleTag = colors.bold(`[${fix.rule}]`);
-    console.log(`  ${ruleTag}  ${fix.description}`);
+    sink.write(`  ${ruleTag}  ${fix.description}\n`);
     for (const edit of fix.edits) {
-      switch (edit.type) {
-        case "remove": {
-          console.log(
-            colors.red(prefixContent(edit.search, "    - ", "      ")),
-          );
-          break;
-        }
-        case "replace": {
-          console.log(
-            colors.red(prefixContent(edit.search, "    - ", "      ")),
-          );
-          console.log(
-            colors.green(prefixContent(edit.content ?? "", "    + ", "      ")),
-          );
-          break;
-        }
-        case "add": {
-          console.log(colors.dim(`    (after "${edit.search}")`));
-          console.log(
-            colors.green(prefixContent(edit.content ?? "", "    + ", "      ")),
-          );
-          break;
-        }
+      if (edit.type === "remove") {
+        sink.write(
+          colors.red(prefixContent(edit.search, "    - ", "      ")) + "\n",
+        );
+      } else if (edit.type === "replace") {
+        sink.write(
+          colors.red(prefixContent(edit.search, "    - ", "      ")) + "\n",
+        );
+        sink.write(
+          colors.green(prefixContent(edit.content ?? "", "    + ", "      ")) +
+            "\n",
+        );
+      } else {
+        sink.write(colors.dim(`    (after "${edit.search}")\n`));
+        sink.write(
+          colors.green(prefixContent(edit.content ?? "", "    + ", "      ")) +
+            "\n",
+        );
       }
     }
-    console.log();
+    sink.write("\n");
   }
 };
 
-const detectFormat = (format?: string): string => {
-  if (format) return format;
-  if (process.env.GITHUB_ACTIONS) return "github";
-  return "text";
-};
+/**
+ * Text-mode renderer for `aact check`. Branches on GITHUB_ACTIONS env to
+ * emit annotation lines (consumed by GitHub Actions Workflow UI) instead of
+ * the table when running inside CI. JSON mode is handled by JsonReporter
+ * upstream, never reaches this function.
+ */
+export const renderCheckText: Renderer<CheckData> = (envelope, sink) => {
+  const { data } = envelope;
 
-const formatResults = (
-  results: readonly RuleResult[],
-  format: string,
-  effective: readonly RuleDefinition[],
-): void => {
-  switch (format) {
-    case "json": {
-      formatJson(results);
-      break;
-    }
-    case "github": {
-      formatGithub(results);
-      break;
-    }
-    default: {
-      formatText(results, effective);
-    }
-  }
-};
-
-const writeFixes = async (
-  config: AactConfig,
-  fixes: readonly FixResult[],
-  effective: readonly RuleDefinition[],
-): Promise<void> => {
-  const writePath = path.resolve(config.source.writePath ?? config.source.path);
-  let source = await readFile(writePath, "utf8");
-  for (const fix of fixes) {
-    source = applyEdits(source, fix.edits);
-  }
-  await writeFile(writePath, source, "utf8");
-
-  const isDslFix =
-    config.source.writePath && config.source.writePath !== config.source.path;
-
-  if (isDslFix) {
-    consola.success(`Applied ${fixes.length} fix(es), wrote ${writePath}`);
-    consola.warn(
-      "DSL updated — regenerate workspace.json from workspace.dsl before re-checking",
-    );
-  } else {
-    const { model: reModel } = await loadModel(config);
-    const reResults = runRules(reModel, config.rules, effective);
-    const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
-    consola.success(
-      `Applied ${fixes.length} fix(es), wrote ${writePath}` +
-        (remaining > 0 ? ` (${remaining} violation(s) remain)` : ""),
-    );
-  }
-};
-
-const handleFixMode = async (
-  model: Model,
-  results: RuleResult[],
-  config: AactConfig,
-  dryRun: boolean,
-  effective: readonly RuleDefinition[],
-): Promise<void> => {
-  const hasViolations = results.some((r) => r.violations.length > 0);
-  if (!hasViolations) {
-    consola.success("No violations to fix");
+  if (process.env.GITHUB_ACTIONS) {
+    renderGithubAnnotations(data, sink);
     return;
   }
 
-  const fixCapability = await resolveFixCapability(config);
-  if (!fixCapability) return exitWithViolations();
+  renderViolationsTable(data, sink);
 
-  const fixes = generateFixes(
-    model,
-    results,
-    config.rules,
-    fixCapability.syntax,
-    effective,
-  );
-  if (fixes.length === 0) {
-    consola.info("No auto-fixes available for these violations");
-    exitWithViolations();
+  const fixableRules = new Set(data.suggestedFixes.map((f) => f.rule)).size;
+  renderBoxSummary(data, fixableRules, sink);
+
+  if (data.mode === "dry-run" && data.suggestedFixes.length > 0) {
+    sink.write(colors.bold("Suggested fixes (dry run):") + "\n\n");
+    renderFixes(data.suggestedFixes, sink);
   }
 
-  console.log(
-    colors.bold(dryRun ? "Suggested fixes (dry run):" : "Applying fixes:"),
-  );
-  console.log();
-  formatFixes(fixes);
-  console.log();
-
-  if (!dryRun) {
-    await writeFixes(config, fixes, effective);
+  if (data.fixesApplied) {
+    const tail =
+      data.fixesApplied.remaining > 0
+        ? ` (${data.fixesApplied.remaining} violation(s) remain)`
+        : "";
+    sink.write(
+      colors.green(
+        `✔ Applied ${data.fixesApplied.count} fix(es), wrote ${data.fixesApplied.writePath}${tail}\n`,
+      ),
+    );
   }
 };
 
-const suggestFixes = async (
-  model: Model,
-  results: readonly RuleResult[],
-  config: AactConfig,
-  effective: readonly RuleDefinition[],
-): Promise<void> => {
-  const fixCapability = await resolveFixCapability(config);
-  if (!fixCapability) return;
-  const fixes = generateFixes(
-    model,
-    [...results],
-    config.rules,
-    fixCapability.syntax,
-    effective,
-  );
-  if (fixes.length > 0) {
-    console.log(colors.bold("Suggested fixes:"));
-    console.log();
-    formatFixes(fixes);
-  }
-};
+// -----------------------------------------------------------------------------
+// Command definition
+// -----------------------------------------------------------------------------
 
-export const check = defineCommand({
+export const check = cliCommandWithConfig({
+  name: "check",
   meta: { description: "Check architecture rules" },
   args: {
-    config: {
-      type: "string",
-      description: "Path to aact config file",
-    },
-    format: {
-      type: "string",
-      description: "Output format: text, json, github",
-    },
+    ...configArg,
+    ...jsonArg,
     fix: {
       type: "boolean",
       description: "Apply auto-fixes to the source file",
     },
     "dry-run": {
       type: "boolean",
-      description: "Show fixes without applying them",
+      description:
+        "Show fixes without applying them (exits 1 if violations exist)",
     },
   },
-  async run({ args }) {
-    const config = await loadAndValidateConfig(args.config);
-    const effective = buildEffectiveRules(config.customRules);
-    warnUnknownRuleNames(config.rules, effective);
-
-    const { model, issues } = await loadModel(config);
-
-    // Surface loader-time issues (dangling refs, duplicate names, etc.)
-    for (const issue of issues) {
-      consola.warn(`model: ${issue.kind}`, issue);
-    }
-
-    const results = runRules(model, config.rules, effective);
-    formatResults(results, detectFormat(args.format), effective);
-
-    const hasViolations = results.some((r) => r.violations.length > 0);
-
-    if (args.fix || args["dry-run"]) {
-      await handleFixMode(
-        model,
-        results,
-        config,
-        args["dry-run"] ?? false,
-        effective,
-      );
-      return;
-    }
-
-    if (hasViolations) {
-      await suggestFixes(model, results, config, effective);
-      exitWithViolations();
-    }
-  },
+  renderText: renderCheckText,
+  execute: (ctx, config) => executeCheck(config, ctx.args as CheckArgs),
 });

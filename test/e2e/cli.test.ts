@@ -94,15 +94,56 @@ describe("aact check", () => {
     expect(output).toContain("orders");
   });
 
-  it("emits a friendly error and exits 1 when source file is missing", async () => {
+  it("emits a friendly error and exits 2 when source file is missing", async () => {
     await runCli(["init"]);
     await fs.rm(path.join(workDir, "architecture.puml"));
     const result = await runCli(["check"]);
-    expect(result.exitCode).toBe(1);
+    // Tool error (missing source) → exit 2; distinct from domain failure (exit 1)
+    expect(result.exitCode).toBe(2);
     const output = result.stdout + result.stderr;
     expect(output).toMatch(/architecture file not found/i);
     // Should NOT be a raw Node stack trace.
     expect(output).not.toContain("at Object.<anonymous>");
+  });
+
+  it("--json emits a v1 envelope with violations and summary", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["check", "--json"]);
+    expect(result.exitCode).toBe(1);
+
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe("check");
+    expect(envelope.ok).toBe(false);
+    expect(envelope.exitCode).toBe(1);
+
+    const data = envelope.data as Record<string, unknown>;
+    expect(data.mode).toBe("check");
+    expect(Array.isArray(data.violations)).toBe(true);
+    expect((data.violations as unknown[]).length).toBeGreaterThan(0);
+    expect(data).toHaveProperty("suggestedFixes");
+    expect(data).toHaveProperty("summary");
+  });
+
+  it("--dry-run exits 1 when violations remain (Codex P1 fix)", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["check", "--dry-run", "--json"]);
+    expect(result.exitCode).toBe(1);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const data = envelope.data as Record<string, unknown>;
+    expect(data.mode).toBe("dry-run");
+  });
+
+  it("--fix exits 0 when all violations are fixed", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["check", "--fix", "--json"]);
+    expect(result.exitCode).toBe(0);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const data = envelope.data as Record<string, unknown>;
+    expect(data.mode).toBe("fix");
+    const fixesApplied = data.fixesApplied as Record<string, unknown>;
+    expect(fixesApplied).toBeDefined();
+    expect(fixesApplied.remaining).toBe(0);
   });
 
   it("--help prints the available options", async () => {
@@ -110,6 +151,7 @@ describe("aact check", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("--fix");
     expect(result.stdout).toContain("--dry-run");
+    expect(result.stdout).toContain("--json");
   });
 });
 
