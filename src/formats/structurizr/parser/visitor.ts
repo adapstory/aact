@@ -108,6 +108,45 @@ const findClosingBrace = (cst: CstNode): IToken | undefined => {
 };
 
 /**
+ * Strip `"""..."""` wrapping from a triple-quoted text block token.
+ * The reference DSL preserves the inner contents verbatim — no escape
+ * processing — so we mirror that.
+ */
+const unwrapTextBlock = (image: string): string => image.slice(3, -3);
+
+/**
+ * Build a string AST node from any token that could carry a textual
+ * value: a `StringLiteral`, a `TextBlock`, or a bare `Identifier`
+ * (used as a path in some directive slots). The wrapper / escape
+ * rules differ per token type, so dispatch on `tokenType.name`.
+ */
+const stringFromAnyToken = (token: IToken, file: string): AstStringLiteral => {
+  switch (token.tokenType.name) {
+    case "StringLiteral": {
+      return {
+        kind: "string",
+        value: unwrapStringLiteral(token.image),
+        range: rangeFromToken(token, file),
+      };
+    }
+    case "TextBlock": {
+      return {
+        kind: "string",
+        value: unwrapTextBlock(token.image),
+        range: rangeFromToken(token, file),
+      };
+    }
+    default: {
+      return {
+        kind: "string",
+        value: token.image,
+        range: rangeFromToken(token, file),
+      };
+    }
+  }
+};
+
+/**
  * `identifierName` subrule yields a CST node whose single child is
  * the token that matched (Identifier | Person | SoftwareSystem | ...).
  * Pull the token out regardless of which alternative fired.
@@ -598,11 +637,12 @@ class StructurizrCstToAst extends BaseVisitor {
   constDirective(ctx: {
     BangConst: [IToken];
     name: [IToken];
-    value: [IToken];
+    value?: [IToken];
+    valueTextBlock?: [IToken];
   }) {
     const keyword = ctx.BangConst[0];
     const nameToken = ctx.name[0];
-    const valueToken = ctx.value[0];
+    const valueToken = (ctx.value ?? ctx.valueTextBlock)![0];
     return {
       kind: "const" as const,
       name: {
@@ -610,15 +650,20 @@ class StructurizrCstToAst extends BaseVisitor {
         value: nameToken.image,
         range: rangeFromToken(nameToken, this.file),
       },
-      value: this.stringFromToken(valueToken),
+      value: stringFromAnyToken(valueToken, this.file),
       range: rangeFromTokens(keyword, valueToken, this.file),
     };
   }
 
-  varDirective(ctx: { BangVar: [IToken]; name: [IToken]; value: [IToken] }) {
+  varDirective(ctx: {
+    BangVar: [IToken];
+    name: [IToken];
+    value?: [IToken];
+    valueTextBlock?: [IToken];
+  }) {
     const keyword = ctx.BangVar[0];
     const nameToken = ctx.name[0];
-    const valueToken = ctx.value[0];
+    const valueToken = (ctx.value ?? ctx.valueTextBlock)![0];
     return {
       kind: "var" as const,
       name: {
@@ -626,7 +671,7 @@ class StructurizrCstToAst extends BaseVisitor {
         value: nameToken.image,
         range: rangeFromToken(nameToken, this.file),
       },
-      value: this.stringFromToken(valueToken),
+      value: stringFromAnyToken(valueToken, this.file),
       range: rangeFromTokens(keyword, valueToken, this.file),
     };
   }

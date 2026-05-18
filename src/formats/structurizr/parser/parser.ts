@@ -62,6 +62,7 @@ import {
   Tag,
   Tags,
   Technology,
+  TextBlock,
   This,
   Url,
   Workspace,
@@ -305,6 +306,7 @@ class StructurizrParser extends CstParser {
     this.CONSUME(Identifier, { LABEL: "name" });
     this.OR([
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: "value" }) },
+      { ALT: () => this.CONSUME(TextBlock, { LABEL: "valueTextBlock" }) },
       { ALT: () => this.CONSUME1(Identifier, { LABEL: "value" }) },
     ]);
   });
@@ -314,6 +316,7 @@ class StructurizrParser extends CstParser {
     this.CONSUME(Identifier, { LABEL: "name" });
     this.OR([
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: "value" }) },
+      { ALT: () => this.CONSUME(TextBlock, { LABEL: "valueTextBlock" }) },
       { ALT: () => this.CONSUME1(Identifier, { LABEL: "value" }) },
     ]);
   });

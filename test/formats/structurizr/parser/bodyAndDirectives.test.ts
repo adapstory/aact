@@ -116,6 +116,19 @@ describe("Structurizr parser — body statements + directives", () => {
     });
   });
 
+  it("supports !const with a triple-quoted text block value", () => {
+    const src = `workspace {
+      model {
+        !const SVG """<svg>
+          <path d="M0,0" />
+        </svg>"""
+        api = container "API"
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
   it("supports !const at model scope (parsed, currently no toModel effect)", () => {
     const src = `workspace {
       model {
