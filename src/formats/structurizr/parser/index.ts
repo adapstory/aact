@@ -12,8 +12,16 @@
 
 import type { LoadResult } from "../../types";
 import { parseStructurizrDsl } from "./parser";
-import type { HardRemovedError, OpaqueBlock } from "./preParse";
-import { findHardRemovedTokens, stripOpaqueBlocks } from "./preParse";
+import type {
+  HardRemovedError,
+  OpaqueBlock,
+  ParsedInfoBlock,
+} from "./preParse";
+import {
+  findHardRemovedTokens,
+  stripDeploymentBlocks,
+  stripOpaqueBlocks,
+} from "./preParse";
 import { StructurizrLexer } from "./tokens";
 import { toModel } from "./toModel";
 import { buildAst } from "./visitor";
@@ -32,6 +40,11 @@ export interface ChevrotainParseResult extends LoadResult {
    *  terminology/themes) that were skipped during parsing. They are
    *  preserved here so a future writer can reinsert them verbatim. */
   readonly opaqueBlocks: readonly OpaqueBlock[];
+  /** Deployment-family blocks (deploymentEnvironment/deploymentNode/
+   *  …) skipped because aact does not model deployment topology yet.
+   *  Each one carries the construct name and a hint so the CLI can
+   *  show an info-level "N deployment blocks ignored" summary. */
+  readonly infoBlocks: readonly ParsedInfoBlock[];
 }
 
 /**
@@ -49,11 +62,15 @@ export const parseSource = (
 ): ChevrotainParseResult => {
   const lex = StructurizrLexer.tokenize(text);
 
-  // Pre-parse passes: strip opaque blocks first so a `views { … }`
-  // chunk doesn't trip on a hard-removed keyword inside it, then
-  // surface hard-removed constructs as dedicated errors.
+  // Pre-parse passes in order:
+  //   1. Strip opaque workspace blocks (views/styles/…) so their inner
+  //      tokens never reach the parser or surface lex noise (`*` etc.).
+  //   2. Strip deployment-family blocks — recognised but not modelled.
+  //   3. Convert hard-removed tokens (`!ref`/`enterprise`/…) into
+  //      explicit errors with replacement hints.
   const stripped = stripOpaqueBlocks(lex.tokens, filePath);
-  const hardRemoved = findHardRemovedTokens(stripped.tokens, filePath);
+  const deployment = stripDeploymentBlocks(stripped.tokens, filePath);
+  const hardRemoved = findHardRemovedTokens(deployment.tokens, filePath);
 
   const { cst, errors: parserErrors } = parseStructurizrDsl(hardRemoved.tokens);
 
@@ -91,6 +108,7 @@ export const parseSource = (
     issues: loadResult.issues,
     parseErrors,
     opaqueBlocks: stripped.blocks,
+    infoBlocks: deployment.blocks,
   };
 };
 

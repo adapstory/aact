@@ -186,7 +186,7 @@ const handleBoundary = (
   }
   for (const child of children) {
     if (child.kind === "relationship") {
-      handleRelationship(child, containers, identifierMap);
+      handleRelationship(child, containers, identifierMap, displayName);
     }
   }
   boundaries.push({
@@ -308,7 +308,7 @@ const handleLeaf = (
   });
   for (const child of children) {
     if (child.kind === "relationship") {
-      handleRelationship(child, containers, identifierMap);
+      handleRelationship(child, containers, identifierMap, displayName);
     }
   }
 };
@@ -375,17 +375,25 @@ const kindFromAstKind = (k: ElementNode["kind"]): ContainerKind => {
 
 /**
  * Push a Relation onto the source Container's `relations[]`. Source/dest
- * identifiers are resolved through `identifierMap`.
+ * identifiers are resolved through `identifierMap`. When the relationship
+ * is in implicit-source form (`-> destination`) the source comes from
+ * `enclosingElementName` — the element whose body contains the line.
+ *
+ * The `-/>` no-relationship form is parsed for grammar completeness
+ * (deployment views use it) but does not produce a Model edge today.
  */
 const handleRelationship = (
   rel: RelationshipNode,
   containers: Container[],
   identifierMap: Map<string, string>,
+  enclosingElementName?: string,
 ): void => {
   if (rel.arrow === "-/>") return; // no-relationship form — deployment-only
-  const sourceName = rel.source
-    ? (identifierMap.get(rel.source.name) ?? rel.source.name)
-    : undefined;
+  const sourceName = resolveRelationshipSource(
+    rel,
+    identifierMap,
+    enclosingElementName,
+  );
   const destinationName =
     identifierMap.get(rel.destination.name) ?? rel.destination.name;
   if (!sourceName) return;
@@ -410,6 +418,23 @@ const handleRelationship = (
     ...sourceContainer,
     relations: [...sourceContainer.relations, relation],
   };
+};
+
+/**
+ * Resolve a relationship's source identifier to the target Container's
+ * name. Three cases:
+ *   - explicit source (`a -> b`) → look up `a` in the identifier map
+ *   - `this -> b` → enclosing element
+ *   - implicit source (`-> b`) → enclosing element
+ */
+const resolveRelationshipSource = (
+  rel: RelationshipNode,
+  identifierMap: Map<string, string>,
+  enclosingElementName: string | undefined,
+): string | undefined => {
+  if (!rel.source) return enclosingElementName;
+  if (rel.source.isThis) return enclosingElementName;
+  return identifierMap.get(rel.source.name) ?? rel.source.name;
 };
 
 const splitTags = (raw: string): readonly string[] =>

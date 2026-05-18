@@ -33,9 +33,19 @@ import {
   BangRefHardError,
   Branding,
   Configuration,
+  ContainerInstance,
+  DeploymentEnvironment,
+  DeploymentGroup,
+  DeploymentNode,
   EnterpriseHardError,
+  HealthCheck,
+  Identifier,
+  InfrastructureNode,
+  InstanceOf,
   LBrace,
   RBrace,
+  SoftwareSystemInstance,
+  StringLiteral,
   Styles,
   Terminology,
   Theme,
@@ -59,6 +69,20 @@ export interface HardRemovedError {
   readonly range: SourceLocation;
 }
 
+/**
+ * A deployment-family block (`deploymentEnvironment`, `deploymentNode`,
+ * …) that the linter parses-then-skips. Surfaced as info-level
+ * diagnostics so users see what was ignored; the model itself does
+ * not get a deployment view today.
+ */
+export interface ParsedInfoBlock {
+  /** The keyword that opened the block. */
+  readonly construct: string;
+  /** Why this block was skipped. */
+  readonly hint: string;
+  readonly range: SourceLocation;
+}
+
 const OPAQUE_KEYWORDS = [
   Views,
   Styles,
@@ -68,6 +92,26 @@ const OPAQUE_KEYWORDS = [
   Themes,
   Theme,
 ];
+
+/**
+ * Deployment-family keywords. These ARE parsed by the reference DSL,
+ * but the linter does not model deployment topology — we strip the
+ * blocks and emit one info-issue per occurrence so users know what
+ * was skipped.
+ */
+const DEPLOYMENT_KEYWORDS = [
+  DeploymentEnvironment,
+  DeploymentNode,
+  DeploymentGroup,
+  InfrastructureNode,
+  SoftwareSystemInstance,
+  ContainerInstance,
+  InstanceOf,
+  HealthCheck,
+];
+
+const DEPLOYMENT_HINT =
+  "Deployment-family constructs are recognised but not modelled by aact yet. The block was skipped so the rest of the workspace still parses.";
 
 const HARD_REMOVED = new Map<unknown, { construct: string; hint: string }>([
   [
@@ -102,6 +146,35 @@ const HARD_REMOVED = new Map<unknown, { construct: string; hint: string }>([
 
 const isOpaqueKeyword = (token: IToken): boolean =>
   OPAQUE_KEYWORDS.some((k) => tokenMatcher(token, k));
+
+const isDeploymentKeyword = (token: IToken): boolean =>
+  DEPLOYMENT_KEYWORDS.some((k) => tokenMatcher(token, k));
+
+/**
+ * Find the opening `{` of a block introduced by `tokens[keywordIdx]`.
+ * Some block keywords accept positional arguments before the brace:
+ *
+ *   deploymentEnvironment "Production" {
+ *   views "Some Name" {
+ *
+ * Skip ahead over `StringLiteral` and `Identifier` tokens. Returns the
+ * index of the `{` token, or -1 if no opening brace is found before
+ * any other significant token.
+ */
+const findOpeningBrace = (
+  tokens: readonly IToken[],
+  keywordIdx: number,
+): number => {
+  for (let k = keywordIdx + 1; k < tokens.length; k++) {
+    const tk = tokens[k];
+    if (tokenMatcher(tk, LBrace)) return k;
+    if (tokenMatcher(tk, StringLiteral) || tokenMatcher(tk, Identifier)) {
+      continue;
+    }
+    return -1;
+  }
+  return -1;
+};
 
 const rangeOfTokens = (
   first: IToken,
@@ -141,19 +214,19 @@ export const stripOpaqueBlocks = (
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
-    if (
-      !isOpaqueKeyword(t) ||
-      !tokens[i + 1] ||
-      !tokenMatcher(tokens[i + 1], LBrace)
-    ) {
+    if (!isOpaqueKeyword(t)) {
       out.push(t);
       i++;
       continue;
     }
-
-    // We have `<opaqueKeyword> {` — balance braces to find the close.
+    const braceIdx = findOpeningBrace(tokens, i);
+    if (braceIdx < 0) {
+      out.push(t);
+      i++;
+      continue;
+    }
     let depth = 1;
-    let j = i + 2;
+    let j = braceIdx + 1;
     while (j < tokens.length && depth > 0) {
       if (tokenMatcher(tokens[j], LBrace)) depth++;
       else if (tokenMatcher(tokens[j], RBrace)) depth--;
@@ -168,9 +241,66 @@ export const stripOpaqueBlocks = (
       i++;
       continue;
     }
-
     blocks.push({
       name: t.image,
+      range: rangeOfTokens(t, tokens[j], file),
+    });
+    i = j + 1;
+  }
+
+  return { tokens: out, blocks };
+};
+
+/**
+ * Walk the token array. When a deployment-family keyword is followed
+ * by `{`, balance braces and strip the block — the linter does not
+ * model deployment topology, so leaving the tokens in the stream
+ * only creates parser noise. One `ParsedInfoBlock` is emitted per
+ * stripped occurrence so callers can show "we saw N deployment
+ * blocks and skipped them" instead of dropping them silently.
+ *
+ * A bare keyword without `{` (e.g. `instanceOf X` reference) is
+ * passed through to the parser, which will surface a real error
+ * since the grammar doesn't accept it at model scope. That's
+ * preferred over silent loss.
+ */
+export const stripDeploymentBlocks = (
+  tokens: readonly IToken[],
+  file: string,
+): { tokens: IToken[]; blocks: ParsedInfoBlock[] } => {
+  const out: IToken[] = [];
+  const blocks: ParsedInfoBlock[] = [];
+
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (!isDeploymentKeyword(t)) {
+      out.push(t);
+      i++;
+      continue;
+    }
+    const braceIdx = findOpeningBrace(tokens, i);
+    if (braceIdx < 0) {
+      out.push(t);
+      i++;
+      continue;
+    }
+    let depth = 1;
+    let j = braceIdx + 1;
+    while (j < tokens.length && depth > 0) {
+      if (tokenMatcher(tokens[j], LBrace)) depth++;
+      else if (tokenMatcher(tokens[j], RBrace)) depth--;
+      if (depth === 0) break;
+      j++;
+    }
+    if (depth !== 0) {
+      out.push(t);
+      i++;
+      continue;
+    }
+    blocks.push({
+      construct: t.image,
+      hint: DEPLOYMENT_HINT,
       range: rangeOfTokens(t, tokens[j], file),
     });
     i = j + 1;

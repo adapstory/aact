@@ -610,21 +610,33 @@ class StructurizrCstToAst extends BaseVisitor {
   }
 
   relationship(ctx: RelationshipCtx): RelationshipNode {
-    const sourceToken = ctx.source[0];
+    const sourceToken = ctx.source?.[0];
     const destinationToken = ctx.destination[0];
-    const arrowToken = ctx.Relationship[0];
+    // Chevrotain's CONSUME / CONSUME1 produce separate context keys for
+    // each numbered occurrence of the same token type. The explicit
+    // form's arrow lands in `arrow`; the implicit form uses different
+    // CONSUME indices and may land in `arrow` or in the raw
+    // Relationship / NoRelationship arrays — fall back through all
+    // possibilities so we always recover the arrow token.
+    const arrowToken =
+      (ctx.arrow)?.[0] ??
+      ctx.Relationship?.[0] ??
+      ctx.NoRelationship?.[0];
+
     const lastToken =
       ctx.tags?.[0] ??
       ctx.technology?.[0] ??
       ctx.description?.[0] ??
       destinationToken;
 
-    const source: IdentifierRef = {
-      kind: "identifierRef",
-      name: sourceToken.image,
-      range: rangeFromToken(sourceToken, this.file),
-      ...(sourceToken.image === "this" ? { isThis: true as const } : {}),
-    };
+    const source: IdentifierRef | undefined = sourceToken
+      ? {
+          kind: "identifierRef",
+          name: sourceToken.image,
+          range: rangeFromToken(sourceToken, this.file),
+          ...(sourceToken.image === "this" ? { isThis: true as const } : {}),
+        }
+      : undefined;
     const destination: IdentifierRef = {
       kind: "identifierRef",
       name: destinationToken.image,
@@ -639,10 +651,11 @@ class StructurizrCstToAst extends BaseVisitor {
           range: rangeFromToken(assigned, this.file),
         }
       : undefined;
+    const startToken = assigned ?? sourceToken ?? arrowToken!;
     return {
       kind: "relationship",
       assignedIdentifier: assignedAst,
-      arrow: arrowToken.image as "->" | "-/>",
+      arrow: (arrowToken?.image ?? "->") as "->" | "-/>",
       source,
       destination,
       headerDescription: ctx.description
@@ -653,7 +666,7 @@ class StructurizrCstToAst extends BaseVisitor {
         : undefined,
       headerTags: ctx.tags ? this.stringFromToken(ctx.tags[0]) : undefined,
       body: [],
-      range: rangeFromTokens(assigned ?? sourceToken, lastToken, this.file),
+      range: rangeFromTokens(startToken, lastToken, this.file),
     };
   }
 
@@ -733,9 +746,11 @@ interface BodyStatementCtx {
 
 interface RelationshipCtx {
   readonly assignedIdentifier?: readonly [IToken];
-  readonly source: readonly [IToken];
+  readonly source?: readonly [IToken];
   readonly destination: readonly [IToken];
-  readonly Relationship: readonly [IToken];
+  readonly arrow?: readonly IToken[];
+  readonly Relationship?: readonly IToken[];
+  readonly NoRelationship?: readonly IToken[];
   readonly description?: readonly [IToken];
   readonly technology?: readonly [IToken];
   readonly tags?: readonly [IToken];

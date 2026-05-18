@@ -51,6 +51,7 @@ import {
   Identifier,
   LBrace,
   Model,
+  NoRelationship,
   Person,
   Perspectives,
   Properties,
@@ -61,6 +62,7 @@ import {
   Tag,
   Tags,
   Technology,
+  This,
   Url,
   Workspace,
 } from "./tokens";
@@ -299,19 +301,61 @@ class StructurizrParser extends CstParser {
     },
   );
 
-  // ── <id> -> <id> [description] [technology] [tags] ─────────────────
+  // ── Relationships ──────────────────────────────────────────────────
+  //
+  // Three forms accepted:
+  //   1. Explicit:        [id =] source -> destination [desc] [tech] [tags]
+  //   2. Implicit-source:           -> destination [desc] [tech] [tags]
+  //   3. No-relationship: source -/> destination (deployment-only marker)
+  //
+  // Form #2 only makes sense inside an element body where the enclosing
+  // element supplies the source; the grammar permits it at model scope
+  // too, toModel surfaces an error there. Form #3 is parsed for grammar
+  // completeness; the deployment subsystem will surface info-issues.
 
   private relationship = this.RULE("relationship", () => {
-    this.OPTION1(() => {
-      this.CONSUME(Identifier, { LABEL: "assignedIdentifier" });
-      this.CONSUME(Equals);
-    });
-    this.CONSUME1(Identifier, { LABEL: "source" });
-    this.CONSUME(Relationship);
-    this.CONSUME2(Identifier, { LABEL: "destination" });
-    this.OPTION2(() => this.CONSUME1(StringLiteral, { LABEL: "description" }));
-    this.OPTION3(() => this.CONSUME2(StringLiteral, { LABEL: "technology" }));
-    this.OPTION4(() => this.CONSUME3(StringLiteral, { LABEL: "tags" }));
+    this.OR([
+      {
+        ALT: () => {
+          this.OPTION1(() => {
+            this.CONSUME(Identifier, { LABEL: "assignedIdentifier" });
+            this.CONSUME(Equals);
+          });
+          this.OR2([
+            { ALT: () => this.CONSUME1(Identifier, { LABEL: "source" }) },
+            { ALT: () => this.CONSUME(This, { LABEL: "source" }) },
+          ]);
+          this.OR1([
+            { ALT: () => this.CONSUME(Relationship, { LABEL: "arrow" }) },
+            { ALT: () => this.CONSUME(NoRelationship, { LABEL: "arrow" }) },
+          ]);
+          this.CONSUME2(Identifier, { LABEL: "destination" });
+          this.OPTION2(() =>
+            this.CONSUME1(StringLiteral, { LABEL: "description" }),
+          );
+          this.OPTION3(() =>
+            this.CONSUME2(StringLiteral, { LABEL: "technology" }),
+          );
+          this.OPTION4(() => this.CONSUME3(StringLiteral, { LABEL: "tags" }));
+        },
+      },
+      {
+        ALT: () => {
+          this.OR3([
+            { ALT: () => this.CONSUME1(Relationship, { LABEL: "arrow" }) },
+            { ALT: () => this.CONSUME1(NoRelationship, { LABEL: "arrow" }) },
+          ]);
+          this.CONSUME3(Identifier, { LABEL: "destination" });
+          this.OPTION5(() =>
+            this.CONSUME4(StringLiteral, { LABEL: "description" }),
+          );
+          this.OPTION6(() =>
+            this.CONSUME5(StringLiteral, { LABEL: "technology" }),
+          );
+          this.OPTION7(() => this.CONSUME6(StringLiteral, { LABEL: "tags" }));
+        },
+      },
+    ]);
   });
 }
 
