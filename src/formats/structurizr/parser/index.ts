@@ -62,13 +62,20 @@ export const parseSource = (
   text: string,
   filePath: string,
 ): ChevrotainParseResult => {
-  // Pre-lexer pass: collapse backslash-newline continuations into a
-  // single logical line, mirroring the reference parser's line
+  // Pre-lexer pass A: collapse backslash-newline continuations into
+  // a single logical line, mirroring the reference parser's line
   // preprocessing (`StructurizrDslParser.preProcessLines`). Without
   // this, fixtures like multi-line.dsl that wrap a long
   // `softwareSystem` declaration across several lines fail to parse.
   const joined = joinContinuationLines(text);
-  const lex = StructurizrLexer.tokenize(joined);
+  // Pre-lexer pass B: expand `${NAME}` substitutions sourced from
+  // `!const NAME "VALUE"` / `!var NAME "VALUE"` declarations.
+  // Reference parser does this on every token (`StructurizrDslParser:
+  // 1385-1414`, STRING_SUBSTITUTION_PATTERN). We hoist it to the
+  // pre-lex stage so token positions stay coherent and downstream
+  // grammar doesn't need to think about it.
+  const substituted = expandSubstitutions(joined);
+  const lex = StructurizrLexer.tokenize(substituted);
 
   // Pre-parse passes in order:
   //   1. Strip opaque workspace blocks (views/styles/…) so their inner
@@ -144,6 +151,48 @@ export const parseSource = (
  * are by convention logically one line, and reference parser
  * diagnostics behave the same way.
  */
+/**
+ * Walk the source one logical line at a time, collecting
+ * `!const NAME "VALUE"` and `!var NAME "VALUE"` declarations into a
+ * substitution table. Every `${NAME}` occurrence — in subsequent
+ * lines AND inside text-block bodies (`"""..."""`) — is replaced with
+ * the table value. Reference parser uses
+ * `STRING_SUBSTITUTION_PATTERN = /\$\{([a-zA-Z0-9-_.]+)\}/g` and
+ * iterates to a fixed point so a const can reference another const.
+ *
+ * Unknown `${NAME}` references are left verbatim — the reference
+ * parser does the same (it stops substituting when no match is
+ * found, leaving the token for the parser to error on).
+ */
+const expandSubstitutions = (text: string): string => {
+  const pattern = /\$\{([a-zA-Z0-9_.-]+)\}/g;
+  // Scan declarations first. Permit both `"value"` (StringLiteral)
+  // and `"""value"""` (TextBlock) on the right-hand side; the
+  // declaration line itself is left in source so the grammar can
+  // still see `!const`/`!var` directives at parse time.
+  const constVar =
+    /!(?:const|var)\s+([a-zA-Z0-9_.-]+)\s+(?:"""([\s\S]*?)"""|"((?:[^"\\]|\\.)*)")/g;
+  const table = new Map<string, string>();
+  let match: RegExpExecArray | null;
+  while ((match = constVar.exec(text)) !== null) {
+    const name = match[1];
+    const value = match[2] ?? match[3] ?? "";
+    table.set(name, value);
+  }
+  // Iterate to a fixed point so chained references resolve
+  // (`!const A "${B}"; !const B "X"` → "X"). Bound the loop to 16
+  // passes to avoid runaway expansion on cyclic references.
+  let current = text;
+  for (let i = 0; i < 16; i++) {
+    const next = current.replaceAll(pattern, (raw, name: string) =>
+      table.has(name) ? table.get(name)! : raw,
+    );
+    if (next === current) break;
+    current = next;
+  }
+  return current;
+};
+
 const joinContinuationLines = (text: string): string =>
   text.replaceAll(/\\\r?\n[ \t]*/g, " ");
 
