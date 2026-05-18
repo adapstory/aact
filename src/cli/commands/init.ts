@@ -87,6 +87,12 @@ const config: AactConfig = {
   //   kubernetes: { path: "./fixtures/kubernetes" },
   //   boundaryLabel: "Our system",
   // },
+
+  // Default output mode. CLI \`--json\` always overrides per-invocation.
+  // Set to "json" for CI / agent pipelines that always want the envelope.
+  // output: {
+  //   mode: "json",
+  // },
 };
 
 export default config;
