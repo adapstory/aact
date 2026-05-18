@@ -535,6 +535,19 @@ const aggregateBody = (
 
         break;
       }
+      case "group": {
+        // `<element> { group "<name>" }` (no `{ }` block on the
+        // group) — reference parser treats this as a property
+        // assignment: `Component.properties.group = "<name>"`
+        // (StructurizrDslParser.java:690-691). The visitor surfaces
+        // the group statement as a GroupNode in the body; when its
+        // `members` array is empty, it's the property-statement form.
+        if (item.members.length === 0) {
+          properties = properties ?? {};
+          properties.group = item.name.value;
+        }
+        break;
+      }
       // No default
     }
   }

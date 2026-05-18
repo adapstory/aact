@@ -71,6 +71,24 @@ describe("Structurizr parser — group → properties.group", () => {
     expect(model.containers["api"]?.properties?.group).toBe("Inner");
   });
 
+  it('`<element> { group "Layer" }` body-form sets properties.group', () => {
+    // Reference: StructurizrDslParser.java:690-691 — a `group` token
+    // inside a component body (no `{ }` block on the group) is a
+    // property statement, not a nested element declaration.
+    const src = `workspace {
+      model {
+        api = container "API" {
+          ctrl = component "Controller" {
+            group "Web Layer"
+          }
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["ctrl"]?.properties?.group).toBe("Web Layer");
+  });
+
   it("preserves other properties alongside group", () => {
     const src = `workspace {
       model {
