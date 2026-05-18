@@ -2,19 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import consola from "consola";
-
 import {
   createInstallPlans,
+  executeSkill,
   installAgentSkill,
 } from "../../src/cli/commands/skill";
-
-vi.mock("consola", () => ({
-  default: {
-    info: vi.fn(),
-    success: vi.fn(),
-  },
-}));
 
 const defaultRepo = "https://github.com/ChS23/aact-architect-skill.git";
 const fixedDate = new Date("2026-05-16T00:00:00.000Z");
@@ -118,7 +110,7 @@ describe("skill install command", () => {
   it("clones the community skill and writes an aact marker", async () => {
     const { calls, runtime } = createRuntime();
 
-    await installAgentSkill({ target: root }, runtime);
+    const result = await executeSkill({ target: root }, runtime);
 
     const skillDir = path.join(root, "aact-architect");
     expect(calls.map((c) => c.args[0])).toEqual(["clone"]);
@@ -143,9 +135,15 @@ describe("skill install command", () => {
       ref: "main",
       installedAt: fixedDate.toISOString(),
     });
-    expect(consola.success).toHaveBeenCalledWith(
-      expect.stringContaining(skillDir),
-    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.data.plans).toHaveLength(1);
+    expect(result.data.plans[0]).toMatchObject({
+      kind: "shared",
+      action: "installed",
+      skillDir,
+    });
+    expect(result.data.dryRun).toBe(false);
   });
 
   it("updates an existing managed skill checkout", async () => {
@@ -193,17 +191,23 @@ describe("skill install command", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("does not run git in dry-run mode", async () => {
+  it("does not run git in dry-run mode and reports planned action", async () => {
     const { calls, runtime } = createRuntime();
 
-    await installAgentSkill({ target: root, "dry-run": true }, runtime);
+    const result = await executeSkill(
+      { target: root, "dry-run": true },
+      runtime,
+    );
 
     expect(calls).toHaveLength(0);
     await expect(
       fs.access(path.join(root, "aact-architect")),
     ).rejects.toThrow();
-    expect(consola.info).toHaveBeenCalledWith(
-      expect.stringContaining("dry run"),
+
+    expect(result.data.dryRun).toBe(true);
+    expect(result.data.plans[0].action).toBe("installed");
+    expect(result.data.plans[0].skillDir).toBe(
+      path.join(root, "aact-architect"),
     );
   });
 });

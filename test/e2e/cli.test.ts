@@ -508,6 +508,36 @@ describe("aact skill", () => {
       fs.access(path.join(targetRoot, "aact-architect")),
     ).rejects.toThrow();
   });
+
+  it("--json emits envelope with plans (dry-run, no fs side-effects)", async () => {
+    const targetRoot = path.join(workDir, "skills");
+    const result = await runCli([
+      "skill",
+      "--dry-run",
+      "--target",
+      targetRoot,
+      "--json",
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe("skill install");
+
+    const data = envelope.data as Record<string, unknown>;
+    expect(data.dryRun).toBe(true);
+    expect(data.skill).toBe("aact-architect");
+    expect(data.repo).toMatch(/^https?:\/\//);
+
+    const plans = data.plans as Array<Record<string, unknown>>;
+    expect(plans).toHaveLength(1);
+    expect(plans[0].action).toBe("installed");
+    expect(plans[0].kind).toBe("shared");
+
+    await expect(
+      fs.access(path.join(targetRoot, "aact-architect")),
+    ).rejects.toThrow();
+  });
 });
 
 describe("aact --help / --version", () => {

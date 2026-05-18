@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 
 import type { MockedFunction } from "vitest";
 
+import type { GenerateData } from "../../src/cli/commands/generate";
 import {
   executeGenerate,
   renderGenerateText,
@@ -258,8 +259,8 @@ describe("renderGenerateText", () => {
     };
   };
 
-  const sampleEnvelope = (data: Parameters<typeof buildEnvelope>[0]["data"]) =>
-    buildEnvelope({
+  const sampleEnvelope = (data: GenerateData) =>
+    buildEnvelope<GenerateData>({
       command: "generate",
       exitCode: 0,
       data,

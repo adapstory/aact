@@ -4,10 +4,14 @@ import os from "node:os";
 
 import type { ArgsDef } from "citty";
 import { defineCommand } from "citty";
-import consola from "consola";
 import path from "pathe";
 
 import { version } from "../../../package.json";
+import type { Renderer } from "../output";
+import { ToolError } from "../output";
+import type { ExecuteResult } from "../run";
+import { cliCommand } from "../run";
+import { jsonArg } from "../sharedArgs";
 
 const skillName = "aact-architect";
 const markerFileName = ".aact-skill.json";
@@ -58,6 +62,31 @@ export interface InstallPlan {
   readonly rootDir: string;
   readonly skillDir: string;
 }
+
+// -----------------------------------------------------------------------------
+// Public data shape (envelope.data for `aact skill`)
+// -----------------------------------------------------------------------------
+
+export type SkillAction = "installed" | "updated" | "reinstalled";
+
+export interface SkillPlanResult {
+  readonly kind: TargetKind;
+  readonly label: string;
+  readonly skillDir: string;
+  readonly action: SkillAction;
+}
+
+export interface SkillData {
+  readonly skill: string;
+  readonly repo: string;
+  readonly ref: string;
+  readonly dryRun: boolean;
+  readonly plans: readonly SkillPlanResult[];
+}
+
+// -----------------------------------------------------------------------------
+// Git runner injection (preserved for tests)
+// -----------------------------------------------------------------------------
 
 interface GitOptions {
   readonly cwd?: string;
@@ -113,6 +142,10 @@ const defaultRuntime: InstallRuntime = {
   now: () => new Date(),
 };
 
+// -----------------------------------------------------------------------------
+// Plan resolution (unchanged from prior behaviour)
+// -----------------------------------------------------------------------------
+
 const isClientValue = (value: string): value is ClientValue =>
   clientValues.includes(value as ClientValue);
 
@@ -147,8 +180,10 @@ const selectedKinds = (args: SkillInstallArgs): TargetKind[] => {
 
   if (args.client) {
     if (!isClientValue(args.client)) {
-      throw new Error(
+      throw new ToolError(
+        "config.invalidSchema",
         `Unknown skill client "${args.client}". Expected one of: ${clientValues.join(", ")}.`,
+        { client: args.client },
       );
     }
     for (const kind of normalizeKind(args.client)) out.add(kind);
@@ -167,7 +202,8 @@ const selectedKinds = (args: SkillInstallArgs): TargetKind[] => {
 export const createInstallPlans = (args: SkillInstallArgs): InstallPlan[] => {
   const kinds = selectedKinds(args);
   if (args.target && kinds.length > 1) {
-    throw new Error(
+    throw new ToolError(
+      "config.missingOutputPath",
       "--target can be used with a single client target only. Remove --all or install clients one by one.",
     );
   }
@@ -182,6 +218,10 @@ export const createInstallPlans = (args: SkillInstallArgs): InstallPlan[] => {
     };
   });
 };
+
+// -----------------------------------------------------------------------------
+// Filesystem + git plumbing
+// -----------------------------------------------------------------------------
 
 const pathExists = async (target: string): Promise<boolean> => {
   try {
@@ -232,8 +272,10 @@ const writeMarker = async (
 const ensureSkillFile = async (skillDir: string): Promise<void> => {
   const skillFile = path.join(skillDir, "SKILL.md");
   if (!(await pathExists(skillFile))) {
-    throw new Error(
+    throw new ToolError(
+      "skill.unmanagedDir",
       `Installed repository does not contain ${skillName}/SKILL.md at ${skillFile}.`,
+      { skillDir },
     );
   }
 };
@@ -265,18 +307,28 @@ const updateSkill = async (
 ): Promise<void> => {
   const marker = await readMarker(plan.skillDir);
   if (!marker) {
-    throw new Error(
+    throw new ToolError(
+      "skill.unmanagedDir",
       `${plan.skillDir} already exists and is not managed by aact. Use --force to overwrite it.`,
+      { skillDir: plan.skillDir },
     );
   }
   if (marker.repo !== repo) {
-    throw new Error(
+    throw new ToolError(
+      "skill.repoMismatch",
       `${plan.skillDir} is managed by aact but was installed from ${marker.repo}. Use --force to reinstall from ${repo}.`,
+      {
+        skillDir: plan.skillDir,
+        existingRepo: marker.repo,
+        requestedRepo: repo,
+      },
     );
   }
   if (!(await pathExists(path.join(plan.skillDir, ".git")))) {
-    throw new Error(
+    throw new ToolError(
+      "skill.unmanagedDir",
       `${plan.skillDir} is managed by aact but is not a git checkout. Use --force to reinstall it.`,
+      { skillDir: plan.skillDir },
     );
   }
 
@@ -289,23 +341,33 @@ const updateSkill = async (
   await ensureSkillFile(plan.skillDir);
 };
 
-const installOne = async (
+// -----------------------------------------------------------------------------
+// Per-plan execution
+// -----------------------------------------------------------------------------
+
+interface PlanExecution {
+  readonly action: SkillAction;
+}
+
+const installOnePlan = async (
   plan: InstallPlan,
   args: SkillInstallArgs,
   runtime: InstallRuntime,
-): Promise<void> => {
+): Promise<PlanExecution> => {
   const repo = args.repo ?? defaultRepo;
   const ref = args.ref ?? defaultRef;
   const dryRun = args["dry-run"] ?? false;
   const force = args.force ?? false;
   const exists = await pathExists(plan.skillDir);
-  const action = exists ? "update" : "install";
+
+  // Decide which action this plan will (or would) perform.
+  let action: SkillAction;
+  if (!exists) action = "installed";
+  else if (force) action = "reinstalled";
+  else action = "updated";
 
   if (dryRun) {
-    consola.info(
-      `[dry run] ${force && exists ? "reinstall" : action} ${skillName} for ${plan.label}: ${plan.skillDir}`,
-    );
-    return;
+    return { action };
   }
 
   if (exists && force) {
@@ -315,30 +377,91 @@ const installOne = async (
   if (exists && !force) {
     await updateSkill(plan, repo, ref, runtime);
     await writeMarker(plan, repo, ref, runtime);
-    consola.success(`Updated ${skillName} for ${plan.label}: ${plan.skillDir}`);
-    return;
+    return { action: "updated" };
   }
 
   await cloneSkill(plan, repo, ref, runtime);
   await writeMarker(plan, repo, ref, runtime);
-  consola.success(`Installed ${skillName} for ${plan.label}: ${plan.skillDir}`);
+  return { action: exists && force ? "reinstalled" : "installed" };
 };
 
+// -----------------------------------------------------------------------------
+// Pure executor
+// -----------------------------------------------------------------------------
+
+export const executeSkill = async (
+  args: SkillInstallArgs,
+  runtime: InstallRuntime = defaultRuntime,
+): Promise<ExecuteResult<SkillData>> => {
+  const repo = args.repo ?? defaultRepo;
+  const ref = args.ref ?? defaultRef;
+  const dryRun = args["dry-run"] ?? false;
+  const plans = createInstallPlans(args);
+
+  const results: SkillPlanResult[] = [];
+  for (const plan of plans) {
+    const exec = await installOnePlan(plan, args, runtime);
+    results.push({
+      kind: plan.kind,
+      label: plan.label,
+      skillDir: plan.skillDir,
+      action: exec.action,
+    });
+  }
+
+  return {
+    data: {
+      skill: skillName,
+      repo,
+      ref,
+      dryRun,
+      plans: results,
+    },
+    exitCode: 0,
+  };
+};
+
+// Backward-compatible export (kept for any external test that imported it).
 export const installAgentSkill = async (
   args: SkillInstallArgs,
   runtime: InstallRuntime = defaultRuntime,
 ): Promise<void> => {
-  const repo = args.repo ?? defaultRepo;
-  const ref = args.ref ?? defaultRef;
-  const plans = createInstallPlans(args);
+  await executeSkill(args, runtime);
+};
 
-  consola.info(`Installing community ${skillName} skill from ${repo} (${ref})`);
-  for (const plan of plans) {
-    await installOne(plan, args, runtime);
+// -----------------------------------------------------------------------------
+// Text rendering — mirrors current consola.info / consola.success messages
+// -----------------------------------------------------------------------------
+
+export const renderSkillText: Renderer<SkillData> = (envelope, sink) => {
+  const { data } = envelope;
+  sink.write(
+    `Installing community ${data.skill} skill from ${data.repo} (${data.ref})\n`,
+  );
+  for (const plan of data.plans) {
+    if (data.dryRun) {
+      sink.write(
+        `ℹ [dry run] ${plan.action} ${data.skill} for ${plan.label}: ${plan.skillDir}\n`,
+      );
+    } else {
+      const verbs: Record<SkillAction, string> = {
+        installed: "Installed",
+        updated: "Updated",
+        reinstalled: "Reinstalled",
+      };
+      sink.write(
+        `✔ ${verbs[plan.action]} ${data.skill} for ${plan.label}: ${plan.skillDir}\n`,
+      );
+    }
   }
 };
 
+// -----------------------------------------------------------------------------
+// Command definition
+// -----------------------------------------------------------------------------
+
 const installArgs = {
+  ...jsonArg,
   client: {
     type: "enum",
     description:
@@ -394,14 +517,14 @@ const installArgs = {
   },
 } satisfies ArgsDef;
 
-const install = defineCommand({
+const install = cliCommand({
+  name: "skill install",
   meta: {
     description: "Install the community aact-architect skill for AI agents",
   },
   args: installArgs,
-  async run({ args }) {
-    await installAgentSkill(args);
-  },
+  renderText: renderSkillText,
+  execute: (ctx) => executeSkill(ctx.args as SkillInstallArgs),
 });
 
 export const skill = defineCommand({
