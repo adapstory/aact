@@ -12,6 +12,8 @@
 
 import type { LoadResult } from "../../types";
 import { parseStructurizrDsl } from "./parser";
+import type { HardRemovedError, OpaqueBlock } from "./preParse";
+import { findHardRemovedTokens, stripOpaqueBlocks } from "./preParse";
 import { StructurizrLexer } from "./tokens";
 import { toModel } from "./toModel";
 import { buildAst } from "./visitor";
@@ -23,8 +25,13 @@ export interface ChevrotainParseError {
 }
 
 export interface ChevrotainParseResult extends LoadResult {
-  /** Lexer + parser errors. Empty on a clean parse. */
+  /** Lexer + parser errors plus hard-removed-construct rejections.
+   *  Empty on a clean parse. */
   readonly parseErrors: readonly ChevrotainParseError[];
+  /** Opaque workspace blocks (views/styles/configuration/branding/
+   *  terminology/themes) that were skipped during parsing. They are
+   *  preserved here so a future writer can reinsert them verbatim. */
+  readonly opaqueBlocks: readonly OpaqueBlock[];
 }
 
 /**
@@ -41,15 +48,29 @@ export const parseSource = (
   filePath: string,
 ): ChevrotainParseResult => {
   const lex = StructurizrLexer.tokenize(text);
-  const { cst, errors: parserErrors } = parseStructurizrDsl(lex.tokens);
+
+  // Pre-parse passes: strip opaque blocks first so a `views { … }`
+  // chunk doesn't trip on a hard-removed keyword inside it, then
+  // surface hard-removed constructs as dedicated errors.
+  const stripped = stripOpaqueBlocks(lex.tokens, filePath);
+  const hardRemoved = findHardRemovedTokens(stripped.tokens, filePath);
+
+  const { cst, errors: parserErrors } = parseStructurizrDsl(hardRemoved.tokens);
 
   const parseErrors: ChevrotainParseError[] = [];
   for (const err of lex.errors) {
+    // Lex errors inside an opaque block (e.g. `*` in `include *` inside
+    // `views { ... }`) are noise — the block is dropped before parsing,
+    // so we drop the diagnostic too.
+    if (isInsideOpaqueBlock(err, stripped.blocks)) continue;
     parseErrors.push({
       message: err.message,
       line: err.line ?? undefined,
       column: err.column ?? undefined,
     });
+  }
+  for (const e of hardRemoved.errors) {
+    parseErrors.push(hardRemovedToParseError(e));
   }
   for (const err of parserErrors as readonly {
     message?: string;
@@ -69,7 +90,34 @@ export const parseSource = (
     model: loadResult.model,
     issues: loadResult.issues,
     parseErrors,
+    opaqueBlocks: stripped.blocks,
   };
+};
+
+const hardRemovedToParseError = (
+  e: HardRemovedError,
+): ChevrotainParseError => ({
+  message: `\`${e.construct}\` is no longer supported. ${e.hint}`,
+  line: e.range.start.line,
+  column: e.range.start.col,
+});
+
+const isInsideOpaqueBlock = (
+  err: { offset?: number; line?: number | null },
+  blocks: readonly OpaqueBlock[],
+): boolean => {
+  if (typeof err.offset === "number") {
+    return blocks.some(
+      (b) =>
+        err.offset! >= b.range.start.offset && err.offset! < b.range.end.offset,
+    );
+  }
+  if (typeof err.line === "number") {
+    return blocks.some(
+      (b) => err.line! >= b.range.start.line && err.line! <= b.range.end.line,
+    );
+  }
+  return false;
 };
 
 // Re-exports for callers that want the lower-level pieces.
