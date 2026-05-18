@@ -1,11 +1,11 @@
-import type {UMLElement} from "plantuml-parser";
+import type { UMLElement } from "plantuml-parser";
 import {
   Comment,
   Relationship,
   Stdlib_C4_Boundary,
   Stdlib_C4_Container_Component,
   Stdlib_C4_Context,
-  Stdlib_C4_Dynamic_Rel
+  Stdlib_C4_Dynamic_Rel,
 } from "plantuml-parser";
 
 // C4 macro names мы знаем из _shared/c4Mapping — но фильтр работает на raw
@@ -40,7 +40,6 @@ const BOUNDARY_NAMES: ReadonlySet<string> = new Set([
   "Boundary",
   "System_Boundary",
   "Container_Boundary",
-  "Component_Boundary",
   "Enterprise_Boundary",
 ]);
 

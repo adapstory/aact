@@ -25,15 +25,11 @@ import { filterElements } from "./lib/filterElements";
 // works around. It is a self-contained unit — when the chevrotain parser
 // lands in v3.x, this whole block is deleted in one commit.
 //
-// Gaps closed here:
-//   1. Named-arg syntax (`$tags=`, `$link=`, `$sprite=`, `$index=`) — the
-//      parser drops the entire element when it sees a named arg. We repack
-//      named args into positional slots with a unique marker prefix; the
-//      loader then extracts them from whichever slot they landed in.
-//   2. `Component_Boundary` — the parser's grammar lacks this token entirely
-//      and throws SyntaxError on valid C4-PlantUML. We rewrite it to
-//      `Container_Boundary` (accepted) and track the aliases so the loader
-//      restores kind="Component".
+// Gap closed here:
+//   Named-arg syntax (`$tags=`, `$link=`, `$sprite=`, `$index=`) — the
+//   parser drops the entire element when it sees a named arg. We repack
+//   named args into positional slots with a unique marker prefix; the
+//   loader then extracts them from whichever slot they landed in.
 //
 // Old hack (just strip `$tags=`, leave bare value) broke on real sprites:
 // `Container(svc, "L", "Java", "D", "java-logo")` gave sprite="java-logo"
@@ -44,7 +40,7 @@ const LINK_MARKER = "__aact_link__:";
 const SPRITE_MARKER = "__aact_sprite__:";
 const INDEX_MARKER = "__aact_index__:";
 
-const preTransformNamedArgs = (raw: string): string =>
+const preTransform = (raw: string): string =>
   raw
     .replaceAll(/, \$tags="(.+?)"/g, `, "${TAGS_MARKER}$1"`)
     .replaceAll(/, \$link="(.+?)"/g, `, "${LINK_MARKER}$1"`)
@@ -57,33 +53,6 @@ const preTransformNamedArgs = (raw: string): string =>
         `, "${INDEX_MARKER}${quoted ?? bare ?? ""}"`,
     )
     .replaceAll('""', '" "');
-
-/**
- * `Component_Boundary` is absent from plantuml-parser 0.4's grammar — it
- * throws SyntaxError. Rewrite to `Container_Boundary` (which the parser
- * accepts) and capture the rewritten aliases so `buildBoundary` can restore
- * `kind: "Component"`. Aliases not captured (exotic identifier characters)
- * degrade gracefully to `kind: "Container"` — no crash either way.
- */
-const COMPONENT_BOUNDARY_ALIAS_RE =
-  /\bComponent_Boundary\(\s*([A-Za-z0-9_.]+)/g;
-
-interface PreTransformResult {
-  readonly source: string;
-  readonly componentBoundaryAliases: ReadonlySet<string>;
-}
-
-const preTransform = (raw: string): PreTransformResult => {
-  const componentBoundaryAliases = new Set<string>();
-  for (const match of raw.matchAll(COMPONENT_BOUNDARY_ALIAS_RE)) {
-    componentBoundaryAliases.add(match[1]);
-  }
-  const source = preTransformNamedArgs(raw).replaceAll(
-    /\bComponent_Boundary\(/g,
-    "Container_Boundary(",
-  );
-  return { source, componentBoundaryAliases };
-};
 
 const stripMarker = (
   value: string | undefined,
@@ -230,24 +199,16 @@ const buildBoundary = (
   el: Stdlib_C4_Boundary,
   childContainers: readonly string[],
   childBoundaries: readonly string[],
-  componentBoundaryAliases: ReadonlySet<string>,
 ): Boundary => {
   // Same marker-strip как в buildContainer/buildRelation: $tags=/$link=
   // могут приземлиться в любой positional slot (parser имеет tags+link).
   const taggedValue = extractMarked(TAGS_MARKER, el.tags, el.link);
   const linkValue = extractMarked(LINK_MARKER, el.tags, el.link);
 
-  // `Component_Boundary` was rewritten to `Container_Boundary` in the
-  // pre-transform (parser grammar gap). Restore the real kind from the
-  // alias set captured before the rewrite.
-  const kind = componentBoundaryAliases.has(el.alias)
-    ? "Component"
-    : parseBoundaryMacro(el.type_.name);
-
   return {
     name: el.alias,
     label: el.label,
-    kind,
+    kind: parseBoundaryMacro(el.type_.name),
     tags:
       taggedValue === undefined
         ? parseCsvTags(cleanSlot(el.tags, ...ALL_MARKERS))
@@ -329,7 +290,7 @@ const collectChildBoundaryNames = (
 export const load = async (filePath: string): Promise<LoadResult> => {
   const filepath = path.resolve(filePath);
   const raw = await fs.readFile(filepath, "utf8");
-  const { source: transformed, componentBoundaryAliases } = preTransform(raw);
+  const transformed = preTransform(raw);
   const [{ elements: rawElements }] = parsePuml(transformed);
   const elements = filterElements(rawElements);
 
@@ -354,12 +315,7 @@ export const load = async (filePath: string): Promise<LoadResult> => {
   const boundaries = boundaryElements.map((b) => {
     const { containers, boundaries: childBoundaries } =
       collectBoundaryChildren(b);
-    return buildBoundary(
-      b,
-      containers,
-      childBoundaries,
-      componentBoundaryAliases,
-    );
+    return buildBoundary(b, containers, childBoundaries);
   });
   const rootBoundaryNames = boundaries
     .map((b) => b.name)

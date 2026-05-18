@@ -49,12 +49,15 @@ const C4_KIND_MAP: Readonly<Record<string, C4Kind>> = Object.freeze({
 export const parseC4MacroKind = (macroName: string): C4Kind | undefined =>
   C4_KIND_MAP[macroName];
 
+// Component_Boundary intentionally omitted — it is NOT in the C4-PlantUML
+// stdlib (no macro definition; the README's "system or component boundary"
+// language refers to Container_Boundary as the way to group components).
+// c4model.com has no concept of a component boundary either.
 const BOUNDARY_KIND_MAP: Readonly<Record<string, BoundaryKind>> = Object.freeze(
   {
     Boundary: "System", // generic — sensible default
     System_Boundary: "System",
     Container_Boundary: "Container",
-    Component_Boundary: "Component",
     Enterprise_Boundary: "Enterprise",
   },
 );
@@ -84,6 +87,9 @@ export const c4MacroName = (kind: ContainerKind, external: boolean): string => {
 export const boundaryMacroName = (kind: BoundaryKind): string => {
   if (kind === "System") return "System_Boundary";
   if (kind === "Container") return "Container_Boundary";
-  if (kind === "Component") return "Component_Boundary";
+  // "Component" kind has no PlantUML boundary macro (no Component_Boundary
+  // in stdlib). Fall back to Container_Boundary — the canonical way the
+  // C4-PlantUML stdlib groups components.
+  if (kind === "Component") return "Container_Boundary";
   return "Enterprise_Boundary";
 };

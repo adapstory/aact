@@ -396,10 +396,12 @@ describe("PlantUML load — unit", () => {
     ["System_Boundary", "System"],
     ["Container_Boundary", "Container"],
     ["Enterprise_Boundary", "Enterprise"],
-    // Component_Boundary is absent from plantuml-parser 0.4's grammar; the
-    // pre-transform rewrites it to Container_Boundary and restores the kind
-    // from the captured alias set. See "Component_Boundary" tests below.
-    ["Component_Boundary", "Component"],
+    // Component_Boundary intentionally absent — it is NOT in the C4-PlantUML
+    // stdlib (verified against the upstream macro definitions and README:
+    // "the available boundary macros are Boundary, Enterprise_Boundary,
+    // System_Boundary, Container_Boundary"). The canonical way to group
+    // components is `Container_Boundary`, not a non-existent
+    // `Component_Boundary`.
   ])(
     "filterElements recognises %s → boundary.kind=%s",
     async (macro, expectedKind) => {
@@ -815,63 +817,18 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
     expect(getContainer(model, "a")?.relations[0]?.order).toBeUndefined();
   });
 
-  it("Component_Boundary does not crash the loader", async () => {
-    // plantuml-parser 0.4's grammar lacks the Component_Boundary token and
-    // throws SyntaxError. The pre-transform rewrites it to Container_Boundary.
-    await expect(
-      loadFromContent(
-        "component-boundary.puml",
-        [
-          "@startuml",
-          "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml",
-          'Component_Boundary(api, "API Layer") {',
-          '  Component(ctrl, "Controller")',
-          '  Component(svc, "Service")',
-          "}",
-          'Rel(ctrl, svc, "calls")',
-          "@enduml",
-        ].join("\n"),
-      ),
-    ).resolves.toBeDefined();
-  });
-
-  it("Component_Boundary loads with kind=Component and its children", async () => {
-    const model = await loadFromContent(
-      "component-boundary-kind.puml",
-      [
-        "@startuml",
-        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml",
-        'Component_Boundary(api, "API Layer") {',
-        '  Component(ctrl, "Controller")',
-        '  Component(svc, "Service")',
-        "}",
-        'Rel(ctrl, svc, "calls")',
-        "@enduml",
-      ].join("\n"),
-    );
-    expect(model.boundaries.api?.kind).toBe("Component");
-    expect(model.boundaries.api?.containerNames).toEqual(["ctrl", "svc"]);
-    expect(getContainer(model, "ctrl")?.relations[0]?.to).toBe("svc");
-  });
-
-  it("Component_Boundary nested inside another boundary", async () => {
+  // Component_Boundary tests removed — it is NOT in the C4-PlantUML stdlib
+  // (verified against upstream macro definitions, README, and c4model.com).
+  // The earlier beta.4 "fix" added rewriting for a token that was never part
+  // of the language. Use `Container_Boundary` to group components, as the
+  // upstream README explicitly directs.
+  it.skip("Component_Boundary nested inside another boundary (removed — not in C4-PlantUML stdlib)", async () => {
+    // Intentionally skipped — placeholder to record the rationale.
     const model = await loadFromContent(
       "component-boundary-nested.puml",
-      [
-        "@startuml",
-        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml",
-        'Container_Boundary(app, "App") {',
-        '  Component_Boundary(api, "API Layer") {',
-        '    Component(ctrl, "Controller")',
-        "  }",
-        "}",
-        "@enduml",
-      ].join("\n"),
+      ["@startuml", "@enduml"].join("\n"),
     );
-    expect(model.boundaries.app?.kind).toBe("Container");
-    expect(model.boundaries.app?.boundaryNames).toContain("api");
-    expect(model.boundaries.api?.kind).toBe("Component");
-    expect(model.boundaries.api?.containerNames).toEqual(["ctrl"]);
+    expect(model).toBeDefined();
   });
 });
 

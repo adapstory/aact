@@ -46,10 +46,16 @@ describe("c4Mapping", () => {
     ["Boundary", "System"],
     ["System_Boundary", "System"],
     ["Container_Boundary", "Container"],
-    ["Component_Boundary", "Component"],
     ["Enterprise_Boundary", "Enterprise"],
+    // Component_Boundary intentionally absent — not in C4-PlantUML stdlib.
   ])("parseBoundaryMacro(%s) → %s", (macro, expected) => {
     expect(parseBoundaryMacro(macro)).toBe(expected);
+  });
+
+  it("parseBoundaryMacro(Component_Boundary) → System (unknown macro, defaults)", () => {
+    // Component_Boundary is not a real C4-PlantUML macro; verify the
+    // default-fallback applies, no synthetic mapping is in place.
+    expect(parseBoundaryMacro("Component_Boundary")).toBe("System");
   });
 
   it("parseBoundaryMacro defaults unknown to System", () => {
@@ -73,7 +79,10 @@ describe("c4Mapping", () => {
   it.each([
     ["System", "System_Boundary"],
     ["Container", "Container_Boundary"],
-    ["Component", "Component_Boundary"],
+    // Component → Container_Boundary because Component_Boundary is not a
+    // real C4-PlantUML macro; Container_Boundary is the canonical way to
+    // group components per the upstream README.
+    ["Component", "Container_Boundary"],
     ["Enterprise", "Enterprise_Boundary"],
   ])("boundaryMacroName(%s) → %s", (kind, expected) => {
     expect(boundaryMacroName(kind as never)).toBe(expected);
