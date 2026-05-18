@@ -28,9 +28,15 @@ import { tokenMatcher } from "chevrotain";
 
 import type { SourceLocation } from "../../../model";
 import {
+  BangAdrs,
+  BangComponents,
   BangConstantHardError,
+  BangDecisions,
+  BangDocs,
   BangExtendHardError,
+  BangPlugin,
   BangRefHardError,
+  BangScript,
   Branding,
   Configuration,
   ContainerInstance,
@@ -91,6 +97,13 @@ const OPAQUE_KEYWORDS = [
   Terminology,
   Themes,
   Theme,
+  // Block-form `!directives`: each opens a `{ ... }` body that the
+  // linter does not interpret. Reference grammar lets these appear at
+  // workspace or model scope; positional args (script language name,
+  // plugin id) sit between the keyword and `{`.
+  BangScript,
+  BangPlugin,
+  BangComponents,
 ];
 
 /**
@@ -249,6 +262,58 @@ export const stripOpaqueBlocks = (
   }
 
   return { tokens: out, blocks };
+};
+
+/**
+ * Inline directive keywords that take 1–2 positional args and NO body:
+ * `!docs <path> [importer]`, `!decisions <path> [importer]`,
+ * `!adrs <path> [importer]`. The linter ignores them entirely — but
+ * we must strip the keyword AND its arguments, otherwise the parser
+ * sees orphan identifiers/strings after the directive and reports
+ * grammar errors. The pass walks the token stream; when it spots an
+ * inline-directive keyword, it skips ahead over up to two trailing
+ * `StringLiteral`/`Identifier`/`TextBlock` tokens.
+ */
+const INLINE_DIRECTIVES = [BangDocs, BangDecisions, BangAdrs];
+
+const isInlineDirective = (token: IToken): boolean =>
+  INLINE_DIRECTIVES.some((k) => tokenMatcher(token, k));
+
+const isInlineDirectiveArg = (token: IToken): boolean => {
+  const name = token.tokenType.name;
+  return (
+    name === "StringLiteral" || name === "TextBlock" || name === "Identifier"
+  );
+};
+
+export const stripInlineDirectives = (tokens: readonly IToken[]): IToken[] => {
+  const out: IToken[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const keywordTok = tokens[i];
+    if (!isInlineDirective(keywordTok)) {
+      out.push(keywordTok);
+      i++;
+      continue;
+    }
+    // Skip the keyword. Then skip up to two positional args, but only
+    // if they sit on the SAME source line as the keyword — newlines
+    // are stripped from the token stream, so we cross-check
+    // `startLine` to avoid eating the next statement.
+    const keywordLine = keywordTok.startLine;
+    i++;
+    let consumedArgs = 0;
+    while (
+      consumedArgs < 2 &&
+      i < tokens.length &&
+      isInlineDirectiveArg(tokens[i]) &&
+      tokens[i].startLine === keywordLine
+    ) {
+      i++;
+      consumedArgs++;
+    }
+  }
+  return out;
 };
 
 /**

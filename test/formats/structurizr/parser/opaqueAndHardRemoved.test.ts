@@ -92,6 +92,69 @@ describe("Structurizr parser — opaque workspace blocks", () => {
   });
 });
 
+describe("Structurizr parser — auxiliary directives (!docs / !script / etc)", () => {
+  it("strips inline `!docs <path>` without errors", () => {
+    const src = `workspace {
+      model {
+        !docs "./docs"
+        api = container "API"
+      }
+    }`;
+    const { parseErrors, model } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.containers["API"]).toBeDefined();
+  });
+
+  it("strips inline `!decisions <path> <importer>` (two args)", () => {
+    const src = `workspace {
+      model {
+        !decisions "./adrs" "com.example.Importer"
+        api = container "API"
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
+  it("strips inline `!adrs <path>`", () => {
+    const src = `workspace {
+      model {
+        !adrs "./adrs"
+        api = container "API"
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
+  it("strips block `!script <lang> { ... }` wholesale", () => {
+    const src = `workspace {
+      model {
+        api = container "API"
+        !script "javascript" {
+          workspace.model.addPerson("Bot")
+        }
+      }
+    }`;
+    const { parseErrors, opaqueBlocks } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(opaqueBlocks.some((b) => b.name.startsWith("!script"))).toBe(true);
+  });
+
+  it("strips block `!plugin <id> { ... }` wholesale", () => {
+    const src = `workspace {
+      model {
+        api = container "API"
+        !plugin "com.foo.Plugin" {
+          key value
+        }
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+});
+
 describe("Structurizr parser — hard-removed constructs", () => {
   it("reports `!ref` with the modern replacement hint", () => {
     const src = `workspace {

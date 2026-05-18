@@ -20,6 +20,7 @@ import type {
 import {
   findHardRemovedTokens,
   stripDeploymentBlocks,
+  stripInlineDirectives,
   stripOpaqueBlocks,
 } from "./preParse";
 import { StructurizrLexer } from "./tokens";
@@ -76,7 +77,12 @@ export const parseSource = (
   //      explicit errors with replacement hints.
   const stripped = stripOpaqueBlocks(lex.tokens, filePath);
   const deployment = stripDeploymentBlocks(stripped.tokens, filePath);
-  const hardRemoved = findHardRemovedTokens(deployment.tokens, filePath);
+  // Strip inline `!docs` / `!decisions` / `!adrs` directives — they
+  // take 1–2 positional path/importer args and no body. Run AFTER
+  // hard-removed pre-parse so a stray `!constant` near them still
+  // surfaces with its full diagnostic.
+  const inlineStripped = stripInlineDirectives(deployment.tokens);
+  const hardRemoved = findHardRemovedTokens(inlineStripped, filePath);
 
   const { cst, errors: parserErrors } = parseStructurizrDsl(hardRemoved.tokens);
 
