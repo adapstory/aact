@@ -21,8 +21,10 @@ References used while authoring:
 
 ## Scope policy
 
-Three categories. See `docs/v3-parser-phase-0-inventory.md` for the
-reasoning.
+Six categories — three primary (in-scope / opaque / parsed-then-info-issue)
+plus three boundary cases (hard parse error / tokenize-ignore / in-scope
+minimal). See `docs/v3-parser-phase-0-inventory.md` for the reasoning
+behind the primary three.
 
 | Category                                         | Goes to                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Examples                                                                                                                                                                                                                                                                   |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -40,20 +42,20 @@ handled at lex time.
 
 ### Lexical primitives
 
-| Construct           | Form                                     | Notes                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| UTF-8 BOM           | leading `﻿`                              | Stripped before lexing, on the first line of the source file and on every included file. Failing to strip corrupts the first token.                                                                                                                                                                                                                    |
-| String literal      | `"..."` (double-quoted)                  | Standard escape sequences. Property/perspective values may also appear unquoted as bare tokens.                                                                                                                                                                                                                                                        |
-| Text block          | `"""\n...\n"""`                          | Reference: `TEXT_BLOCK_MARKER = "\"\"\""`                                                                                                                                                                                                                                                                                                              |
-| String substitution | `${name}`                                | `STRING_SUBSTITUTION_PATTERN = (\$\{[a-zA-Z0-9-_.]+?\})`. Expanded _before_ lexing — handled by a pre-lex pass.                                                                                                                                                                                                                                        |
-| Line continuation   | trailing `\`                             | `MULTI_LINE_SEPARATOR`. Two physical lines join into one logical line.                                                                                                                                                                                                                                                                                 |
-| Identifier          | `\w[a-zA-Z0-9_-]*` (anchored)            | Reference: `IdentifiersRegister.IDENTIFIER_PATTERN`. Allows hyphen `-` after the first char; **forbids** the period `.` inside an identifier. Hierarchical references compose identifiers with `.` as a separator at lookup time, but a single declared identifier never contains `.`. Leading `-` is explicitly rejected by `validateIdentifierName`. |
-| `this` keyword      | `THIS_TOKEN = "this"`                    | Inside an element body, refers to the enclosing element — used as a relationship endpoint (`this -> other "uses"`).                                                                                                                                                                                                                                    |
-| Single-line comment | `// ...`, `# ...`                        | `COMMENT_PATTERN = ^\s*?(//\|#).*$`.                                                                                                                                                                                                                                                                                                                   |
-| Block comment       | `/* ... */`                              | **Line-scoped in the reference**: `/*` must start a line, `*/` must end a line; not inline within a line of tokens. Reference: `MULTI_LINE_COMMENT_START_TOKEN = "/*"` / `MULTI_LINE_COMMENT_END_TOKEN = "*/"`, dispatched at `StructurizrDslParser.java:281-290`.                                                                                     |
-| Assignment          | `<identifier> =` (≥3 tokens on the line) | The reference uses `tokens.get(1).equals(ASSIGNMENT_OPERATOR_TOKEN)` with `tokens.size() >= 3`; identifier name then validated via `IdentifiersRegister.validateIdentifierName`.                                                                                                                                                                       |
-| Block start         | `{` at end of line                       | Opens a new context.                                                                                                                                                                                                                                                                                                                                   |
-| Block end           | `}` on its own line                      | `DslContext.CONTEXT_END_TOKEN = "}"`.                                                                                                                                                                                                                                                                                                                  |
+| Construct           | Form                          | Notes                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| UTF-8 BOM           | leading `﻿`                   | The reference (`StructurizrDslParser.java:249, 302`) strips BOM at the start of any line, in both main source and included files; in practice this fires only on the first line of each file.                                                                                                                                                          |
+| String literal      | `"..."` (double-quoted)       | Standard escape sequences. Property/perspective values may also appear unquoted as bare tokens.                                                                                                                                                                                                                                                        |
+| Text block          | `"""\n...\n"""`               | Reference: `TEXT_BLOCK_MARKER = "\"\"\""`                                                                                                                                                                                                                                                                                                              |
+| String substitution | `${name}`                     | `STRING_SUBSTITUTION_PATTERN = (\$\{[a-zA-Z0-9-_.]+?\})`. Expanded _before_ lexing — handled by a pre-lex pass.                                                                                                                                                                                                                                        |
+| Line continuation   | trailing `\`                  | `MULTI_LINE_SEPARATOR`. Two physical lines join into one logical line.                                                                                                                                                                                                                                                                                 |
+| Identifier          | `\w[a-zA-Z0-9_-]*` (anchored) | Reference: `IdentifiersRegister.IDENTIFIER_PATTERN`. Allows hyphen `-` after the first char; **forbids** the period `.` inside an identifier. Hierarchical references compose identifiers with `.` as a separator at lookup time, but a single declared identifier never contains `.`. Leading `-` is explicitly rejected by `validateIdentifierName`. |
+| `this` keyword      | `THIS_TOKEN = "this"`         | Inside an element body, refers to the enclosing element — used as a relationship endpoint (`this -> other "uses"`).                                                                                                                                                                                                                                    |
+| Single-line comment | `// ...`, `# ...`             | `COMMENT_PATTERN = ^\s*?(//\|#).*$`.                                                                                                                                                                                                                                                                                                                   |
+| Block comment       | `/* ... */`                   | **Line-scoped in the reference**: `/*` must start a line, `*/` must end a line; not inline within a line of tokens. Reference: `MULTI_LINE_COMMENT_START_TOKEN = "/*"` / `MULTI_LINE_COMMENT_END_TOKEN = "*/"`, dispatched at `StructurizrDslParser.java:281-290`.                                                                                     |
+| Assignment          | `<identifier> = <construct…>` | The reference recognises an assignment when `tokens.get(1) == "="` and `tokens.size() >= 3` (identifier + `=` + at least one construct token; the remaining tokens after `=` form the actual element/construct production). Identifier name validated via `IdentifiersRegister.validateIdentifierName`.                                                |
+| Block start         | `{` at end of line            | Opens a new context.                                                                                                                                                                                                                                                                                                                                   |
+| Block end           | `}` on its own line           | `DslContext.CONTEXT_END_TOKEN = "}"`.                                                                                                                                                                                                                                                                                                                  |
 
 ### Workspace and model
 
@@ -90,6 +92,40 @@ child elements.
 `tags` is a single string of comma-separated tag names — split by `,`
 in the reference. Empty string acceptable (no tags).
 
+### Archetypes (in-scope — alias declarations)
+
+```
+archetypes {
+  <aliasIdentifier> = <baseKeyword> {
+    [description "<text>"]
+    [technology "<text>"]   // only if baseKeyword is container/component
+    [tags "<csv>"]
+    [tag "<single>"]
+    [url "<url>"]
+    [properties { ... }]
+    [perspectives { ... }]
+  }
+}
+```
+
+Valid `baseKeyword` values: `group`, `element` (customElement), `person`,
+`softwareSystem`, `container`, `component`, `deploymentNode`,
+`infrastructureNode`, `relationship`.
+
+After an archetype is declared, the `aliasIdentifier` becomes a valid
+keyword wherever its base would be — `archetypes { db = container { ... } }`
+then `db myDb "Orders DB"` is parsed identically to
+`container "Orders DB"` (tagged with `db`, plus any defaults set in the
+archetype body). The reference dispatches this via
+`isElementKeywordOrArchetype(firstToken, BASE_TOKEN)` at
+`StructurizrDslParser.java:1480-1486`.
+
+The aact parser MUST extract the keyword→base-type mapping from any
+`archetypes { ... }` block before parsing the model body. Archetype
+defaults (description/technology/tags etc.) may be applied during
+toModel as initial values for elements declared via the alias — TBD
+based on Phase 2 implementation.
+
 ### Relationships
 
 | GRAMMAR                                                          | Quoted from                          | Notes                                                                                                                                                                                                                                                                                                                                                                     |
@@ -111,21 +147,24 @@ These statements are valid inside element bodies. They are recognised
 at the line level by the reference parser via the context-stack
 dispatch.
 
-| Statement              | Where valid                                                                                                                                                                |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `description "<text>"` | Inside `person` / `softwareSystem` / `container` / `component` body. Overwrites the description set by the element header.                                                 |
-| `technology "<text>"`  | Inside `container` / `component` body only (and inside `deploymentNode` / `infrastructureNode`, but those are out-of-scope). NOT valid inside `person` / `softwareSystem`. |
-| `tags "<csv>"`         | All element bodies. Comma-separated list, appended to header-declared tags.                                                                                                |
-| `tag "<single>"`       | All element bodies. Appends a single tag.                                                                                                                                  |
-| `url "<url>"`          | All element bodies.                                                                                                                                                        |
-| `properties { ... }`   | All element bodies. Block of `<key> <value>` lines — value can be unquoted bare token OR quoted string (only quote when the value contains whitespace).                    |
-| `perspectives { ... }` | All element bodies. Block of `<name> <description> [value]` lines — exactly 2 or 3 tokens per line.                                                                        |
+| Statement                       | Where valid                                                                                                                                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `description "<text>"`          | Inside `person` / `softwareSystem` / `container` / `component` body. Overwrites the description set by the element header.                                                                                                     |
+| `technology "<text>"`           | Inside `container` / `component` body only (and inside `deploymentNode` / `infrastructureNode`, but those are out-of-scope). NOT valid inside `person` / `softwareSystem`.                                                     |
+| `tags "<csv>"`                  | All element bodies. Comma-separated list, appended to header-declared tags.                                                                                                                                                    |
+| `tag "<single>"`                | All element bodies. Appends a single tag.                                                                                                                                                                                      |
+| `url "<url>"`                   | All element bodies.                                                                                                                                                                                                            |
+| `properties { ... }`            | All element bodies. Block of `<key> <value>` lines — value can be unquoted bare token OR quoted string (only quote when the value contains whitespace).                                                                        |
+| `perspectives { ... }`          | All element bodies. Block of `<name> <description> [value]` lines — exactly 2 or 3 tokens per line.                                                                                                                            |
+| `!docs <path> [fqn]`            | Valid inside `softwareSystem` / `container` / `component` bodies (per their `getPermittedTokens()`), in addition to the workspace-scope form covered in §2. Element-scoped docs route to `raw.docs[elementId]` for round-trip. |
+| `!decisions <path> <type\|fqn>` | Same as `!docs` — element-scoped variant alongside the workspace-scope form.                                                                                                                                                   |
 
 Element bodies may also contain nested elements (per the hierarchy):
 
 - `softwareSystem` body may contain `container` and `group`
 - `container` body may contain `component` and `group`
-- `person` and `component` bodies do not have nested elements
+- `component` body may contain `group` (no element children)
+- `person` body has no nested elements
 
 Workspace body (inside `workspace "..." { ... }`) also accepts
 `name "<text>"` and `description "<text>"` overrides — see
@@ -146,18 +185,18 @@ routes them to slots in `LoadResult.raw` so a future Structurizr
 generator can re-emit them verbatim. No rule, analyzer, or generator
 inside aact reads from these.
 
-| Construct     | Form                                                     | Raw destination                   |
-| ------------- | -------------------------------------------------------- | --------------------------------- | --------------- |
-| Views         | `views { ... }`                                          | `raw.views`                       |
-| Styles        | `styles { ... }` (inside `views { ... }` in current DSL) | `raw.styles`                      |
-| Configuration | `configuration { ... }`                                  | `raw.configuration`               |
-| Branding      | `branding { ... }`                                       | `raw.branding`                    |
-| Terminology   | `terminology { ... }`                                    | `raw.terminology`                 |
-| Themes        | `themes ...`                                             | `raw.themes`                      |
-| Docs          | `!docs <path> [fqn]` (`DocsParser.GRAMMAR`)              | `raw.docs`                        |
-| Decisions     | `!decisions <path> <type                                 | fqn>` (`DecisionsParser.GRAMMAR`) | `raw.decisions` |
-| Plugin        | `!plugin <fqn>`                                          | `raw.plugins[]`                   |
-| Script        | `!script <filename>` / `!script <language> { ... }`      | `raw.scripts[]`                   |
+| Construct     | Form                                                                                                                                                                       | Raw destination                   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | --------------- |
+| Views         | `views { ... }`                                                                                                                                                            | `raw.views`                       |
+| Styles        | `styles { ... }` (inside `views { ... }` in current DSL)                                                                                                                   | `raw.styles`                      |
+| Configuration | `configuration { ... }`                                                                                                                                                    | `raw.configuration`               |
+| Branding      | `branding { ... }`                                                                                                                                                         | `raw.branding`                    |
+| Terminology   | `terminology { ... }`                                                                                                                                                      | `raw.terminology`                 |
+| Themes        | `themes ...`                                                                                                                                                               | `raw.themes`                      |
+| Docs          | `!docs <path> <fqn>` (`DocsParser.GRAMMAR`; `<fqn>` is verbatim-mandatory in GRAMMAR but semantically optional at parse time — defaults to `DefaultDocumentationImporter`) | `raw.docs`                        |
+| Decisions     | `!decisions <path> <type                                                                                                                                                   | fqn>` (`DecisionsParser.GRAMMAR`) | `raw.decisions` |
+| Plugin        | `!plugin <fqn>`                                                                                                                                                            | `raw.plugins[]`                   |
+| Script        | `!script <filename>` / `!script <language> { ... }`                                                                                                                        | `raw.scripts[]`                   |
 
 The parser preserves enough byte-range info that re-emit is faithful
 character-for-character.
@@ -177,7 +216,7 @@ in raw.
 | Infrastructure node      | `infrastructureNode <name> [description] [technology] [tags]` (`InfrastructureNodeParser.GRAMMAR`)                                                                                                                    |
 | Software system instance | `softwareSystemInstance <identifier> [deploymentGroups] [tags]` (`SoftwareSystemInstanceParser.GRAMMAR`)                                                                                                              |
 | Container instance       | `containerInstance <identifier> [deploymentGroups] [tags]` (`ContainerInstanceParser.GRAMMAR`)                                                                                                                        |
-| Instance-of (generic)    | `instanceOf <identifier> [deploymentGroups] [tags]` (`ContainerInstanceParser.GRAMMAR`)                                                                                                                               |
+| Instance-of (generic)    | `instanceOf <identifier> [deploymentGroups] [tags]` (`InstanceOfParser.GRAMMAR`)                                                                                                                                      |
 | Health check             | `healthCheck <name> <url> [interval] [timeout]` (`HealthCheckParser.GRAMMAR`) — valid ONLY inside `softwareSystemInstance` / `containerInstance` body; free-standing `healthCheck` is a parse error in the reference. |
 
 ## 4. Tokenize-ignore (no info issue)
