@@ -22,24 +22,9 @@ export interface PlantumlGenerateOptions {
 const isContextKind = (kind: Container["kind"]): boolean =>
   kind === "Person" || kind === "System";
 
-/**
- * Resolve the PUML alias slot for an element. After the v3
- * display-name refactor, `Container.name` is the human-readable label
- * (which may contain spaces and is invalid as a PUML alias). The
- * loader stashes the original alias in `properties["plantuml.alias"]`
- * — we prefer it. For elements that originated outside PUML (e.g. a
- * Structurizr workspace.json or hand-built Model in tests), fall back
- * to a sanitised slug of the name.
- */
-const aliasOf = (el: {
-  name: string;
-  properties?: Readonly<Record<string, string>>;
-}): string =>
-  el.properties?.["plantuml.alias"] ?? el.name.replaceAll(/\W/g, "_");
-
 const renderContainer = (container: Container): string => {
   const macro = c4MacroName(container.kind, container.external);
-  const parts: string[] = [aliasOf(container), `"${container.label}"`];
+  const parts: string[] = [container.name, `"${container.label}"`];
 
   if (isContextKind(container.kind)) {
     // Person/System: alias, label, descr (no techn)
@@ -77,7 +62,7 @@ const renderBoundary = (
     .map((c) => `${inner}${renderContainer(c)}`);
 
   // Boundary signature: Boundary(alias, label, ?type, ?tags, ?link)
-  const parts: string[] = [aliasOf(boundary), `"${boundary.label}"`];
+  const parts: string[] = [boundary.name, `"${boundary.label}"`];
   const named: string[] = [];
   if (boundary.tags.length > 0)
     named.push(`$tags="${boundary.tags.join("+")}"`);
@@ -96,12 +81,11 @@ const renderBoundary = (
  *   Rel(from, to, label, ?techn, ?descr, ?sprite, ?tags, ?link)
  */
 const renderRelation = (
-  fromAlias: string,
+  from: string,
   relation: Container["relations"][number],
-  toAlias: string,
 ): string => {
   const label = relation.description ?? "";
-  const parts: string[] = [fromAlias, toAlias, `"${label}"`];
+  const parts: string[] = [from, relation.to, `"${label}"`];
   if (relation.technology) parts.push(`"${relation.technology}"`);
 
   const named: string[] = [];
@@ -162,14 +146,7 @@ export const generate = (
   );
 
   const relations = Object.values(model.containers).flatMap((container) =>
-    container.relations.map((rel) => {
-      // Resolve `rel.to` (a display name) back to the alias slot for
-      // PUML output. If the target lives in the Model, use its alias;
-      // otherwise sanitise the display name as a fallback.
-      const target = getContainer(model, rel.to);
-      const toAlias = target ? aliasOf(target) : rel.to.replaceAll(/\W/g, "_");
-      return renderRelation(aliasOf(container), rel, toAlias);
-    }),
+    container.relations.map((rel) => renderRelation(container.name, rel)),
   );
 
   const content = [

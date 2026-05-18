@@ -16,12 +16,6 @@ import { makeModel } from "../../helpers/makeModel";
  * generator теряет данные или loader восстанавливает не идентично.
  * v2 имел такие баги (descr в techn slot, sprite-as-tags fallback на real
  * sprites) — round-trip их сразу подсветил бы.
- *
- * В v3 `Container.name` / `Boundary.name` — это display name (то же, что
- * label). PUML alias slot стампится loader'ом в `properties["plantuml.alias"]`
- * (а не как имя). Fixture здесь строится «вручную» без properties — поэтому
- * `normalize` намеренно исключает properties: иначе rebuilt (с alias-stamp)
- * никогда не сравняется с original (без).
  */
 
 let tmpDir: string;
@@ -91,8 +85,8 @@ describe("PlantUML round-trip integrity (F3)", () => {
   it("preserves a flat container model", async () => {
     const original = makeModel({
       containers: [
-        { name: "Orders API", label: "Orders API", technology: "Java" },
-        { name: "Orders DB", label: "Orders DB", kind: "ContainerDb" },
+        { name: "orders_api", label: "Orders API", technology: "Java" },
+        { name: "orders_db", label: "Orders DB", kind: "ContainerDb" },
       ],
     });
     const rebuilt = await roundTrip(original);
@@ -103,7 +97,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
     const original = makeModel({
       containers: [
         {
-          name: "Service",
+          name: "svc",
           label: "Service",
           kind: "Container",
           technology: "Node 22",
@@ -121,10 +115,10 @@ describe("PlantUML round-trip integrity (F3)", () => {
   it("preserves Person and System contexts (no techn slot)", async () => {
     const original = makeModel({
       containers: [
-        { name: "End User", label: "End User", kind: "Person" },
-        { name: "Core System", label: "Core System", kind: "System" },
+        { name: "user", label: "End User", kind: "Person" },
+        { name: "core", label: "Core System", kind: "System" },
         {
-          name: "External API",
+          name: "ext_api",
           label: "External API",
           kind: "System",
           external: true,
@@ -138,12 +132,12 @@ describe("PlantUML round-trip integrity (F3)", () => {
   it("preserves all ContainerKind variants (Db, Queue, Component)", async () => {
     const original = makeModel({
       containers: [
-        { name: "API", label: "API", kind: "Container" },
-        { name: "DB", label: "DB", kind: "ContainerDb" },
-        { name: "Queue", label: "Queue", kind: "ContainerQueue" },
-        { name: "Comp", label: "Comp", kind: "Component" },
-        { name: "Comp DB", label: "Comp DB", kind: "ComponentDb" },
-        { name: "Comp Queue", label: "Comp Queue", kind: "ComponentQueue" },
+        { name: "api", label: "API", kind: "Container" },
+        { name: "db", label: "DB", kind: "ContainerDb" },
+        { name: "queue", label: "Queue", kind: "ContainerQueue" },
+        { name: "comp", label: "Comp", kind: "Component" },
+        { name: "comp_db", label: "Comp DB", kind: "ComponentDb" },
+        { name: "comp_queue", label: "Comp Queue", kind: "ComponentQueue" },
       ],
     });
     const rebuilt = await roundTrip(original);
@@ -153,21 +147,16 @@ describe("PlantUML round-trip integrity (F3)", () => {
   it("preserves external flag across all kinds", async () => {
     const original = makeModel({
       containers: [
+        { name: "ext_p", label: "Ext Person", kind: "Person", external: true },
+        { name: "ext_s", label: "Ext Sys", kind: "System", external: true },
         {
-          name: "Ext Person",
-          label: "Ext Person",
-          kind: "Person",
-          external: true,
-        },
-        { name: "Ext Sys", label: "Ext Sys", kind: "System", external: true },
-        {
-          name: "Ext Container",
+          name: "ext_c",
           label: "Ext Container",
           kind: "Container",
           external: true,
         },
         {
-          name: "Ext ContainerDb",
+          name: "ext_cdb",
           label: "Ext ContainerDb",
           kind: "ContainerDb",
           external: true,
@@ -182,22 +171,21 @@ describe("PlantUML round-trip integrity (F3)", () => {
     const original = makeModel({
       containers: [
         {
-          name: "A",
-          label: "A",
+          name: "a",
           relations: [
-            { to: "B", description: "calls" },
+            { to: "b", description: "calls" },
             {
-              to: "C",
+              to: "c",
               description: "publishes",
               technology: "Kafka",
               tags: ["async", "critical"],
             },
-            { to: "D", link: "https://docs.example.com/d" },
+            { to: "d", link: "https://docs.example.com/d" },
           ],
         },
-        { name: "B", label: "B" },
-        { name: "C", label: "C" },
-        { name: "D", label: "D" },
+        { name: "b" },
+        { name: "c" },
+        { name: "d" },
       ],
     });
     const rebuilt = await roundTrip(original);
@@ -207,25 +195,25 @@ describe("PlantUML round-trip integrity (F3)", () => {
   it("preserves boundary nesting", async () => {
     const original = makeModel({
       containers: [
-        { name: "API", label: "API" },
-        { name: "Worker", label: "Worker" },
-        { name: "Inner Svc", label: "Inner Svc" },
+        { name: "api", label: "API" },
+        { name: "worker", label: "Worker" },
+        { name: "inner_svc", label: "Inner Svc" },
       ],
       boundaries: [
         {
-          name: "Outer",
+          name: "outer",
           label: "Outer",
-          boundaryNames: ["Inner"],
-          containerNames: ["API", "Worker"],
+          boundaryNames: ["inner"],
+          containerNames: ["api", "worker"],
         },
         {
-          name: "Inner",
+          name: "inner",
           label: "Inner",
-          containerNames: ["Inner Svc"],
+          containerNames: ["inner_svc"],
           tags: ["domain"],
         },
       ],
-      rootBoundaryNames: ["Outer"],
+      rootBoundaryNames: ["outer"],
     });
     const rebuilt = await roundTrip(original);
     expect(normalize(rebuilt)).toEqual(normalize(original));
@@ -235,19 +223,14 @@ describe("PlantUML round-trip integrity (F3)", () => {
     const original = makeModel({
       containers: [
         {
-          name: "API",
+          name: "api",
           label: "API",
-          relations: [{ to: "External", description: "uses" }],
+          relations: [{ to: "ext", description: "uses" }],
         },
-        {
-          name: "External",
-          label: "External",
-          kind: "System",
-          external: true,
-        },
+        { name: "ext", label: "External", kind: "System", external: true },
       ],
       boundaries: [
-        { name: "Platform", label: "Platform", containerNames: ["API"] },
+        { name: "platform", label: "Platform", containerNames: ["api"] },
       ],
     });
     const rebuilt = await roundTrip(original);
@@ -256,12 +239,12 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves boundary tags and link", async () => {
     const original = makeModel({
-      containers: [{ name: "Svc", label: "Svc" }],
+      containers: [{ name: "svc" }],
       boundaries: [
         {
-          name: "Context",
+          name: "ctx",
           label: "Context",
-          containerNames: ["Svc"],
+          containerNames: ["svc"],
           tags: ["domain", "core"],
           link: "https://wiki.example.com/ctx",
         },

@@ -49,7 +49,7 @@ describe("Rules on common-reuse.puml", () => {
     const violations = commonReuseRule.check(model);
 
     expect(violations).toHaveLength(1);
-    expect(violations[0].container).toBe("Inventory");
-    expect(violations[0].message).toContain("Orders Events");
+    expect(violations[0].container).toBe("inventory");
+    expect(violations[0].message).toContain("orders_events");
   });
 });
