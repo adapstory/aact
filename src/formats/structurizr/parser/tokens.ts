@@ -84,18 +84,20 @@ export const Comma = createToken({ name: "Comma", pattern: /,/ });
 
 /**
  * Identifier per `IdentifiersRegister.IDENTIFIER_PATTERN`:
- * `\w[a-zA-Z0-9_-]*`. The reference forbids period inside a single
- * identifier — period is the hierarchical-reference separator at
- * lookup time.
+ * `\w[a-zA-Z0-9_-]*`. The reference forbids period and slash inside
+ * a single identifier — both come up downstream (period as the
+ * hierarchical-reference separator, slash inside `!include` and
+ * `extends` path arguments).
  *
- * We widen the lexical pattern to accept dotted form
- * (`bank.api.controller`) as one token so the grammar stays simple;
- * resolution code in toModel splits on `.` and walks the identifier
- * map to map each segment to its display name.
+ * We widen the lexical pattern to accept both forms as one token:
+ *   - `bank.api.controller` — hierarchical reference, split on `.` in toModel
+ *   - `path/to/file.dsl` — bare relative path argument to `!include`/`extends`
+ * The grammar then accepts the same `Identifier` token in identifier
+ * slots and in path slots; downstream code disambiguates by context.
  */
 export const Identifier = createToken({
   name: "Identifier",
-  pattern: /\w[a-zA-Z0-9_.-]*/,
+  pattern: /\w[a-zA-Z0-9_./-]*/,
 });
 
 // ── Directives (start with `!`) ────────────────────────────────────────

@@ -139,6 +139,25 @@ describe("Structurizr parser — body statements + directives", () => {
     expect(parseErrors).toEqual([]);
   });
 
+  it("supports !include with bare path (unquoted, with slashes)", () => {
+    const src = `workspace {
+      model {
+        !include path/to/other.dsl
+        api = container "API"
+      }
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
+  it("`workspace extends path/to/parent.dsl` parses without errors", () => {
+    const src = `workspace extends path/to/parent.dsl {
+      model {}
+    }`;
+    const { parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+  });
+
   it("supports !identifiers hierarchical", () => {
     const src = `workspace {
       model {

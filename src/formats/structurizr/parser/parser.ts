@@ -90,7 +90,10 @@ class StructurizrParser extends CstParser {
     this.OPTION2(() => this.CONSUME2(StringLiteral, { LABEL: "description" }));
     this.OPTION3(() => {
       this.CONSUME(Extends);
-      this.CONSUME3(StringLiteral, { LABEL: "extendsTarget" });
+      this.OR([
+        { ALT: () => this.CONSUME3(StringLiteral, { LABEL: "extendsTarget" }) },
+        { ALT: () => this.CONSUME(Identifier, { LABEL: "extendsTargetPath" }) },
+      ]);
     });
     this.CONSUME(LBrace);
     this.MANY(() => this.SUBRULE(this.modelBlock));
