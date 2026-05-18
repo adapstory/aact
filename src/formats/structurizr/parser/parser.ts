@@ -45,6 +45,7 @@ import {
   Component,
   Container,
   Description,
+  Element,
   Equals,
   Extends,
   Group,
@@ -188,6 +189,7 @@ class StructurizrParser extends CstParser {
       { ALT: () => this.CONSUME(Container, { LABEL: "kind" }) },
       { ALT: () => this.CONSUME(Component, { LABEL: "kind" }) },
       { ALT: () => this.CONSUME(Group, { LABEL: "kind" }) },
+      { ALT: () => this.CONSUME(Element, { LABEL: "kind" }) },
     ]);
     this.CONSUME(StringLiteral, { LABEL: "name" });
     // Up to 3 positional string args after name. Their meaning depends on

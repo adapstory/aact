@@ -93,7 +93,8 @@ interface ElementHeaderAst {
     | "softwareSystem"
     | "container"
     | "component"
-    | "group";
+    | "group"
+    | "element";
   readonly kindToken: IToken;
   readonly lastToken: IToken;
   readonly name: AstStringLiteral;
@@ -344,6 +345,22 @@ class StructurizrCstToAst extends BaseVisitor {
           range: baseRange,
         };
       }
+      case "element": {
+        // `element <name> [metadata] [description] [tags]`. The
+        // visitor's elementHeader has already split positionals to
+        // description / tags for the element case (metadata drops on
+        // the floor — we have no Model field for it). Read straight
+        // from header.description / header.tags.
+        return {
+          kind: "element",
+          assignedIdentifier: assignedAst,
+          name: header.name,
+          headerDescription: header.description,
+          headerTags: header.tags,
+          body,
+          range: baseRange,
+        };
+      }
       case "group": {
         const groupNode: GroupNode = {
           kind: "group",
@@ -372,7 +389,8 @@ class StructurizrCstToAst extends BaseVisitor {
       ctx.SoftwareSystem?.[0] ??
       ctx.Container?.[0] ??
       ctx.Component?.[0] ??
-      ctx.Group?.[0];
+      ctx.Group?.[0] ??
+      ctx.Element?.[0];
     if (!kindToken) {
       throw new Error("elementHeader: missing kind token in CST");
     }
@@ -384,17 +402,25 @@ class StructurizrCstToAst extends BaseVisitor {
     const positional3 = ctx.positional3?.[0];
 
     const hasTechnology = kindName === "container" || kindName === "component";
+    const isCustomElement = kindName === "element";
 
     let description: AstStringLiteral | undefined;
     let technology: AstStringLiteral | undefined;
     let tags: AstStringLiteral | undefined;
 
-    if (positional1) description = this.stringFromToken(positional1);
-    if (positional2) {
-      if (hasTechnology) technology = this.stringFromToken(positional2);
-      else tags = this.stringFromToken(positional2);
+    if (isCustomElement) {
+      // `element <name> [metadata] [description] [tags]`. Metadata
+      // currently drops on the floor — we have no Model field for it.
+      if (positional2) description = this.stringFromToken(positional2);
+      if (positional3) tags = this.stringFromToken(positional3);
+    } else {
+      if (positional1) description = this.stringFromToken(positional1);
+      if (positional2) {
+        if (hasTechnology) technology = this.stringFromToken(positional2);
+        else tags = this.stringFromToken(positional2);
+      }
     }
-    if (positional3) {
+    if (positional3 && !isCustomElement) {
       tags = this.stringFromToken(positional3);
     }
 
@@ -843,6 +869,7 @@ interface ElementHeaderCtx {
   readonly Container?: readonly [IToken];
   readonly Component?: readonly [IToken];
   readonly Group?: readonly [IToken];
+  readonly Element?: readonly [IToken];
   readonly name: readonly [IToken];
   readonly positional1?: readonly [IToken];
   readonly positional2?: readonly [IToken];

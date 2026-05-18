@@ -205,6 +205,7 @@ const ELEMENT_KINDS = new Set([
   "container",
   "component",
   "group",
+  "element",
 ]);
 
 const collectModelChild = (
@@ -379,7 +380,8 @@ const aggregateBody = (
     element.kind === "person" ||
     element.kind === "softwareSystem" ||
     element.kind === "container" ||
-    element.kind === "component"
+    element.kind === "component" ||
+    element.kind === "element"
       ? element.headerDescription?.value
       : undefined;
   let technology: string | undefined =
@@ -554,6 +556,13 @@ const kindFromAstKind = (k: ElementNode["kind"]): ContainerKind => {
       // Groups have no Container counterpart — they're visual grouping.
       // Today they surface as plain Containers; the future pass will
       // route them to Container.properties["group"] instead.
+      return "Container";
+    }
+    case "element": {
+      // CustomElement is the escape hatch outside the five C4 kinds —
+      // `Element` is an abstract C4 concept, not a kind. Surface it
+      // as `Container` so the Model contract stays closed, then tags
+      // (`["Element"]`) signal the special case to rules.
       return "Container";
     }
   }
@@ -826,6 +835,13 @@ const defaultTagsForKind = (kind: ElementNode["kind"]): readonly string[] => {
     }
     case "component": {
       return ["Element", "Component"];
+    }
+    case "element": {
+      // CustomElement is the escape hatch outside the five C4 types —
+      // Element is the abstract parent in C4 vocabulary, not a kind.
+      // We tag only with `"Element"` so rules that look for the
+      // canonical kinds (`Person`, `Container`, …) ignore it cleanly.
+      return ["Element"];
     }
     case "group": {
       // Groups aren't C4 elements — handled elsewhere; return empty

@@ -188,6 +188,9 @@ export const SoftwareSystem = keyword("SoftwareSystem", "softwareSystem");
 export const Container = keyword("Container", "container");
 export const Component = keyword("Component", "component");
 export const Group = keyword("Group", "group");
+/** `element` (CustomElement). Reference `CustomElementParser` accepts
+ * `element <name> [metadata] [description] [tags]`. */
+export const Element = keyword("Element", "element");
 
 // Element body statements
 export const Name = keyword("Name", "name");
@@ -304,6 +307,7 @@ export const allTokens = [
   Container,
   Component,
   Group,
+  Element,
   Name,
   Description,
   Technology,

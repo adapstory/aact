@@ -148,7 +148,8 @@ export type ElementNode =
   | SoftwareSystemNode
   | ContainerNode
   | ComponentNode
-  | GroupNode;
+  | GroupNode
+  | CustomElementNode;
 
 /**
  * Common element fields. Maps to `Model.Container` after `toModel`.
@@ -225,6 +226,22 @@ export interface GroupNode extends RecoverableNode {
   readonly assignedIdentifier?: Identifier;
   readonly name: StringLiteral;
   readonly members: readonly (ElementNode | RelationshipNode)[];
+}
+
+/**
+ * `element <name> [metadata] [description] [tags]` — CustomElement.
+ * The reference treats it as a 6th element kind with a tag set of
+ * just `["Element"]` (no kind-specific second tag). We map it to a
+ * Model Container with kind = "Container".
+ */
+export interface CustomElementNode extends RecoverableNode {
+  readonly kind: "element";
+  readonly assignedIdentifier?: Identifier;
+  readonly name: StringLiteral;
+  readonly headerMetadata?: StringLiteral;
+  readonly headerDescription?: StringLiteral;
+  readonly headerTags?: StringLiteral;
+  readonly body: readonly ElementBodyNode[];
 }
 
 // ── Element body statements ─────────────────────────────────────────────
