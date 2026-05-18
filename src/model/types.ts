@@ -32,15 +32,39 @@ export type ContainerKind =
 export type BoundaryKind = "System" | "Container" | "Component" | "Enterprise";
 
 /**
- * Foundation для clickable file:line violations в CLI output'е (terminal-link
- * OSC8). Optional на типе — loader'ы заполняют где могут, test fixtures могут
- * опустить.
+ * A position within a source file. 1-based for `line` and `col` (matches
+ * editor conventions and OSC8 terminal-link expectations). `offset` is
+ * 0-based byte offset from the start of the file — required for
+ * range-based AST fixes ("replace bytes 1024..1051" rather than regex
+ * search/replace).
+ *
+ * All three are mandatory. If a position is not known, the enclosing
+ * `SourceLocation` must be omitted entirely (it is optional on each
+ * Model node) — never fabricated with placeholder values.
+ */
+export interface SourcePosition {
+  readonly line: number;
+  readonly col: number;
+  readonly offset: number;
+}
+
+/**
+ * A range within a source file: `start` and `end` `SourcePosition`s plus
+ * the `file` they belong to. `end` is the position **after** the last
+ * character of the parsed construct (half-open interval, matching
+ * chevrotain and LSP conventions).
+ *
+ * The chevrotain parser populates this on every Container / Boundary /
+ * Relation node it emits. Regex-based loaders may omit it entirely —
+ * the field is optional on each Model node. When present, the range
+ * must be complete (no partial fills); the new shape exists precisely
+ * so that diagnostics, terminal-link OSC8, and AST-based fixes have
+ * full information.
  */
 export interface SourceLocation {
   readonly file: string;
-  readonly line: number;
-  readonly column?: number;
-  readonly endLine?: number;
+  readonly start: SourcePosition;
+  readonly end: SourcePosition;
 }
 
 /**
