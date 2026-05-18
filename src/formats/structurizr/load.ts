@@ -7,6 +7,7 @@ import { buildModel } from "../../model";
 import { inferKindFromTechnology } from "../_shared/kindHeuristics";
 import { parseCsvTags } from "../_shared/tags";
 import type { LoadResult } from "../types";
+import { parseSource } from "./parser";
 import type {
   StructurizrContainer,
   StructurizrPerson,
@@ -151,6 +152,14 @@ interface ElementWithRelations {
  */
 export const load = async (filePath: string): Promise<LoadResult> => {
   const filepath = path.resolve(filePath);
+  // Dispatch on extension. `.dsl` (Structurizr DSL source) goes
+  // through the chevrotain parser; `.json` (structurizr-cli output)
+  // stays on the existing JSON walker. Solution Architects who edit
+  // DSL directly can now point aact at `workspace.dsl` without first
+  // compiling through structurizr-cli.
+  if (filepath.toLowerCase().endsWith(".dsl")) {
+    return loadFromDsl(filepath);
+  }
   const data = await fs.readFile(filepath, "utf8");
   const workspace = JSON.parse(data) as StructurizrWorkspace;
 
@@ -244,4 +253,30 @@ export const load = async (filePath: string): Promise<LoadResult> => {
     boundaries,
     rootBoundaryNames,
   });
+};
+
+/**
+ * Read a Structurizr DSL source file directly via the chevrotain
+ * parser. Parse errors are surfaced through a thrown Error — the
+ * loader contract guarantees a usable Model or an exception. Model
+ * issues from the parser's own toModel pass propagate as
+ * `LoadResult.issues` for the linter to render.
+ */
+const loadFromDsl = async (filepath: string): Promise<LoadResult> => {
+  const text = await fs.readFile(filepath, "utf8");
+  const result = parseSource(text, filepath);
+  if (result.parseErrors.length > 0) {
+    const summary = result.parseErrors
+      .slice(0, 5)
+      .map((e) => `  ${e.line ?? "?"}:${e.column ?? "?"} ${e.message}`)
+      .join("\n");
+    const more =
+      result.parseErrors.length > 5
+        ? `\n  ...and ${result.parseErrors.length - 5} more.`
+        : "";
+    throw new Error(
+      `Failed to parse Structurizr DSL ${filepath}:\n${summary}${more}`,
+    );
+  }
+  return { model: result.model, issues: result.issues };
 };
