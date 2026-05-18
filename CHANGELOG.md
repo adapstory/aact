@@ -4,6 +4,104 @@ All notable changes to `aact` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+Unified CLI output layer. Every command now speaks the same versioned
+JSON envelope (`schemaVersion: 1`) and follows a tight exit-code
+contract. This is the v3 API break window — review the Breaking section
+before upgrading from beta.5.
+
+### Breaking
+
+- **`--format` dropped from `check` and `analyze`.** `--format json` is
+  replaced by `--json` everywhere; no deprecation period. `--format`
+  remains valid on `generate`, where it still means "artefact target"
+  (`plantuml`, `kubernetes`, ...) — never an output renderer.
+- **Exit code 2 for tool errors.** Missing source files, schema-invalid
+  config, unknown formats, and any non-domain failure exit `2`,
+  distinct from exit `1` (architecture violations). CI scripts and
+  agent loops can now branch on tool-failure vs domain-failure.
+- **`aact check --dry-run` exits 1 when violations remain** (was `0`).
+  CI gates that depended on the previous behaviour will start blocking
+  PRs with unresolved violations — typically the intended outcome.
+- **`aact check --fix` exits 1 when violations remain after applying
+  fixes** (was `0`). Same rationale.
+- **JSON output is now a versioned envelope.** Previously each command
+  emitted an ad-hoc shape (`check` wrapped in `{ results }`, `analyze`
+  returned the raw report, `rule list` returned a bare array).
+  Consumers must update their parsers.
+
+### Added
+
+- `--json` flag on every command: `init`, `check`, `analyze`,
+  `generate`, `rule list`, `skill`. In JSON mode stdout is reserved for
+  the envelope; warnings and progress go to stderr.
+- `--config` flag on `rule list` (previously missing — c12
+  auto-discovery only). All config-aware commands now accept it
+  uniformly.
+- Stable `DiagnosticKind` enum surfaced in
+  `envelope.diagnostics[].kind` (`model.duplicateContainerName`,
+  `config.unknownRule`, `format.missingWritePath`,
+  `config.outputCollidesWithJson`, etc.). Agents and CI scripts can
+  branch on the kind without scraping prose. New kinds are additive;
+  renames or removals require a `schemaVersion` bump.
+- `config.output.mode: "text" | "json"` in `aact.config.ts` for a
+  project-wide default output mode. CLI `--json` still wins
+  per-invocation.
+- `aact generate --output -` — UNIX `-` sentinel explicitly routes the
+  artefact to stdout. Multi-file artefacts (e.g. `kubernetes`) reject
+  `-` with `config.missingOutputPath`.
+
+### Changed
+
+- `aact rule list` no longer silently swallows config errors. A broken
+  or schema-invalid config exits 2 with a typed diagnostic instead of
+  falling back to built-ins. A missing config (no file in cwd) still
+  falls back to built-ins-only — the legitimate discovery use case.
+- `aact check` no longer prints inline "Suggested fixes" outside
+  `--dry-run` text mode. Agents read `data.suggestedFixes[]` from the
+  JSON envelope; humans see the preview only when they ask via
+  `--dry-run`.
+- `aact generate --json --output <file>` writes the artefact to disk
+  and emits the envelope on stdout. `aact generate --json` without
+  `--output` exits 2 — the artefact and the envelope cannot both own
+  stdout.
+- GitHub Actions annotations still auto-enable on `aact check` when
+  `GITHUB_ACTIONS=true` is set; the explicit `--format=github` flag is
+  gone alongside `--format=json`.
+
+### Internal
+
+- New `src/cli/output/` module owns every `stdout`/`stderr` write.
+  Commands return a typed `ExecuteResult<TData>`; the wrapper
+  (`cliCommand` / `cliCommandWithConfig`) picks `JsonReporter` or
+  `HumanReporter` and exits with `envelope.exitCode`. The only
+  remaining command-side `process.stdout.write` lives in `generate.ts`
+  for explicit `--output -` artefact streaming.
+
+### Migration
+
+```bash
+# Before
+aact check --format json | jq '.results[]'
+aact analyze --format json
+
+# After
+aact check --json | jq '.data.violations[]'
+aact analyze --json | jq '.data'
+```
+
+Exit-code matrix for CI / agents:
+
+```bash
+aact check --json > report.json
+case $? in
+  0) ;;                                # clean
+  1) echo "Violations remain" ;;       # domain failure
+  2) echo "aact tool error" ;;         # config / source / format
+esac
+```
+
 ## v3.0.0-beta.5 — 2026-05-17
 
 Agent skill installer. No library API changes; safe upgrade.
