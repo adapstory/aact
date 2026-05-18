@@ -324,20 +324,54 @@ export const findHardRemovedTokens = (
   const out: IToken[] = [];
   const errors: HardRemovedError[] = [];
 
-  for (const t of tokens) {
-    const meta = [...HARD_REMOVED.entries()].find(([tok]) =>
-      tokenMatcher(t, tok as Parameters<typeof tokenMatcher>[1]),
-    )?.[1];
-    if (meta) {
-      errors.push({
-        construct: meta.construct,
-        hint: meta.hint,
-        range: rangeOfTokens(t, t, file),
-      });
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    const meta = hardRemovedMeta(t);
+    if (!meta) {
+      out.push(t);
+      i++;
       continue;
     }
-    out.push(t);
+    // Hard-removed token. Emit the diagnostic. If a balanced
+    // `{ ... }` block follows the keyword (possibly after positional
+    // string/identifier args, e.g. `enterprise "Acme" { ... }` or
+    // `!ref bank { ... }`), strip the whole block — otherwise its
+    // body tokens flood the parser with junk errors. A bare token
+    // (no body) just drops itself.
+    errors.push({
+      construct: meta.construct,
+      hint: meta.hint,
+      range: rangeOfTokens(t, t, file),
+    });
+    const braceIdx = findOpeningBrace(tokens, i);
+    if (braceIdx < 0) {
+      i++;
+      continue;
+    }
+    let depth = 1;
+    let j = braceIdx + 1;
+    while (j < tokens.length && depth > 0) {
+      if (tokenMatcher(tokens[j], LBrace)) depth++;
+      else if (tokenMatcher(tokens[j], RBrace)) depth--;
+      if (depth === 0) break;
+      j++;
+    }
+    if (depth !== 0) {
+      // Unbalanced — leave the rest of the stream alone so the parser
+      // produces a normal "missing }" error.
+      i++;
+      continue;
+    }
+    i = j + 1;
   }
 
   return { tokens: out, errors };
 };
+
+const hardRemovedMeta = (
+  t: IToken,
+): { construct: string; hint: string } | undefined =>
+  [...HARD_REMOVED.entries()].find(([tok]) =>
+    tokenMatcher(t, tok as Parameters<typeof tokenMatcher>[1]),
+  )?.[1];

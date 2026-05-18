@@ -149,11 +149,11 @@ describe("Structurizr parser — hard-removed constructs", () => {
   });
 
   it("surfaces the hard-removed error and lets the parser continue", () => {
-    // The hard-removed pre-pass drops the offending token but leaves
-    // its arguments behind (`MY_TAG "platform"` after `!constant`).
-    // The parser then reports those orphans as additional errors —
-    // that's acceptable noise; what matters is that the explanatory
-    // hard-removed error is in the list.
+    // `!constant NAME VALUE` is a 3-token bare form (no body). The
+    // pre-pass drops only `!constant`; the parser still sees the
+    // orphan NAME + value tokens and reports normal grammar errors
+    // for them. We only assert that the explanatory hard-removed
+    // error is in the list.
     const src = `workspace {
       model {
         !constant MY_TAG "platform"
@@ -161,6 +161,43 @@ describe("Structurizr parser — hard-removed constructs", () => {
     }`;
     const { parseErrors } = parse(src);
     expect(parseErrors.some((e) => e.message.includes("!constant"))).toBe(true);
+  });
+
+  it('strips the whole `enterprise "X" { ... }` block including body', () => {
+    const src = `workspace {
+      model {
+        enterprise "BigCo" {
+          bank = softwareSystem "Bank"
+        }
+        api = container "API"
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    // One error for `enterprise`; the body is stripped wholesale so
+    // declarations after the block still parse cleanly.
+    expect(
+      parseErrors.filter((e) => e.message.includes("enterprise")).length,
+    ).toBe(1);
+    expect(model.containers["API"]).toBeDefined();
+    // Bank declared INSIDE the enterprise block is intentionally dropped
+    // (we cannot represent the enterprise grouping in the Model).
+    expect(model.containers["Bank"]).toBeUndefined();
+  });
+
+  it("strips `!ref bank { ... }` body wholesale", () => {
+    const src = `workspace {
+      model {
+        bank = softwareSystem "Bank"
+        !ref bank {
+          web = container "Web"
+        }
+        api = container "API"
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors.some((e) => e.message.includes("!ref"))).toBe(true);
+    expect(model.containers["Bank"]).toBeDefined();
+    expect(model.containers["API"]).toBeDefined();
   });
 
   it("a hard-removed token on its own does not block declarations that come before it", () => {
