@@ -21,7 +21,7 @@ describe("loadAndValidateConfig", () => {
       : never);
 
     await expect(loadAndValidateConfig()).rejects.toThrow(
-      "No source configured",
+      "No aact config found",
     );
   });
 

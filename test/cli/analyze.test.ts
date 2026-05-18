@@ -1,26 +1,29 @@
-import { loadConfig } from "c12";
-import consola from "consola";
+import { PassThrough } from "node:stream";
 
+import {
+  executeAnalyze,
+  renderAnalyzeText,
+} from "../../src/cli/commands/analyze";
 import { loadModel } from "../../src/cli/loadModel";
+import { buildEnvelope } from "../../src/cli/output";
+import type { AactConfig } from "../../src/config";
 import { makeModel } from "../helpers/makeModel";
 
-vi.mock("c12", () => ({
-  loadConfig: vi.fn(),
-}));
+vi.mock("../../src/cli/loadModel", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../src/cli/loadModel")
+  >("../../src/cli/loadModel");
+  return {
+    ...actual,
+    loadModel: vi.fn(),
+  };
+});
 
-vi.mock("../../src/cli/loadModel", () => ({
-  loadModel: vi.fn(),
-}));
-
-vi.mock("consola", () => ({
-  default: {
-    info: vi.fn(),
-    log: vi.fn(),
-  },
-}));
-
-const mockLoadConfig = vi.mocked(loadConfig);
 const mockLoadModel = vi.mocked(loadModel);
+
+const config: AactConfig = {
+  source: { type: "plantuml", path: "test.puml" },
+};
 
 const testModel = () =>
   makeModel({
@@ -41,105 +44,111 @@ const testModel = () =>
     ],
   });
 
-const setupConfig = (): void => {
-  mockLoadConfig.mockResolvedValue({
-    config: {
-      source: { type: "plantuml", path: "test.puml" },
-    },
-  });
+const captureSink = (): {
+  sink: NodeJS.WritableStream;
+  output: () => string;
+} => {
+  const stream = new PassThrough();
+  const chunks: Buffer[] = [];
+  stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+  return {
+    sink: stream,
+    output: () => Buffer.concat(chunks).toString("utf8"),
+  };
 };
 
-const runAnalyze = async (args: { format?: string } = {}): Promise<void> => {
-  const mod = await import("../../src/cli/commands/analyze");
-  const command = mod.analyze;
-  await (
-    command as unknown as {
-      run: (ctx: { args: Record<string, unknown> }) => Promise<void>;
-    }
-  ).run({ args });
-};
-
-describe("analyze command", () => {
+describe("executeAnalyze", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("throws when config source is missing", async () => {
-    mockLoadConfig.mockResolvedValue({ config: {} });
-    await expect(runAnalyze()).rejects.toThrow();
-  });
-
-  it("outputs text metrics via consola", async () => {
-    setupConfig();
+  it("returns AnalysisReport as data with exitCode 0", async () => {
     mockLoadModel.mockResolvedValue({ model: testModel(), issues: [] });
 
-    await runAnalyze();
+    const result = await executeAnalyze(config);
 
-    const infoCalls = vi
-      .mocked(consola.info)
-      .mock.calls.map((c) => c[0] as string);
-    expect(infoCalls.some((c) => c.includes("Elements:"))).toBe(true);
-    expect(infoCalls.some((c) => c.includes("Sync API calls:"))).toBe(true);
-    expect(infoCalls.some((c) => c.includes("Async API calls:"))).toBe(true);
-    expect(infoCalls.some((c) => c.includes("Databases:"))).toBe(true);
+    expect(result.exitCode).toBe(0);
+    expect(result.data).toHaveProperty("elementsCount");
+    expect(result.data).toHaveProperty("syncApiCalls");
+    expect(result.data).toHaveProperty("asyncApiCalls");
+    expect(result.data).toHaveProperty("databases");
+    expect(result.data).toHaveProperty("boundaries");
   });
 
-  it("outputs json format", async () => {
-    setupConfig();
-    mockLoadModel.mockResolvedValue({ model: testModel(), issues: [] });
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-    await runAnalyze({ format: "json" });
-
-    expect(spy).toHaveBeenCalled();
-    const output = JSON.parse(spy.mock.calls[0][0] as string);
-    expect(output).toHaveProperty("elementsCount");
-    expect(output).toHaveProperty("syncApiCalls");
-    expect(output).toHaveProperty("asyncApiCalls");
-    expect(output).toHaveProperty("databases");
-    expect(output).toHaveProperty("boundaries");
-  });
-
-  it("unknown format falls back to text output", async () => {
-    setupConfig();
-    mockLoadModel.mockResolvedValue({ model: testModel(), issues: [] });
-
-    await runAnalyze({ format: "unknown" });
-
-    const infoCalls = vi
-      .mocked(consola.info)
-      .mock.calls.map((c) => c[0] as string);
-    expect(infoCalls.some((c) => c.includes("Elements:"))).toBe(true);
-  });
-
-  it("logs coupling relations for boundaries", async () => {
-    setupConfig();
+  it("maps loader issues to diagnostics with stable kinds", async () => {
     mockLoadModel.mockResolvedValue({
-      model: makeModel({
-        containers: [
-          { name: "ext", label: "Ext", kind: "System", external: true },
-          {
-            name: "svc_coupling",
-            label: "Coupled Service",
-            relations: [{ to: "ext", technology: "http" }],
-          },
-        ],
+      model: testModel(),
+      issues: [
+        { kind: "duplicate-container-name", name: "orders_db" },
+        { kind: "self-relation", container: "svc_a" },
+      ],
+    });
+
+    const result = await executeAnalyze(config);
+
+    expect(result.diagnostics).toHaveLength(2);
+    expect(result.diagnostics?.[0]).toMatchObject({
+      kind: "model.duplicateContainerName",
+      severity: "warning",
+    });
+    expect(result.diagnostics?.[1]).toMatchObject({
+      kind: "model.selfRelation",
+      severity: "warning",
+    });
+  });
+
+  it("propagates ToolError from loadModel (source missing) unchanged", async () => {
+    const { ToolError } = await import("../../src/cli/output");
+    mockLoadModel.mockRejectedValue(
+      new ToolError("model.sourceNotFound", "missing", { path: "x.puml" }),
+    );
+
+    await expect(executeAnalyze(config)).rejects.toMatchObject({
+      kind: "model.sourceNotFound",
+    });
+  });
+});
+
+describe("renderAnalyzeText", () => {
+  const sampleEnvelope = () =>
+    buildEnvelope({
+      command: "analyze",
+      exitCode: 0,
+      data: {
+        elementsCount: 2,
+        syncApiCalls: 0,
+        asyncApiCalls: 0,
+        databases: { count: 1, consumes: 1 },
         boundaries: [
           {
             name: "project",
             label: "Project",
-            containerNames: ["svc_coupling"],
+            cohesion: 0.5,
+            coupling: 0.2,
+            couplingRelations: [{ from: "svc_a", to: "external_x" }],
           },
         ],
-      }),
-      issues: [],
+      },
+      meta: {
+        durationMs: 5,
+        configPath: null,
+        source: "test.puml",
+      },
     });
 
-    await runAnalyze();
+  it("writes metrics and boundary breakdown to the sink", () => {
+    const { sink, output } = captureSink();
 
-    const logCalls = vi
-      .mocked(consola.log)
-      .mock.calls.map((c) => c[0] as string);
-    expect(logCalls.some((c) => c.includes("svc_coupling"))).toBe(true);
+    renderAnalyzeText(sampleEnvelope(), sink);
+
+    const text = output();
+    expect(text).toContain("Elements: 2");
+    expect(text).toContain("Sync API calls: 0");
+    expect(text).toContain("Async API calls: 0");
+    expect(text).toContain("Databases: 1");
+    expect(text).toContain('Boundary "Project"');
+    expect(text).toContain("cohesion=0.5");
+    expect(text).toContain("coupling=0.2");
+    expect(text).toContain("svc_a → external_x");
   });
 });

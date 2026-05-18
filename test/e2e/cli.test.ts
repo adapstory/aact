@@ -113,6 +113,68 @@ describe("aact check", () => {
   });
 });
 
+describe("aact analyze", () => {
+  it("renders metrics as text by default", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["analyze"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Elements:");
+    expect(result.stdout).toContain("Sync API calls:");
+    expect(result.stdout).toContain("Databases:");
+  });
+
+  it("--json emits a v1 envelope on stdout with AnalysisReport data", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["analyze", "--json"]);
+    expect(result.exitCode).toBe(0);
+
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe("analyze");
+    expect(envelope.ok).toBe(true);
+    expect(envelope.exitCode).toBe(0);
+
+    const data = envelope.data as Record<string, unknown>;
+    expect(data).toHaveProperty("elementsCount");
+    expect(data).toHaveProperty("syncApiCalls");
+    expect(data).toHaveProperty("asyncApiCalls");
+    expect(data).toHaveProperty("databases");
+    expect(data).toHaveProperty("boundaries");
+
+    const meta = envelope.meta as Record<string, unknown>;
+    expect(meta).toHaveProperty("aactVersion");
+    expect(meta).toHaveProperty("durationMs");
+    expect(typeof meta.durationMs).toBe("number");
+  });
+
+  it("--json exits 2 on missing source file (tool error, not domain failure)", async () => {
+    await runCli(["init"]);
+    await fs.rm(path.join(workDir, "architecture.puml"));
+    const result = await runCli(["analyze", "--json"]);
+
+    expect(result.exitCode).toBe(2);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.exitCode).toBe(2);
+    expect(envelope.ok).toBe(false);
+    expect(envelope.data).toBeNull();
+
+    const diag = (envelope.diagnostics as Array<Record<string, unknown>>)[0];
+    expect(diag.kind).toBe("model.sourceNotFound");
+  });
+
+  it("--json exits 2 when no config / config schema invalid (tool error)", async () => {
+    // c12 returns {} when no config file is found; valibot then rejects on
+    // the missing `source` field. Either kind signals a tool-level failure
+    // distinct from domain violations.
+    const result = await runCli(["analyze", "--json"]);
+    expect(result.exitCode).toBe(2);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const kind = (envelope.diagnostics as Array<Record<string, unknown>>)[0]
+      .kind;
+    expect(kind).toMatch(/^config\.(missingSource|invalidSchema|loadFailed)$/);
+  });
+});
+
 describe("aact check --fix demo loop", () => {
   it("init → check reports violation → fix applies → re-check is clean", async () => {
     await runCli(["init"]);

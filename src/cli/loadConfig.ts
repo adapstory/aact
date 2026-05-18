@@ -7,6 +7,7 @@ import { AactConfigSchema } from "../config";
 import { knownFormatNames, loadFormat } from "../formats/registry";
 import { canLoad } from "../formats/types";
 import type { RuleDefinition } from "../rules/types";
+import { ToolError } from "./output";
 
 /**
  * Simple two-shape matcher для format.defaultPattern:
@@ -39,29 +40,39 @@ const validateCustomRules = (
   const validated: RuleDefinition[] = [];
   for (const [i, raw] of entries.entries()) {
     if (!raw || typeof raw !== "object") {
-      throw new Error(
+      throw new ToolError(
+        "config.invalidCustomRule",
         `customRules[${i}]: expected RuleDefinition object (got ${typeof raw})`,
+        { index: String(i) },
       );
     }
     const rule = raw as Record<string, unknown>;
     if (typeof rule.name !== "string" || !rule.name) {
-      throw new Error(
+      throw new ToolError(
+        "config.invalidCustomRule",
         `customRules[${i}]: missing "name" (must be non-empty string)`,
+        { index: String(i) },
       );
     }
     if (typeof rule.description !== "string") {
-      throw new TypeError(
+      throw new ToolError(
+        "config.invalidCustomRule",
         `customRules[${i}] "${rule.name}": missing "description" string`,
+        { index: String(i), name: rule.name },
       );
     }
     if (typeof rule.check !== "function") {
-      throw new TypeError(
+      throw new ToolError(
+        "config.invalidCustomRule",
         `customRules[${i}] "${rule.name}": "check" must be a function`,
+        { index: String(i), name: rule.name },
       );
     }
     if (rule.fix !== undefined && typeof rule.fix !== "function") {
-      throw new Error(
+      throw new ToolError(
+        "config.invalidCustomRule",
         `customRules[${i}] "${rule.name}": "fix" must be a function if provided`,
+        { index: String(i), name: rule.name },
       );
     }
     validated.push(rule as unknown as RuleDefinition);
@@ -76,22 +87,68 @@ const inferSourceType = async (filePath: string): Promise<string> => {
     if (matchesPattern(filePath, fmt.defaultPattern)) return name;
   }
   const known = knownFormatNames().join(", ");
-  throw new Error(
+  throw new ToolError(
+    "format.unknown",
     `Cannot infer source format from "${filePath}". Add explicit \`source.type\` to aact.config.ts (known: ${known}).`,
+    { path: filePath },
   );
+};
+
+const describeError = (error: unknown): string => {
+  if (error instanceof v.ValiError) {
+    const issues = error.issues as Array<{ message: string }>;
+    return issues.map((issue) => issue.message).join("; ");
+  }
+  if (error instanceof Error) return error.message;
+  return String(error);
+};
+
+const loadRawConfig = async (
+  configPath: string | undefined,
+): Promise<unknown> => {
+  try {
+    const { config } = await loadConfig({
+      name: "aact",
+      ...(configPath ? { configFile: configPath } : {}),
+    });
+    return config;
+  } catch (error) {
+    throw new ToolError(
+      "config.loadFailed",
+      `Failed to load aact config: ${describeError(error)}`,
+      configPath ? { path: configPath } : undefined,
+    );
+  }
+};
+
+const parseConfig = (
+  raw: unknown,
+  configPath: string | undefined,
+): v.InferOutput<typeof AactConfigSchema> => {
+  try {
+    return v.parse(AactConfigSchema, raw);
+  } catch (error) {
+    throw new ToolError(
+      "config.invalidSchema",
+      `aact config failed schema validation: ${describeError(error)}`,
+      configPath ? { path: configPath } : undefined,
+    );
+  }
 };
 
 export const loadAndValidateConfig = async (
   configPath?: string,
 ): Promise<AactConfig> => {
-  const { config } = await loadConfig({
-    name: "aact",
-    ...(configPath ? { configFile: configPath } : {}),
-  });
-  if (!config) {
-    throw new Error("No source configured. Create an aact.config.ts file.");
+  const raw = await loadRawConfig(configPath);
+
+  if (!raw) {
+    throw new ToolError(
+      "config.missingSource",
+      "No aact config found. Create an aact.config.ts file (run `aact init` to scaffold).",
+    );
   }
-  const parsed = v.parse(AactConfigSchema, config);
+
+  const parsed = parseConfig(raw, configPath);
 
   // Normalize source: string shorthand → object form, infer type if missing.
   const rawSource =
@@ -101,8 +158,10 @@ export const loadAndValidateConfig = async (
   // Validate explicit type against registry — fail fast вместо deferred
   // "Unknown format" из loadModel. Inferred type гарантированно валиден.
   if (rawSource.type && !knownFormatNames().includes(type)) {
-    throw new Error(
+    throw new ToolError(
+      "format.unknown",
       `Unknown source.type "${type}" in aact.config.ts (known: ${knownFormatNames().join(", ")}).`,
+      { type },
     );
   }
 

@@ -78,6 +78,11 @@ export const AactConfigSchema = v.strictObject({
       boundaryLabel: v.optional(v.string()),
     }),
   ),
+  output: v.optional(
+    v.strictObject({
+      mode: v.optional(v.picklist(["text", "json"])),
+    }),
+  ),
 });
 
 /**
@@ -137,6 +142,7 @@ export interface AactConfigInput<
   readonly rules?: AactRulesConfig<C>;
   readonly customRules?: C;
   readonly generate?: v.InferInput<typeof AactConfigSchema>["generate"];
+  readonly output?: v.InferInput<typeof AactConfigSchema>["output"];
 }
 
 /** Normalized — то что `loadAndValidateConfig` возвращает. Source всегда object с populated `type`. */
@@ -149,6 +155,7 @@ export interface AactConfig {
   readonly rules?: BuiltinRulesConfig & Readonly<Record<string, unknown>>;
   readonly customRules?: readonly RuleDefinition[];
   readonly generate?: v.InferOutput<typeof AactConfigSchema>["generate"];
+  readonly output?: v.InferOutput<typeof AactConfigSchema>["output"];
 }
 
 /**
