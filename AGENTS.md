@@ -67,6 +67,15 @@ Agents must branch on these — do not collapse them. The envelope shape
 is defined in `src/cli/output/types.ts`; additions are additive,
 removals or renames require a `schemaVersion` bump.
 
+**`schemaVersion` freeze policy.** `schemaVersion` is the **stable**
+contract version — it locks at `v3.0.0` GA. During `3.0.0-beta.X` we
+reserve the right to remove or rename fields under `schemaVersion: 1`
+without bumping; breaking changes within beta are documented in
+`CHANGELOG.md` only. Bumping `schemaVersion` mid-beta would dilute its
+meaning as a public-contract marker; consumers pinning to `aact@beta`
+must read the CHANGELOG for shape changes. Post-GA, removals or
+renames bump `schemaVersion` per the additive rule above.
+
 ## Source-location hyperlinks
 
 `aact check` text mode emits each violation with a Cmd-clickable
