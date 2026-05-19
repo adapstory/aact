@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.15 — 2026-05-19
+
+Two themes: source-location hyperlinks now actually navigate in
+every modern terminal (Ghostty / iTerm2 / WezTerm / Kitty were
+silently broken in beta.14), and `aact analyze` gets a full
+redesign — drops the useless hardcoded sync/async counter for
+structural metrics that work on any DSL / PUML out of the box.
+
 ### Changed
 
 - **`aact analyze` redesigned around structural metrics that work
