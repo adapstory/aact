@@ -5,6 +5,8 @@
 [![npm version](https://img.shields.io/npm/v/aact)](https://www.npmjs.com/package/aact)
 [![test workflow](https://github.com/Byndyusoft/aact/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/Byndyusoft/aact/actions/workflows/test.yaml)
 
+🇷🇺 **Русский** | 🇬🇧 [English](README.en.md)
+
 CLI и библиотека для валидации, анализа и генерации архитектуры микросервисных систем, описанной "as Code" (PlantUML C4, Structurizr).
 
 Инструменты для работы с архитектурой в формате "as Code":
@@ -140,6 +142,7 @@ const ordersService = model.elements["orders"];
 - [Справочник паттернов](patterns.md) — принципы и паттерны с примерами тестов
 - [ADR](ADRs/) — Architecture Decision Records
 - [Roadmap](roadmap.md) — планы развития
+- [AGENTS.md](AGENTS.md) — инструкции для AI-агентов, работающих с aact
 
 ## Testing
 
