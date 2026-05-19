@@ -20,6 +20,8 @@ export interface ElementSpec {
   readonly relations?: readonly RelationSpec[];
   readonly link?: string;
   readonly properties?: Readonly<Record<string, string>>;
+  /** Override the synthetic SourceLocation makeModel attaches by default. */
+  readonly sourceLocation?: SourceLocation;
 }
 
 export interface RelationSpec {
@@ -32,7 +34,10 @@ export interface RelationSpec {
   /** Lets rule tests pin precise-anchor behavior without going through a
    * full parser pass. Loaders populate this in production; here we inject
    * a fixture location and assert the rule echoed it back on the
-   * resulting `Violation`. */
+   * resulting `Violation`. Defaults to a synthetic range so range-based
+   * fix engines emit edits (the synth offsets don't match a real source
+   * string — callers that pipe edits through `applyEdits` should load
+   * via the format parser instead). */
   readonly sourceLocation?: SourceLocation;
 }
 
@@ -46,6 +51,23 @@ export interface BoundarySpec {
   readonly boundaryNames?: readonly string[];
   readonly link?: string;
 }
+
+// Synthetic SourceLocation factory — every node gets one so range-based
+// `--fix` engines emit edits even on fully-synthetic models. The offsets
+// don't correspond to any real source; tests that need byte-correct
+// splicing must load through the real format parser
+// (`loadPumlString`, etc.) instead.
+let synthOffset = 0;
+const synthRange = (file = "synth.puml"): SourceLocation => {
+  const start = synthOffset;
+  const end = start + 10;
+  synthOffset = end + 1;
+  return {
+    file,
+    start: { line: 1, col: start + 1, offset: start },
+    end: { line: 1, col: end + 1, offset: end },
+  };
+};
 
 const makeElement = (spec: ElementSpec): Element => ({
   name: spec.name,
@@ -63,10 +85,11 @@ const makeElement = (spec: ElementSpec): Element => ({
     tags: r.tags ?? [],
     order: r.order,
     link: r.link,
-    ...(r.sourceLocation ? { sourceLocation: r.sourceLocation } : {}),
+    sourceLocation: r.sourceLocation ?? synthRange(),
   })),
   link: spec.link,
   properties: spec.properties,
+  sourceLocation: spec.sourceLocation ?? synthRange(),
 });
 
 const makeBoundary = (spec: BoundarySpec): Boundary => ({
@@ -87,6 +110,10 @@ export interface ModelSpec {
 }
 
 export const makeModel = (spec: ModelSpec): Model => {
+  // Reset the synth-offset counter per call so subsequent makeModel
+  // invocations in the same test don't drift indefinitely — keeps
+  // ranges deterministic and human-readable when debugging.
+  synthOffset = 0;
   const elements = (spec.elements ?? []).map(makeElement);
   const boundaries = (spec.boundaries ?? []).map(makeBoundary);
   const rootBoundaryNames =

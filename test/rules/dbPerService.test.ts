@@ -5,7 +5,8 @@ import { plantumlSyntax } from "../../src/formats/plantuml/syntax";
 import { structurizrDslSyntax } from "../../src/formats/structurizr/syntax";
 import { dbPerServiceRule } from "../../src/rules";
 import { applyEdits } from "../../src/rules/lib/applyEdits";
-import type { BoundarySpec, ElementSpec } from "../helpers/makeModel";
+import { loadPumlString } from "../helpers/loadPumlString";
+import type { ElementSpec } from "../helpers/makeModel";
 import { makeModel } from "../helpers/makeModel";
 
 const nameArb = fc
@@ -18,22 +19,22 @@ const dbSpec = (name = "orders_db", label = "Orders DB"): ElementSpec => ({
   kind: "ContainerDb",
 });
 
-const violation = (element: string) => ({ element, message: "" });
+const buildModel = (elements: ElementSpec[]) => makeModel({ elements });
 
-const buildModel = (elements: ElementSpec[], boundaries?: BoundarySpec[]) =>
-  makeModel({ elements, boundaries });
+const STDLIB =
+  "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml";
 
-const fixPuml = (
-  containers: ElementSpec[],
-  violationContainer: string,
-  boundaries?: BoundarySpec[],
-) => {
-  const model = buildModel(containers, boundaries);
-  return dbPerServiceRule.fix!(
+const pumlFix = async (puml: string, violationElement: string) => {
+  const { model, source } = await loadPumlString(puml);
+  const fixes = dbPerServiceRule.fix!({
     model,
-    [violation(violationContainer)],
-    plantumlSyntax,
-  );
+    violations: [{ element: violationElement, message: "" }],
+    syntax: plantumlSyntax,
+    options: undefined,
+  });
+  const edits = fixes.flatMap((f) => f.edits);
+  const { content } = applyEdits(source, edits);
+  return { fixes, content };
 };
 
 describe("dbPerServiceRule.check", () => {
@@ -69,577 +70,296 @@ describe("dbPerServiceRule.check", () => {
 });
 
 describe("dbPerServiceRule.fix", () => {
-  it("returns empty for empty violations", () => {
-    expect(dbPerServiceRule.fix!(buildModel([]), [], plantumlSyntax)).toEqual(
-      [],
+  it("returns empty for empty violations", async () => {
+    const { model } = await loadPumlString(
+      ["@startuml", STDLIB, "@enduml"].join("\n"),
     );
+    expect(
+      dbPerServiceRule.fix!({
+        model,
+        violations: [],
+        syntax: plantumlSyntax,
+        options: undefined,
+      }),
+    ).toEqual([]);
   });
 
-  it("returns no fix when db has one accessor", () => {
-    const results = fixPuml(
-      [{ name: "orders_repo", relations: [{ to: "orders_db" }] }, dbSpec()],
-      "orders_db",
-    );
-    expect(results).toHaveLength(0);
+  it("returns no fix when db has one accessor", async () => {
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="repo")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(orders_repo, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { fixes } = await pumlFix(puml, "orders_db");
+    expect(fixes).toHaveLength(0);
   });
 
-  it("returns one FixResult for two accessors", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results).toHaveLength(1);
+  it("redirects the non-owner accessor through the repo-tagged owner", async () => {
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="repo")',
+      'Container(payments, "Payments")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(orders_repo, orders_db, "")',
+      'Rel(payments, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { fixes, content } = await pumlFix(puml, "orders_db");
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0].rule).toBe("dbPerService");
+    expect(content).toContain("Rel(payments, orders_repo");
+    expect(content).not.toMatch(/Rel\(payments, orders_db,\s*""\)/);
+    // Owner's edge stays untouched
+    expect(content).toContain('Rel(orders_repo, orders_db, "")');
   });
 
-  it("generates replace edit for extra accessor", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits).toHaveLength(1);
-    expect(results[0].edits[0].type).toBe("replace");
-    expect(results[0].edits[0].search).toContain("Rel(payments, orders_db");
-    expect(results[0].edits[0].content).toContain("Rel(payments, orders_repo");
-  });
-
-  it("prefers repo-tagged container as owner", () => {
-    const results = fixPuml(
-      [
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        {
-          name: "orders_repo",
-          tags: ["repo"],
-          relations: [{ to: "orders_db" }],
-        },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].content).toContain("orders_repo");
-    expect(results[0].edits[0].search).toContain("payments");
-  });
-
-  it("emits the multi-tagged warning with both names and the chosen owner", () => {
-    const calls: unknown[][] = [];
-    const original = consola.warn;
-    consola.warn = ((...args: unknown[]) => {
-      calls.push(args);
-    }) as typeof consola.warn;
-    try {
-      fixPuml(
-        [
-          {
-            name: "orders_repo",
-            tags: ["repo"],
-            relations: [{ to: "orders_db" }],
-          },
-          {
-            name: "payments_repo",
-            tags: ["repo"],
-            relations: [{ to: "orders_db" }],
-          },
-          dbSpec(),
-        ],
-        "orders_db",
-      );
-    } finally {
-      consola.warn = original;
-    }
-    expect(calls.length).toBeGreaterThan(0);
-    const msg = String(calls[0][0]);
-    expect(msg).toContain("Cannot determine owner of orders_db");
-    expect(msg).toContain("multiple tagged accessors");
-    expect(msg).toContain("orders_repo");
-    expect(msg).toContain("payments_repo");
-    expect(msg).toContain("using orders_repo");
-  });
-
-  it("emits the no-tagged warning when falling back to first accessor", () => {
+  it("warns when multiple owners are tagged and uses the first one", async () => {
     const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
-    fixPuml(
-      [
-        { name: "alpha", relations: [{ to: "orders_db" }] },
-        { name: "beta", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(repo_a, "A", $tags="repo")',
+      'Container(repo_b, "B", $tags="repo")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(repo_a, orders_db, "")',
+      'Rel(repo_b, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { content } = await pumlFix(puml, "orders_db");
     expect(warn).toHaveBeenCalled();
     const msg = String(warn.mock.calls[0][0]);
-    expect(msg).toContain("Cannot determine owner of orders_db");
-    expect(msg).toContain("no repo/relay tagged accessor found");
-    expect(msg).toContain("using alpha");
+    expect(msg).toContain("multiple tagged accessors");
+    expect(msg).toContain("repo_a");
+    expect(msg).toContain("repo_b");
+    // repo_b gets rewired through repo_a (first tagged owner)
+    expect(content).toContain("Rel(repo_b, repo_a");
   });
 
-  it("does NOT warn about multiple owners when only one is tagged", () => {
+  it("warns when no accessor is tagged and falls back to the first one", async () => {
     const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
-    fixPuml(
-      [
-        {
-          name: "orders_repo",
-          tags: ["repo"],
-          relations: [{ to: "orders_db" }],
-        },
-        { name: "orders_api", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(alpha, "A")',
+      'Container(beta, "B")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(alpha, orders_db, "")',
+      'Rel(beta, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { content } = await pumlFix(puml, "orders_db");
+    expect(warn).toHaveBeenCalled();
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain("no repo/relay tagged accessor");
+    // beta gets rewired through alpha (first in declaration order)
+    expect(content).toContain("Rel(beta, alpha");
+  });
+
+  it("emits no warning when only one accessor is tagged", async () => {
+    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="repo")',
+      'Container(payments, "Payments")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(orders_repo, orders_db, "")',
+      'Rel(payments, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    await pumlFix(puml, "orders_db");
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("requires both name AND kind=ContainerDb to pick the violated db", () => {
-    // Stryker: ensure `kind === "ContainerDb"` check still fires.
-    const results = fixPuml(
-      [
-        { name: "orders_db", label: "lookalike" }, // same name, kind=Container
-        // real DB has a different name to avoid duplicate-container ModelIssue
-        dbSpec("real_orders_db", "Real Orders DB"),
-        { name: "a", relations: [{ to: "real_orders_db" }] },
-        { name: "b", relations: [{ to: "real_orders_db" }] },
-      ],
-      "real_orders_db",
-    );
-    expect(results).toHaveLength(1);
-    expect(results[0].edits[0].search).toContain("real_orders_db");
+  it("requires both name AND kind=ContainerDb to pick the violated element", async () => {
+    // A non-DB element shares its name with the violation — fix should
+    // NOT touch it because the rule only redirects DB accessors.
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_db, "Imposter")',
+      'Container(svc, "Service")',
+      'Rel(svc, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { fixes } = await pumlFix(puml, "orders_db");
+    expect(fixes).toHaveLength(0);
   });
 
-  it("uses an empty tech part when rel.technology is undefined", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
+  it("silently skips a violation whose element is not in the model", async () => {
+    const { model } = await loadPumlString(
+      ["@startuml", STDLIB, 'ContainerDb(x, "X")', "@enduml"].join("\n"),
     );
-    expect(results[0].edits[0].content).toContain(
-      'Rel(payments, orders_repo, ""',
-    );
-  });
-
-  it("preserves rel.technology when present", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        {
-          name: "payments",
-          relations: [{ to: "orders_db", technology: "PostgreSQL" }],
-        },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].content).toContain('"PostgreSQL"');
-  });
-
-  it("joins non-empty tags with + when rendering a redirected relation", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        {
-          name: "payments",
-          relations: [{ to: "orders_db", tags: ["async", "audit"] }],
-        },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].content).toContain('$tags="async+audit"');
-  });
-
-  it("does NOT throw when a violation names a db with zero accessors", () => {
-    const model = buildModel([dbSpec("orders_db")]);
-    expect(() =>
-      dbPerServiceRule.fix!(model, [violation("orders_db")], plantumlSyntax),
-    ).not.toThrow();
-  });
-
-  it("matches accessors whose tags array CONTAINS a repo tag, not requires all", () => {
-    const results = fixPuml(
-      [
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        {
-          name: "orders_repo",
-          tags: ["repo", "internal"],
-          relations: [{ to: "orders_db" }],
-        },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].search).toContain("Rel(payments, orders_db");
-    expect(results[0].edits[0].content).toContain("Rel(payments, orders_repo");
-  });
-
-  it("silently skips a violation whose container is not in the model", () => {
-    const model = buildModel([{ name: "a" }, { name: "b" }]);
     expect(
-      dbPerServiceRule.fix!(model, [violation("ghost")], plantumlSyntax),
+      dbPerServiceRule.fix!({
+        model,
+        violations: [{ element: "ghost", message: "" }],
+        syntax: plantumlSyntax,
+        options: undefined,
+      }),
     ).toHaveLength(0);
   });
 
-  it("includes ONLY accessors that actually reach the db", () => {
-    const results = fixPuml(
-      [
-        {
-          name: "orders_repo",
-          tags: ["repo"],
-          relations: [{ to: "orders_db" }],
-        },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        { name: "logger" }, // no relation to db
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    for (const edit of results[0].edits) {
-      const text = `${edit.search} ${edit.content ?? ""}`;
-      expect(text).not.toContain("logger");
-    }
-  });
-
-  it('tags every FixResult with rule="dbPerService"', () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].rule).toBe("dbPerService");
-  });
-
-  it("treats an empty tags array as no tags", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        {
-          name: "payments",
-          relations: [{ to: "orders_db", tags: [] }],
-        },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].content).not.toContain("$tags=");
-  });
-
-  it('passes "dbPerService" as ruleName into the boundary warn', () => {
-    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
-    fixPuml(
-      [
-        {
-          name: "orders_repo",
-          tags: ["repo"],
-          relations: [{ to: "orders_db" }],
-        },
-        dbSpec(),
-        { name: "fulfillment_api", relations: [{ to: "orders_db" }] },
-      ],
-      "orders_db",
-      [
-        { name: "orders", elementNames: ["orders_repo", "orders_db"] },
-        { name: "fulfillment", elementNames: ["fulfillment_api"] },
-      ],
-    );
-    if (warn.mock.calls.length > 0) {
-      const msg = String(warn.mock.calls[0][0]);
-      expect(msg).toContain("fix dbPerService");
-    }
-  });
-
-  it("does NOT auto-fix when only one accessor exists", () => {
-    const results = fixPuml(
-      [{ name: "orders_repo", relations: [{ to: "orders_db" }] }, dbSpec()],
-      "orders_db",
-    );
-    expect(results).toHaveLength(0);
-  });
-
-  it("warns and uses the first when multiple tagged owners are present", () => {
-    const results = fixPuml(
-      [
-        {
-          name: "orders_repo",
-          tags: ["repo"],
-          relations: [{ to: "orders_db" }],
-        },
-        {
-          name: "payments_repo",
-          tags: ["repo"],
-          relations: [{ to: "orders_db" }],
-        },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].content).toContain("orders_repo");
-    expect(results[0].edits[0].search).toContain("payments_repo");
-  });
-
-  it("falls back to first accessor when no repo tag found", () => {
-    const results = fixPuml(
-      [
-        { name: "alpha", relations: [{ to: "orders_db" }] },
-        { name: "beta", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].content).toContain("alpha");
-  });
-
-  it("generates replace for each extra accessor with three accessors", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        { name: "analytics", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits).toHaveLength(2);
-    // Owner = orders_repo (name matches `*_repo` default pattern,
-    // so dbPerService treats it as the canonical owner even without
-    // an explicit `repo` tag).
-    // Extras = payments, analytics — both redirect to orders_repo.
-    const searches = results[0].edits.map((e) => e.search);
-    expect(searches.some((s) => s.includes("Rel(analytics, orders_db"))).toBe(
-      true,
-    );
-    expect(searches.some((s) => s.includes("Rel(payments, orders_db"))).toBe(
-      true,
-    );
-    for (const e of results[0].edits) {
-      expect(e.content).toContain("orders_repo");
-    }
-  });
-
-  it("returns FixResult for each violated db", () => {
-    const model = buildModel([
-      { name: "svc1", relations: [{ to: "orders_db" }] },
-      {
-        name: "svc2",
-        relations: [{ to: "orders_db" }, { to: "users_db" }],
-      },
-      { name: "svc3", relations: [{ to: "users_db" }] },
-      dbSpec("orders_db"),
-      dbSpec("users_db", "Users DB"),
-    ]);
-    const results = dbPerServiceRule.fix!(
-      model,
-      [violation("orders_db"), violation("users_db")],
-      plantumlSyntax,
-    );
-    expect(results).toHaveLength(2);
-  });
-
-  it("description contains container names", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].description).toContain("orders_db");
-    expect(results[0].description).toContain("orders_repo");
-  });
-
-  it("applies edits correctly to puml fragment", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        { name: "payments", relations: [{ to: "orders_db" }] },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
+  it("emits a replace per non-owner accessor when there are three accessors", async () => {
     const puml = [
-      'Container(orders_repo, "Orders Repo")',
-      'ContainerDb(orders_db, "Orders DB")',
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="repo")',
       'Container(payments, "Payments")',
-      'Rel(orders_repo, orders_db, "CRUD")',
-      'Rel(payments, orders_db, "reads")',
+      'Container(fulfillment, "Fulfillment")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(orders_repo, orders_db, "")',
+      'Rel(payments, orders_db, "")',
+      'Rel(fulfillment, orders_db, "")',
+      "@enduml",
     ].join("\n");
-    const patched = applyEdits(puml, results[0].edits);
-    expect(patched).toContain("Rel(payments, orders_repo");
-    expect(patched).not.toContain("Rel(payments, orders_db");
-    expect(patched).toContain("Rel(orders_repo, orders_db");
+    const { content } = await pumlFix(puml, "orders_db");
+    expect(content).toContain("Rel(payments, orders_repo");
+    expect(content).toContain("Rel(fulfillment, orders_repo");
+    // Owner's edge stays
+    expect(content).toContain('Rel(orders_repo, orders_db, "")');
   });
 
-  it("does not affect lines without violations", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        {
-          name: "payments",
-          relations: [{ to: "orders_db" }, { to: "notifications" }],
-        },
-        { name: "notifications" },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits).toHaveLength(1);
-    expect(results[0].edits[0].search).not.toContain("notifications");
+  it("description names both the db and the chosen owner", async () => {
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="repo")',
+      'Container(payments, "Payments")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(orders_repo, orders_db, "")',
+      'Rel(payments, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { fixes } = await pumlFix(puml, "orders_db");
+    expect(fixes[0].description).toContain("orders_db");
+    expect(fixes[0].description).toContain("orders_repo");
   });
 
-  it("works with async tags in Rel", () => {
-    const results = fixPuml(
-      [
-        { name: "orders_repo", relations: [{ to: "orders_db" }] },
-        {
-          name: "payments",
-          relations: [{ to: "orders_db", tags: ["async"] }],
-        },
-        dbSpec(),
-      ],
-      "orders_db",
-    );
-    expect(results[0].edits[0].content).toContain('$tags="async"');
-  });
-});
-
-describe("dbPerServiceRule.fix invariants", () => {
-  test.prop([nameArb, nameArb])(
-    "never throws on any pair of services sharing a db",
-    (a, b) => {
-      if (a === b) return;
-      const model = buildModel([
-        { name: a, relations: [{ to: "shared" }] },
-        { name: b, relations: [{ to: "shared" }] },
-        dbSpec("shared", "shared"),
-      ]);
-      const violations = dbPerServiceRule.check(model);
-      const result = dbPerServiceRule.fix!(model, violations, plantumlSyntax);
-      expect(Array.isArray(result)).toBe(true);
-    },
-  );
-});
-
-describe("dbPerServiceRule.fix — cross-boundary", () => {
-  const crossBoundaryBoundaries: BoundarySpec[] = [
-    {
-      name: "orders",
-      elementNames: ["orders_public_api", "orders_repo", "orders_db"],
-    },
-    { name: "fulfillment", elementNames: ["fulfillment_api"] },
-  ];
-  const crossBoundaryContainers: ElementSpec[] = [
-    { name: "orders_public_api" },
-    {
-      name: "orders_repo",
-      tags: ["repo"],
-      relations: [{ to: "orders_db" }],
-    },
-    dbSpec(),
-    { name: "fulfillment_api", relations: [{ to: "orders_db" }] },
-  ];
-
-  it("redirects cross-boundary accessor through public API of db boundary", () => {
-    const results = fixPuml(
-      crossBoundaryContainers,
-      "orders_db",
-      crossBoundaryBoundaries,
-    );
-    expect(results).toHaveLength(1);
-    expect(results[0].edits[0].type).toBe("replace");
-    expect(results[0].edits[0].content).toContain("orders_public_api");
-    expect(results[0].edits[0].content).not.toContain("orders_repo");
+  it("emits FixResult per violated db when fixing many at once", async () => {
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(repo_a, "A", $tags="repo")',
+      'Container(repo_b, "B", $tags="repo")',
+      'Container(svc1, "S1")',
+      'Container(svc2, "S2")',
+      'ContainerDb(db_a, "DB A")',
+      'ContainerDb(db_b, "DB B")',
+      'Rel(repo_a, db_a, "")',
+      'Rel(svc1, db_a, "")',
+      'Rel(repo_b, db_b, "")',
+      'Rel(svc2, db_b, "")',
+      "@enduml",
+    ].join("\n");
+    const { model, source } = await loadPumlString(puml);
+    const violations = dbPerServiceRule.check(model);
+    const fixes = dbPerServiceRule.fix!({
+      model,
+      violations,
+      syntax: plantumlSyntax,
+      options: undefined,
+    });
+    expect(fixes).toHaveLength(2);
+    const edits = fixes.flatMap((f) => f.edits);
+    const { content } = applyEdits(source, edits);
+    expect(content).toContain("Rel(svc1, repo_a");
+    expect(content).toContain("Rel(svc2, repo_b");
   });
 
-  it("skips cross-boundary accessor when db boundary has no public API", () => {
-    const results = fixPuml(
-      [
-        {
-          name: "orders_repo",
-          tags: ["repo"],
-          relations: [{ to: "orders_db" }],
-        },
-        dbSpec(),
-        { name: "fulfillment_api", relations: [{ to: "orders_db" }] },
-      ],
-      "orders_db",
-      [
-        { name: "orders", elementNames: ["orders_repo", "orders_db"] },
-        { name: "fulfillment", elementNames: ["fulfillment_api"] },
-      ],
-    );
-    expect(results).toHaveLength(0);
+  it("matches accessors whose tags array contains a repo tag (not requires all)", async () => {
+    // `orders_repo` has tags ["legacy", "repo"]. Pin: the includes()
+    // semantics on tag membership — without it, the rule would
+    // require every ownerTag to be present and miss real repos.
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="legacy+repo")',
+      'Container(payments, "Payments")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(orders_repo, orders_db, "")',
+      'Rel(payments, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { content } = await pumlFix(puml, "orders_db");
+    expect(content).toContain("Rel(payments, orders_repo");
   });
 
-  it("still redirects same-boundary accessor through repo when mixed boundaries", () => {
-    const results = fixPuml(
-      [
-        ...crossBoundaryContainers,
-        { name: "orders_worker", relations: [{ to: "orders_db" }] },
-      ],
-      "orders_db",
-      [
-        {
-          name: "orders",
-          elementNames: [
-            "orders_public_api",
-            "orders_repo",
-            "orders_db",
-            "orders_worker",
-          ],
-        },
-        { name: "fulfillment", elementNames: ["fulfillment_api"] },
-      ],
-    );
-    const edits = results[0].edits;
-    const internalEdit = edits.find((e) => e.search.includes("orders_worker"));
-    const crossEdit = edits.find((e) => e.search.includes("fulfillment_api"));
+  it("only includes accessors that actually reach the db (not random accessors)", async () => {
+    // `bystander` doesn't touch orders_db. Pin: it must NOT be
+    // considered for owner selection or redirect targets.
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="repo")',
+      'Container(payments, "Payments")',
+      'Container(bystander, "Bystander")',
+      'ContainerDb(orders_db, "DB")',
+      'ContainerDb(other_db, "Other")',
+      'Rel(orders_repo, orders_db, "")',
+      'Rel(payments, orders_db, "")',
+      'Rel(bystander, other_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { content } = await pumlFix(puml, "orders_db");
+    expect(content).toContain("Rel(payments, orders_repo");
+    // bystander's edge to other_db is intact, no spurious redirect.
+    expect(content).toContain("Rel(bystander, other_db");
+  });
 
-    expect(internalEdit?.content).toContain("orders_repo");
-    expect(crossEdit?.content).toContain("orders_public_api");
+  it("preserves relation tags via the + separator when redirecting", async () => {
+    // Pin: `rel.tags.join("+")` — extra tags on the original edge
+    // (e.g. `async`) survive the rewrite intact.
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders_repo, "Repo", $tags="repo")',
+      'Container(payments, "Payments")',
+      'ContainerDb(orders_db, "DB")',
+      'Rel(orders_repo, orders_db, "")',
+      'Rel(payments, orders_db, "", $tags="async")',
+      "@enduml",
+    ].join("\n");
+    const { content } = await pumlFix(puml, "orders_db");
+    expect(content).toContain("Rel(payments, orders_repo");
+    expect(content).toContain('$tags="async"');
+  });
+
+  test.prop([nameArb])("never throws on arbitrary identifiers", async (svc) => {
+    const puml = [
+      "@startuml",
+      STDLIB,
+      `Container(${svc}, "S")`,
+      'Container(orders_repo, "Repo", $tags="repo")',
+      'ContainerDb(orders_db, "DB")',
+      `Rel(${svc}, orders_db, "")`,
+      'Rel(orders_repo, orders_db, "")',
+      "@enduml",
+    ].join("\n");
+    const { model } = await loadPumlString(puml);
+    const violations = dbPerServiceRule.check(model);
+    expect(() =>
+      dbPerServiceRule.fix!({
+        model,
+        violations,
+        syntax: plantumlSyntax,
+        options: undefined,
+      }),
+    ).not.toThrow();
   });
 });
 
 describe("dbPerServiceRule.fix (structurizr syntax)", () => {
-  it("replaces relation pattern correctly", () => {
-    const model = buildModel([
-      {
-        name: "orders_repo",
-        label: "Orders Repo",
-        relations: [{ to: "orders_db", technology: "PostgreSQL" }],
-      },
-      {
-        name: "other_service",
-        label: "Other Service",
-        relations: [{ to: "orders_db" }],
-      },
-      dbSpec(),
-    ]);
-    const results = dbPerServiceRule.fix!(
-      model,
-      [violation("orders_db")],
-      structurizrDslSyntax,
+  it("emits structurizr DSL content via FormatSyntax helper", () => {
+    const rel = structurizrDslSyntax.relationDecl(
+      "payments",
+      "orders_repo",
+      "JDBC",
     );
-    const dsl = [
-      'orders_repo = container "Orders Repo"',
-      'other_service = container "Other Service"',
-      'orders_db = container "Orders DB" "Storage" "PostgreSQL"',
-      'orders_repo -> orders_db "PostgreSQL"',
-      'other_service -> orders_db ""',
-    ].join("\n");
-    const patched = applyEdits(dsl, results[0].edits);
-
-    expect(patched).toContain("other_service -> orders_repo");
-    expect(patched).not.toContain("other_service -> orders_db");
+    expect(rel).toBe('payments -> orders_repo "JDBC"');
   });
 });

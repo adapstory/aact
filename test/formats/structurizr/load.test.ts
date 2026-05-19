@@ -1041,12 +1041,6 @@ describe("structurizr load — F2 fidelity (url, group, perspectives)", () => {
 });
 
 describe("structurizrDslSyntax helpers", () => {
-  it("containerPattern returns DSL assignment prefix", () => {
-    expect(structurizrDslSyntax.containerPattern("orders")).toBe(
-      "orders = container",
-    );
-  });
-
   it("containerDecl without tags emits a single-line declaration", () => {
     expect(structurizrDslSyntax.containerDecl("orders", "Orders Service")).toBe(
       'orders = container "Orders Service"',
@@ -1057,10 +1051,6 @@ describe("structurizrDslSyntax helpers", () => {
     expect(
       structurizrDslSyntax.containerDecl("orders_acl", "Orders ACL", "acl"),
     ).toBe('orders_acl = container "Orders ACL" {\n    tags "acl"\n}');
-  });
-
-  it("relationPattern matches a `from -> to` arrow", () => {
-    expect(structurizrDslSyntax.relationPattern("a", "b")).toBe("a -> b");
   });
 
   it("relationDecl emits technology in quotes when present", () => {

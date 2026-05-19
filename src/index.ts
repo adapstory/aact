@@ -8,8 +8,8 @@ export {
   type FixCapability,
   type Format,
   type FormatOutput,
+  type FormatSyntax,
   type LoadResult,
-  type SourceSyntax,
 } from "./formats/types";
 export * from "./model";
 export * from "./rules";

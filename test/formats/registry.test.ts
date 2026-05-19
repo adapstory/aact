@@ -96,18 +96,17 @@ describe("Format registry — capability contracts", () => {
 
 describe("Format API — fix capability shape", () => {
   it.each(CAPABILITIES_MATRIX.filter((r) => r.fix))(
-    "$name fix.syntax implements full SourceSyntax interface",
+    "$name fix.syntax implements full FormatSyntax interface",
     async ({ name }) => {
       const fmt = await loadFormat(name);
       if (!canFix(fmt))
         throw new Error(`${name} declared fix but canFix=false`);
       const { syntax } = fmt.fix;
 
-      // Smoke: each method returns a non-empty string for trivial input.
-      // Side-effect: проверяет что метод существует и callable без TS narrowing.
-      expect(syntax.containerPattern("svc")).toContain("svc");
+      // Smoke: each content-builder returns a non-empty string for
+      // trivial input. Patterns are gone in v3 — edits anchor on
+      // `SourceLocation` byte ranges, not text search.
       expect(syntax.containerDecl("svc", "Service").length).toBeGreaterThan(0);
-      expect(syntax.relationPattern("a", "b").length).toBeGreaterThan(0);
       expect(syntax.relationDecl("a", "b").length).toBeGreaterThan(0);
     },
   );

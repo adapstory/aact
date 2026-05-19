@@ -839,10 +839,6 @@ describe("PlantUML load — fixture-coverage edge", () => {
 });
 
 describe("plantumlSyntax helpers", () => {
-  it("containerPattern returns a unique search anchor", () => {
-    expect(plantumlSyntax.containerPattern("orders")).toBe("(orders,");
-  });
-
   it("containerDecl without tags omits the $tags attribute", () => {
     expect(plantumlSyntax.containerDecl("orders", "Orders Service")).toBe(
       'Container(orders, "Orders Service")',
@@ -853,10 +849,6 @@ describe("plantumlSyntax helpers", () => {
     expect(
       plantumlSyntax.containerDecl("orders_acl", "Orders ACL", "acl+repo"),
     ).toBe('Container(orders_acl, "Orders ACL", "", "", $tags="acl+repo")');
-  });
-
-  it("relationPattern matches a Rel( prefix for the given pair", () => {
-    expect(plantumlSyntax.relationPattern("a", "b")).toBe("Rel(a, b");
   });
 
   it("relationDecl renders technology and tags when present", () => {

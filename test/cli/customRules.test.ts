@@ -84,7 +84,7 @@ const noLegacyWithFixRule = defineRule({
       .filter((c) => c.tags.includes(tag))
       .map((c) => ({ element: c.name, message: `tagged "${tag}"` }));
   },
-  fix(_model: Model, violations) {
+  fix({ violations }) {
     return violations.map((v) => ({
       rule: "noLegacyFix",
       description: `Remove legacy tag from ${v.element}`,

@@ -1,12 +1,10 @@
-import type { SourceSyntax } from "../types";
+import type { FormatSyntax } from "../types";
 
-export const plantumlSyntax: SourceSyntax = {
-  containerPattern: (name) => `(${name},`,
+export const plantumlSyntax: FormatSyntax = {
   containerDecl: (name, label, tags) => {
     const tagsPart = tags ? `, "", "", $tags="${tags}"` : "";
     return `Container(${name}, "${label}"${tagsPart})`;
   },
-  relationPattern: (from, to) => `Rel(${from}, ${to}`,
   relationDecl: (from, to, tech, tags) => {
     const tagsPart = tags ? `, $tags="${tags}"` : "";
     return `Rel(${from}, ${to}, "${tech ?? ""}"${tagsPart})`;

@@ -1,5 +1,6 @@
 import consola from "consola";
 
+import type { FormatSyntax } from "../formats/types";
 import type { Element, Model } from "../model";
 import { allElements, targetOf } from "../model";
 import {
@@ -77,12 +78,10 @@ const deriveRepoLabel = (dbName: string): string => {
   );
 };
 
-type FixSyntax = Parameters<NonNullable<RuleDefinition<CrudOptions>["fix"]>>[2];
-
 const fixNonRepoAccessesDb = (
   accessor: Element,
   model: Model,
-  syntax: FixSyntax,
+  syntax: FormatSyntax,
   options: CrudOptions | undefined,
   convention: NamingConvention,
 ): FixResult | undefined => {
@@ -92,9 +91,10 @@ const fixNonRepoAccessesDb = (
   );
   const elementBoundaryMap = buildElementBoundaryMap(model);
 
-  const edits: SourceEdit[] = dbRels.flatMap((rel) => {
+  const edits: SourceEdit[] = dbRels.flatMap((rel): SourceEdit[] => {
     const db = targetOf(model, rel);
     if (!db) return [];
+    if (!rel.sourceLocation) return [];
 
     // Find any existing repo for `db` — including one identified by
     // name convention (e.g. `user_repository` in a legacy archive
@@ -129,24 +129,25 @@ const fixNonRepoAccessesDb = (
         existingRepo.tags.includes(t),
       );
       const canonicalRepoTag = ownerTags[0] ?? "repo";
-      const tagEdits: SourceEdit[] = repoNeedsTagging
-        ? [
-            {
-              type: "replace" as const,
-              search: syntax.containerPattern(existingRepo.name),
-              content: syntax.containerDecl(
-                existingRepo.name,
-                existingRepo.label,
-                canonicalRepoTag,
-              ),
-            },
-          ]
-        : [];
+      const tagEdits: SourceEdit[] =
+        repoNeedsTagging && existingRepo.sourceLocation
+          ? [
+              {
+                kind: "replace",
+                range: existingRepo.sourceLocation,
+                content: syntax.containerDecl(
+                  existingRepo.name,
+                  existingRepo.label,
+                  canonicalRepoTag,
+                ),
+              },
+            ]
+          : [];
       return [
         ...tagEdits,
         {
-          type: "replace" as const,
-          search: syntax.relationPattern(accessor.name, db.name),
+          kind: "replace",
+          range: rel.sourceLocation,
           content: syntax.relationDecl(
             accessor.name,
             redirectTarget.name,
@@ -177,24 +178,27 @@ const fixNonRepoAccessesDb = (
       return [];
     }
 
+    if (!db.sourceLocation) return [];
+
+    // New repo + its hop edge insert as one block right after the DB
+    // container; the offending direct edge is replaced in place.
+    const newDecls = [
+      syntax.containerDecl(
+        repoName,
+        deriveRepoLabel(db.name),
+        ownerTags[0] ?? "repo",
+      ),
+      syntax.relationDecl(repoName, db.name, rel.technology),
+    ].join("\n");
     return [
       {
-        type: "add" as const,
-        search: syntax.containerPattern(db.name),
-        content: syntax.containerDecl(
-          repoName,
-          deriveRepoLabel(db.name),
-          ownerTags[0] ?? "repo",
-        ),
+        kind: "insert-after",
+        anchor: db.sourceLocation,
+        content: `\n${newDecls}`,
       },
       {
-        type: "add" as const,
-        search: syntax.containerPattern(repoName),
-        content: syntax.relationDecl(repoName, db.name, rel.technology),
-      },
-      {
-        type: "replace" as const,
-        search: syntax.relationPattern(accessor.name, db.name),
+        kind: "replace",
+        range: rel.sourceLocation,
         content: syntax.relationDecl(accessor.name, repoName, rel.technology),
       },
     ];
@@ -212,20 +216,21 @@ const fixNonRepoAccessesDb = (
 const fixRepoWithNonDbDeps = (
   repo: Element,
   model: Model,
-  syntax: FixSyntax,
 ): FixResult | undefined => {
   const nonDbRels = repo.relations.filter(
     (r) => targetOf(model, r)?.kind !== "ContainerDb",
   );
   if (nonDbRels.length === 0) return undefined;
 
+  const edits: SourceEdit[] = nonDbRels.flatMap((rel): SourceEdit[] =>
+    rel.sourceLocation ? [{ kind: "remove", range: rel.sourceLocation }] : [],
+  );
+  if (edits.length === 0) return undefined;
+
   return {
     rule: "crud",
     description: `Remove non-database dependencies from repo ${repo.name}`,
-    edits: nonDbRels.map((rel) => ({
-      type: "remove" as const,
-      search: syntax.relationPattern(repo.name, rel.to),
-    })),
+    edits,
   };
 };
 
@@ -280,7 +285,8 @@ export const crudRule: RuleDefinition<CrudOptions> = {
     return violations;
   },
 
-  fix(model, violations, syntax, options) {
+  fix(ctx) {
+    const { model, violations, syntax, options } = ctx;
     const convention = detectNamingConvention(model);
     const results: FixResult[] = [];
 
@@ -289,7 +295,7 @@ export const crudRule: RuleDefinition<CrudOptions> = {
       if (!element) continue;
 
       const fix = isRepo(element, options)
-        ? fixRepoWithNonDbDeps(element, model, syntax)
+        ? fixRepoWithNonDbDeps(element, model)
         : fixNonRepoAccessesDb(element, model, syntax, options, convention);
       if (fix) results.push(fix);
     }

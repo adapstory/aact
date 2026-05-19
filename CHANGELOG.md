@@ -6,6 +6,90 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.10 — 2026-05-19
+
+Range-based `--fix` engine replaces the string-matching applier. Every
+fix edit now anchors on a real `SourceLocation` byte range (chevrotain
+parsers populate them on every Element / Boundary / Relation), so the
+applier is a pure byte-splicer — no more `[warn] ambiguous pattern`
+fallbacks, no guessing which of two same-looking lines the rule meant.
+Overlapping edits between rules are detected and surfaced as
+`fix.editConflict` diagnostics instead of silently dropped.
+
+### Changed (breaking — fix API)
+
+- `SourceEdit` is a discriminated union by `kind`:
+  - `{ kind: "replace"; range: SourceLocation; content: string }`
+  - `{ kind: "remove"; range: SourceLocation }`
+  - `{ kind: "insert-after"; anchor: SourceLocation; content: string }`
+  - `{ kind: "insert-before"; anchor: SourceLocation; content: string }`
+
+  The old `{ type, search, content }` shape is gone. Custom rule
+  authors anchor edits on the node's `sourceLocation` directly —
+  `model.elements[name].sourceLocation`, `rel.sourceLocation`, etc.
+
+- `RuleDefinition.fix` now takes a single `FixContext<O>` argument:
+  ```ts
+  fix?(ctx: { model, violations, syntax, options }): readonly FixResult[]
+  ```
+  Bag-of-args so future additions (raw source string, multi-file map)
+  land as additive optional fields without changing the call shape.
+- `FormatSyntax` (renamed from `SourceSyntax`) is reduced to two
+  content-builders: `containerDecl` and `relationDecl`. The
+  `containerPattern` / `relationPattern` regex builders are gone —
+  range-based edits don't need them.
+- `applyEdits(source, edits)` returns a structured result
+  `{ content, applied, conflicts }`. Pure function, no `consola.warn`
+  side effects — the CLI surfaces conflicts as diagnostics instead.
+
+### Added
+
+- `fix.editConflict` diagnostic kind. Emitted when two fix edits want
+  to touch overlapping byte ranges. The applier keeps the first one
+  (deterministic, input order), reports the rest with `kept` /
+  `skipped` / `keptAt` / `skippedAt` context. Re-running `--fix`
+  after a conflict picks up the dropped edit if it's still applicable.
+- `editLocation(edit): SourceLocation` helper in `rules/lib/applyEdits`
+  for callers (CLI, diagnostics, future LSP) that need to display
+  edit positions without re-matching the discriminant.
+- `RelationSpec.sourceLocation` / `ElementSpec.sourceLocation` in
+  `test/helpers/makeModel` — lets rule tests synthesize models that
+  the range-based fix engine can operate on without a parser pass.
+
+### Migration
+
+Custom rule with a `fix`:
+
+```ts
+// Before (beta.9)
+fix(model, violations, syntax, options) {
+  return violations.map((v) => ({
+    rule: "myRule",
+    description: "...",
+    edits: [
+      { type: "replace", search: syntax.relationPattern(v.element, "x"),
+        content: syntax.relationDecl(v.element, "y") },
+    ],
+  }));
+}
+
+// After (beta.10)
+fix({ model, violations, syntax }) {
+  return violations.flatMap((v) => {
+    const rel = model.elements[v.element]?.relations.find((r) => r.to === "x");
+    if (!rel?.sourceLocation) return [];
+    return [{
+      rule: "myRule",
+      description: "...",
+      edits: [
+        { kind: "replace", range: rel.sourceLocation,
+          content: syntax.relationDecl(v.element, "y") },
+      ],
+    }];
+  });
+}
+```
+
 ## v3.0.0-beta.9 — 2026-05-19
 
 C4 vocabulary alignment is the headline of this beta — the wrapper type

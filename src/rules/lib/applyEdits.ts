@@ -1,63 +1,144 @@
-import consola from "consola";
-
+import type { SourceLocation } from "../../model";
 import type { SourceEdit } from "../types";
 
 /**
- * Text-based fix engine. Edits match single line by substring,
- * indentation наследуется от matched line, ambiguous matches warn'аются
- * (first hit wins). Multi-line block edits — not supported, нужен
- * AST-based primitive (future).
+ * Where the edit's affected byte range lives. `replace`/`remove`
+ * report their `range`, the two insert kinds their `anchor`.
+ * Exposed because CLI / diagnostic consumers need to format the
+ * location uniformly without re-matching the discriminant.
  */
+export const editLocation = (e: SourceEdit): SourceLocation =>
+  "range" in e ? e.range : e.anchor;
 
-const applyIndent = (content: string, indent: string): string =>
-  content
-    .split("\n")
-    // Stryker disable next-line MethodExpression
-    .map((line) => (line.trim() ? indent + line : line))
-    .join("\n");
+/**
+ * Pure byte-splicer for `SourceEdit`s. Edits carry full `SourceLocation`
+ * byte ranges (loaders populate them on every Element / Boundary /
+ * Relation), so the applier never has to match text patterns or guess
+ * which line is meant. Three rules:
+ *
+ *   1. Edits are applied in *reverse* offset order. That way splicing
+ *      earlier offsets never shifts the byte coordinates of later
+ *      edits — the same pattern LSP / VS Code's `TextDocumentEdit`
+ *      uses.
+ *   2. Two edits whose touched ranges overlap conflict. The applier
+ *      keeps the first one (in input order) and reports the
+ *      subsequent ones as `conflicts` — the CLI surfaces them as
+ *      warnings instead of silently dropping a partial edit.
+ *   3. Insertion (`insert-after` / `insert-before`) is just a splice
+ *      at a single offset with zero-width "range". `content` is
+ *      written verbatim — rules emit the newline + indentation they
+ *      want; the applier does not interpret formatting.
+ *
+ * Returns the new content plus structured metadata. The CLI uses
+ * `applied` to count successful fixes and `conflicts` to emit
+ * diagnostics; library consumers can do the same. The function is
+ * agnostic to source format — it works on PUML, Structurizr DSL,
+ * Kubernetes YAML, or anything else byte-addressable.
+ */
+export interface ApplyEditsResult {
+  readonly content: string;
+  readonly applied: readonly SourceEdit[];
+  readonly conflicts: readonly EditConflict[];
+}
+
+export interface EditConflict {
+  readonly skipped: SourceEdit;
+  readonly conflictsWith: SourceEdit;
+}
+
+interface NormalizedEdit {
+  readonly edit: SourceEdit;
+  readonly start: number;
+  readonly end: number;
+  readonly content: string;
+}
+
+const normalize = (edit: SourceEdit): NormalizedEdit => {
+  switch (edit.kind) {
+    case "replace": {
+      return {
+        edit,
+        start: edit.range.start.offset,
+        end: edit.range.end.offset,
+        content: edit.content,
+      };
+    }
+    case "remove": {
+      return {
+        edit,
+        start: edit.range.start.offset,
+        end: edit.range.end.offset,
+        content: "",
+      };
+    }
+    case "insert-after": {
+      return {
+        edit,
+        start: edit.anchor.end.offset,
+        end: edit.anchor.end.offset,
+        content: edit.content,
+      };
+    }
+    case "insert-before": {
+      return {
+        edit,
+        start: edit.anchor.start.offset,
+        end: edit.anchor.start.offset,
+        content: edit.content,
+      };
+    }
+  }
+};
+
+const overlaps = (a: NormalizedEdit, b: NormalizedEdit): boolean => {
+  // Range edits overlap when their half-open intervals intersect.
+  // Pure insertions (zero-width) at the same offset also count as
+  // conflicts — applying both would have order-dependent results
+  // that the rule author didn't ask for.
+  if (a.start === a.end && b.start === b.end) return a.start === b.start;
+  return a.start < b.end && b.start < a.end;
+};
 
 export const applyEdits = (
   source: string,
   edits: readonly SourceEdit[],
-): string => {
-  const lines = source.split("\n");
+): ApplyEditsResult => {
+  const normalized = edits.map(normalize);
 
-  for (const edit of edits) {
-    const idx = lines.findIndex((line) => line.includes(edit.search));
-
-    if (idx === -1) {
-      consola.warn(`fix: pattern not found in source — "${edit.search}"`);
+  // Conflict detection runs against input order (first edit wins).
+  // We track which normalized edits actually get applied so we can
+  // splice in reverse-offset order independently of the input order.
+  const accepted: NormalizedEdit[] = [];
+  const conflicts: EditConflict[] = [];
+  for (const candidate of normalized) {
+    const clashing = accepted.find((acc) => overlaps(acc, candidate));
+    if (clashing) {
+      conflicts.push({
+        skipped: candidate.edit,
+        conflictsWith: clashing.edit,
+      });
       continue;
     }
-
-    const matchCount = lines.filter((line) =>
-      line.includes(edit.search),
-    ).length;
-    if (matchCount > 1) {
-      consola.warn(
-        `fix: ambiguous pattern "${edit.search}" matches ${matchCount} lines, using first`,
-      );
-    }
-
-    // `/^(\s*)/` always matches zero-width at the start of any string.
-    // Stryker disable next-line Regex
-    const indent = /^(\s*)/.exec(lines[idx])![1];
-
-    switch (edit.type) {
-      case "remove": {
-        lines.splice(idx, 1);
-        break;
-      }
-      case "replace": {
-        lines[idx] = applyIndent(edit.content ?? "", indent);
-        break;
-      }
-      case "add": {
-        lines.splice(idx + 1, 0, applyIndent(edit.content ?? "", indent));
-        break;
-      }
-    }
+    accepted.push(candidate);
   }
 
-  return lines.join("\n");
+  // Reverse offset order keeps earlier slices stable while we splice
+  // later parts of the string. Ties break on end-offset (longer range
+  // first) so an `insert-after` colocated with the end of a `replace`
+  // lands on the *original* offset, not the post-replace one.
+  const ordered = [...accepted].toSorted((a, b) => {
+    if (b.start !== a.start) return b.start - a.start;
+    return b.end - a.end;
+  });
+
+  let content = source;
+  for (const n of ordered) {
+    content = content.slice(0, n.start) + n.content + content.slice(n.end);
+  }
+
+  return {
+    content,
+    applied: accepted.map((n) => n.edit),
+    conflicts,
+  };
 };

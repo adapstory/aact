@@ -5,13 +5,18 @@ import path from "pathe";
 
 import type { AactConfig } from "../../config";
 import { loadFormat } from "../../formats/registry";
-import type { FixCapability, SourceSyntax } from "../../formats/types";
+import type { FixCapability, FormatSyntax } from "../../formats/types";
 import { canFix } from "../../formats/types";
 import type { Model, SourceLocation } from "../../model";
 import { formatLocation } from "../../model";
-import { applyEdits } from "../../rules/lib/applyEdits";
+import { applyEdits, editLocation } from "../../rules/lib/applyEdits";
 import { ruleRegistry } from "../../rules/registry";
-import type { FixResult, RuleDefinition, Violation } from "../../rules/types";
+import type {
+  FixResult,
+  RuleDefinition,
+  SourceEdit,
+  Violation,
+} from "../../rules/types";
 import { issueToDiagnostic, loadModel } from "../loadModel";
 import type { Diagnostic, ExitCode, Renderer } from "../output";
 import { linkSourceLocation } from "../output/hyperlinks";
@@ -172,7 +177,7 @@ const generateFixes = (
   model: Model,
   results: readonly RuleResult[],
   rules: AactConfig["rules"],
-  syntax: SourceSyntax,
+  syntax: FormatSyntax,
   effective: readonly RuleDefinition[],
 ): FixResult[] => {
   const ruleByName = new Map(effective.map((r) => [r.name, r]));
@@ -184,7 +189,12 @@ const generateFixes = (
     const configValue = getRuleConfigValue(rules, ruleDef.name);
     const options = typeof configValue === "object" ? configValue : undefined;
     fixes.push(
-      ...(ruleDef.fix?.(model, result.violations, syntax, options) ?? []),
+      ...(ruleDef.fix?.({
+        model,
+        violations: result.violations,
+        syntax,
+        options,
+      }) ?? []),
     );
   }
   return fixes;
@@ -236,6 +246,7 @@ const buildSummary = (results: readonly RuleResult[]): CheckSummary => {
 interface ApplyFixesResult {
   readonly remaining: number;
   readonly writePath: string;
+  readonly conflictDiagnostics: readonly Diagnostic[];
 }
 
 const applyFixes = async (
@@ -244,21 +255,51 @@ const applyFixes = async (
   effective: readonly RuleDefinition[],
 ): Promise<ApplyFixesResult> => {
   const writePath = path.resolve(config.source.writePath ?? config.source.path);
-  let source = await readFile(writePath, "utf8");
-  for (const fix of fixes) source = applyEdits(source, fix.edits);
-  await writeFile(writePath, source, "utf8");
+  const source = await readFile(writePath, "utf8");
+
+  // Pool every edit from every fix into one batch — the range-based
+  // applier resolves offset conflicts globally (reverse-order splice)
+  // instead of running each fix sequentially on the already-mutated
+  // string, which would invalidate the byte ranges of later fixes.
+  const allEdits = fixes.flatMap((f) => f.edits);
+  const { content, conflicts } = applyEdits(source, allEdits);
+
+  // Conflicts mean two fix edits wanted overlapping byte ranges. The
+  // applier kept the first one (deterministic), but the user needs
+  // to know we silently dropped the second — otherwise `--fix`
+  // becomes a "wrote the file but some rules didn't land" trap.
+  // Surfacing as warning rather than error keeps the loop usable
+  // (re-running `check` either re-emits the dropped fix or shows
+  // the rule's been resolved by the kept edit).
+  const conflictDiagnostics: Diagnostic[] = conflicts.map((c) => {
+    const keptLoc = editLocation(c.conflictsWith);
+    const skippedLoc = editLocation(c.skipped);
+    return {
+      kind: "fix.editConflict",
+      message: `Skipped overlapping fix edit: kept ${c.conflictsWith.kind} at ${formatLocation(keptLoc)}, dropped ${c.skipped.kind} at ${formatLocation(skippedLoc)}. Re-run \`aact check --fix\` after reviewing the partial result.`,
+      severity: "warning",
+      context: {
+        kept: c.conflictsWith.kind,
+        keptAt: formatLocation(keptLoc),
+        skipped: c.skipped.kind,
+        skippedAt: formatLocation(skippedLoc),
+      },
+    };
+  });
+
+  await writeFile(writePath, content, "utf8");
 
   const isDslFix =
     !!config.source.writePath && config.source.writePath !== config.source.path;
   if (isDslFix) {
     // Cannot re-check Structurizr DSL until user regenerates workspace.json.
-    return { remaining: 0, writePath };
+    return { remaining: 0, writePath, conflictDiagnostics };
   }
 
   const { model: reModel } = await loadModel(config);
   const reResults = runRules(reModel, config.rules, effective);
   const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
-  return { remaining, writePath };
+  return { remaining, writePath, conflictDiagnostics };
 };
 
 // -----------------------------------------------------------------------------
@@ -323,6 +364,11 @@ export const executeCheck = async (
       remaining: result.remaining,
       writePath: result.writePath,
     };
+    // Surface every edit conflict — silent drops here would defeat
+    // the whole point of moving from string-matching to range-based
+    // edits. Each conflict is its own diagnostic so the user can see
+    // exactly what landed and what didn't.
+    diagnostics.push(...result.conflictDiagnostics);
   }
 
   return {
@@ -454,6 +500,47 @@ const prefixContent = (content: string, first: string, rest: string): string =>
     .map((line, i) => (i === 0 ? first + line : rest + line))
     .join("\n");
 
+const renderEdit = (edit: SourceEdit, sink: NodeJS.WritableStream): void => {
+  switch (edit.kind) {
+    case "remove": {
+      sink.write(
+        colors.dim(
+          `    - remove ${formatLocation(edit.range)} (${editByteSpan(edit.range)} bytes)\n`,
+        ),
+      );
+      break;
+    }
+    case "replace": {
+      sink.write(colors.dim(`    ~ replace ${formatLocation(edit.range)}\n`));
+      sink.write(
+        colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
+      );
+      break;
+    }
+    case "insert-after": {
+      sink.write(
+        colors.dim(`    + insert after ${formatLocation(edit.anchor)}\n`),
+      );
+      sink.write(
+        colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
+      );
+      break;
+    }
+    case "insert-before": {
+      sink.write(
+        colors.dim(`    + insert before ${formatLocation(edit.anchor)}\n`),
+      );
+      sink.write(
+        colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
+      );
+      break;
+    }
+  }
+};
+
+const editByteSpan = (range: SourceLocation): number =>
+  range.end.offset - range.start.offset;
+
 const renderFixes = (
   fixes: readonly FixResult[],
   sink: NodeJS.WritableStream,
@@ -461,27 +548,7 @@ const renderFixes = (
   for (const fix of fixes) {
     const ruleTag = colors.bold(`[${fix.rule}]`);
     sink.write(`  ${ruleTag}  ${fix.description}\n`);
-    for (const edit of fix.edits) {
-      if (edit.type === "remove") {
-        sink.write(
-          colors.red(prefixContent(edit.search, "    - ", "      ")) + "\n",
-        );
-      } else if (edit.type === "replace") {
-        sink.write(
-          colors.red(prefixContent(edit.search, "    - ", "      ")) + "\n",
-        );
-        sink.write(
-          colors.green(prefixContent(edit.content ?? "", "    + ", "      ")) +
-            "\n",
-        );
-      } else {
-        sink.write(colors.dim(`    (after "${edit.search}")\n`));
-        sink.write(
-          colors.green(prefixContent(edit.content ?? "", "    + ", "      ")) +
-            "\n",
-        );
-      }
-    }
+    for (const edit of fix.edits) renderEdit(edit, sink);
     sink.write("\n");
   }
 };

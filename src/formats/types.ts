@@ -11,19 +11,20 @@ import type { Model, ModelIssue } from "../model";
  */
 
 /**
- * Regex-based primitives для in-place editing source files. Используется
- * fix-функциями правил. Future-ready: AST primitives добавятся как
- * `ast?: AstPrimitives` в FixCapability — non-breaking.
+ * Format-specific content builders used by rule `fix` functions.
+ * Range-based fix engine anchors edits on `SourceLocation` byte
+ * offsets, so the syntax helper only emits *new* content (containers
+ * / relations) — pattern matching is no longer needed. Future
+ * builders (boundaryDecl, propertyDecl, …) plug in as additive
+ * optional methods without breaking plugins.
  */
-export interface SourceSyntax {
-  containerPattern(name: string): string;
+export interface FormatSyntax {
   containerDecl(name: string, label: string, tags?: string): string;
-  relationPattern(from: string, to: string): string;
   relationDecl(from: string, to: string, tech?: string, tags?: string): string;
 }
 
 export interface FixCapability {
-  readonly syntax: SourceSyntax;
+  readonly syntax: FormatSyntax;
 }
 
 /**

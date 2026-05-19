@@ -1,6 +1,18 @@
-import consola from "consola";
-
+import type { SourceLocation } from "../../../src/model";
 import { applyEdits } from "../../../src/rules/lib/applyEdits";
+
+// Build a SourceLocation that points at `source[start..end]`. Test
+// helper — line/col are filled in but the applier only consults
+// `.offset`, so we don't bother computing them accurately.
+const loc = (
+  start: number,
+  end: number,
+  file = "test.puml",
+): SourceLocation => ({
+  file,
+  start: { line: 1, col: start + 1, offset: start },
+  end: { line: 1, col: end + 1, offset: end },
+});
 
 describe("applyEdits", () => {
   const source = [
@@ -8,155 +20,171 @@ describe("applyEdits", () => {
     'Container(svc_b, "Service B")',
     'Rel(svc_a, svc_b, "")',
   ].join("\n");
+  const aDeclStart = 0;
+  const aDeclEnd = 'Container(svc_a, "Service A")'.length;
+  const bDeclStart = aDeclEnd + 1; // \n
+  const bDeclEnd = bDeclStart + 'Container(svc_b, "Service B")'.length;
+  const relStart = bDeclEnd + 1;
+  const relEnd = relStart + 'Rel(svc_a, svc_b, "")'.length;
 
   it("returns source unchanged for empty edits", () => {
-    expect(applyEdits(source, [])).toBe(source);
+    const { content, applied, conflicts } = applyEdits(source, []);
+    expect(content).toBe(source);
+    expect(applied).toEqual([]);
+    expect(conflicts).toEqual([]);
   });
 
-  it("removes a line matching search", () => {
-    const result = applyEdits(source, [
-      { type: "remove", search: "Rel(svc_a, svc_b" },
+  it("removes a range", () => {
+    const { content } = applyEdits(source, [
+      { kind: "remove", range: loc(relStart - 1, relEnd) }, // include leading \n
     ]);
-    expect(result).toBe(
+    expect(content).toBe(
       ['Container(svc_a, "Service A")', 'Container(svc_b, "Service B")'].join(
         "\n",
       ),
     );
   });
 
-  it("replaces a line matching search", () => {
-    const result = applyEdits(source, [
+  it("replaces a range with new content", () => {
+    const { content } = applyEdits(source, [
       {
-        type: "replace",
-        search: "Rel(svc_a, svc_b",
+        kind: "replace",
+        range: loc(relStart, relEnd),
         content: 'Rel(svc_a, svc_c, "")',
       },
     ]);
-    expect(result).toContain('Rel(svc_a, svc_c, "")');
-    expect(result).not.toContain("Rel(svc_a, svc_b");
+    expect(content).toContain('Rel(svc_a, svc_c, "")');
+    expect(content).not.toContain("Rel(svc_a, svc_b");
   });
 
-  it("adds a line after the anchor", () => {
-    const result = applyEdits(source, [
+  it("inserts content after an anchor", () => {
+    const { content } = applyEdits(source, [
       {
-        type: "add",
-        search: 'Container(svc_a, "Service A")',
-        content: 'Container(svc_a_acl, "Service A ACL")',
+        kind: "insert-after",
+        anchor: loc(aDeclStart, aDeclEnd),
+        content: '\nContainer(svc_a_acl, "Service A ACL")',
       },
     ]);
-    const lines = result.split("\n");
+    const lines = content.split("\n");
     expect(lines[0]).toBe('Container(svc_a, "Service A")');
     expect(lines[1]).toBe('Container(svc_a_acl, "Service A ACL")');
     expect(lines[2]).toBe('Container(svc_b, "Service B")');
   });
 
-  it("applies multiple edits sequentially", () => {
-    const result = applyEdits(source, [
-      { type: "remove", search: "Rel(svc_a, svc_b" },
+  it("inserts content before an anchor", () => {
+    const { content } = applyEdits(source, [
       {
-        type: "add",
-        search: 'Container(svc_b, "Service B")',
-        content: 'Rel(svc_a, svc_c, "")',
+        kind: "insert-before",
+        anchor: loc(bDeclStart, bDeclEnd),
+        content: 'Container(svc_a_acl, "Service A ACL")\n',
       },
     ]);
-    const lines = result.split("\n");
+    const lines = content.split("\n");
+    expect(lines[0]).toBe('Container(svc_a, "Service A")');
+    expect(lines[1]).toBe('Container(svc_a_acl, "Service A ACL")');
+    expect(lines[2]).toBe('Container(svc_b, "Service B")');
+  });
+
+  it("applies multiple non-overlapping edits in one pass", () => {
+    const { content, applied, conflicts } = applyEdits(source, [
+      { kind: "remove", range: loc(relStart - 1, relEnd) },
+      {
+        kind: "insert-after",
+        anchor: loc(bDeclStart, bDeclEnd),
+        content: '\nRel(svc_a, svc_c, "")',
+      },
+    ]);
+    expect(applied).toHaveLength(2);
+    expect(conflicts).toEqual([]);
+    const lines = content.split("\n");
     expect(lines).toHaveLength(3);
     expect(lines[2]).toBe('Rel(svc_a, svc_c, "")');
   });
 
-  it("applies indent extracted from the matched line to inserted content", () => {
-    // applyIndent must prepend the source line's leading whitespace to
-    // every non-blank line of inserted content. Stryker mutated the
-    // `.map((line) => indent + line)` callback to just `line` (skip
-    // indentation). Pin: a tab-indented anchor produces tab-indented
-    // inserted content.
-    const tabIndented = "\tContainer(svc_a)";
-    const result = applyEdits(tabIndented, [
-      { type: "add", search: "Container(svc_a", content: "Container(svc_b)" },
-    ]);
-    expect(result.split("\n")[1]).toBe("\tContainer(svc_b)");
-    expect(result.split("\n")[1].startsWith("\t")).toBe(true);
-  });
-
-  it("preserves empty lines verbatim when adding multi-line content", () => {
-    // applyIndent must NOT prepend indent to blank lines — keeps formatting
-    // sane when added blocks contain blank-line separators.
-    const indented = ['  Container(svc_a, "Service A")'].join("\n");
-    const result = applyEdits(indented, [
+  it("reverse-orders edits so earlier splices do not shift later offsets", () => {
+    // Two replaces in input order (first, second) — applier reverses by
+    // offset before splicing. Both edits must land on their ORIGINAL
+    // byte ranges, not on shifted ones.
+    const { content } = applyEdits(source, [
       {
-        type: "add",
-        search: "Container(svc_a",
-        content: 'Container(svc_b, "Service B")\n\nRel(svc_a, svc_b, "")',
+        kind: "replace",
+        range: loc(aDeclStart, aDeclEnd),
+        content: "Container(A)",
+      },
+      {
+        kind: "replace",
+        range: loc(relStart, relEnd),
+        content: 'Rel(A, svc_b, "")',
       },
     ]);
-    const lines = result.split("\n");
-    expect(lines[0]).toBe('  Container(svc_a, "Service A")');
-    expect(lines[1]).toBe('  Container(svc_b, "Service B")');
-    expect(lines[2]).toBe(""); // blank line preserved without indent
-    expect(lines[3]).toBe('  Rel(svc_a, svc_b, "")');
+    expect(content).toContain("Container(A)");
+    expect(content).toContain('Rel(A, svc_b, "")');
   });
 
-  it("warns when search matches multiple lines but still applies to first", () => {
-    const ambiguous = ["Container(svc)", "Container(svc)", "End"].join("\n");
-    const result = applyEdits(ambiguous, [
-      { type: "remove", search: "Container(svc)" },
+  it("reports overlapping edits as conflicts, keeps first, skips second", () => {
+    const first = {
+      kind: "replace" as const,
+      range: loc(relStart, relEnd),
+      content: "FIRST_WINS",
+    };
+    const second = {
+      kind: "replace" as const,
+      range: loc(relStart + 1, relEnd),
+      content: "SECOND_LOSES",
+    };
+    const { content, applied, conflicts } = applyEdits(source, [first, second]);
+    expect(applied).toEqual([first]);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].skipped).toBe(second);
+    expect(conflicts[0].conflictsWith).toBe(first);
+    expect(content).toContain("FIRST_WINS");
+    expect(content).not.toContain("SECOND_LOSES");
+  });
+
+  it("treats two zero-width inserts at the same offset as a conflict", () => {
+    const first = {
+      kind: "insert-after" as const,
+      anchor: loc(aDeclStart, aDeclEnd),
+      content: "X",
+    };
+    const second = {
+      kind: "insert-after" as const,
+      anchor: loc(aDeclStart, aDeclEnd),
+      content: "Y",
+    };
+    const { applied, conflicts } = applyEdits(source, [first, second]);
+    expect(applied).toEqual([first]);
+    expect(conflicts).toHaveLength(1);
+  });
+
+  it("allows two zero-width inserts at distinct offsets", () => {
+    const { applied, conflicts } = applyEdits(source, [
+      {
+        kind: "insert-after",
+        anchor: loc(aDeclStart, aDeclEnd),
+        content: "X",
+      },
+      {
+        kind: "insert-after",
+        anchor: loc(bDeclStart, bDeclEnd),
+        content: "Y",
+      },
     ]);
-    // first line removed, second remains
-    expect(result.split("\n")).toEqual(["Container(svc)", "End"]);
+    expect(applied).toHaveLength(2);
+    expect(conflicts).toEqual([]);
   });
 
-  it("replaces a line with the empty string when edit.content is omitted", () => {
-    // Stryker mutated the `?? ""` fallback in
-    // `applyIndent(edit.content ?? "", indent)` to "Stryker was here!".
-    // A type=replace edit without `content` field exercises the fallback.
-    // Pin: the matched line becomes empty (not the Stryker sentinel).
-    const result = applyEdits("Container(a)\nContainer(b)", [
-      { type: "replace", search: "Container(a)" },
+  it("emits content verbatim — newline/indent are the rule's responsibility", () => {
+    // The applier is a pure splicer. If the rule wants the inserted
+    // content on its own line, the rule prepends `\n` to `content`.
+    const { content } = applyEdits(source, [
+      {
+        kind: "insert-after",
+        anchor: loc(aDeclStart, aDeclEnd),
+        content: "INLINE",
+      },
     ]);
-    expect(result.split("\n")).toEqual(["", "Container(b)"]);
-  });
-
-  it("inserts an empty line when add-edit has no content", () => {
-    // Same fallback as replace, on the add branch.
-    const result = applyEdits("Container(a)\nContainer(b)", [
-      { type: "add", search: "Container(a)" },
-    ]);
-    expect(result.split("\n")).toEqual(["Container(a)", "", "Container(b)"]);
-  });
-
-  it("returns source unchanged when search not found", () => {
-    const result = applyEdits(source, [
-      { type: "remove", search: "NonExistentLine" },
-    ]);
-    expect(result).toBe(source);
-  });
-
-  it("warns with the pattern when search is not found", () => {
-    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
-    applyEdits(source, [{ type: "remove", search: "NonExistentLine" }]);
-    expect(warn).toHaveBeenCalledOnce();
-    const msg = String(warn.mock.calls[0][0]);
-    expect(msg).toContain("fix: pattern not found in source");
-    expect(msg).toContain("NonExistentLine");
-  });
-
-  it("warns with match count when pattern is ambiguous", () => {
-    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
-    const ambiguous = ["Container(svc)", "Container(svc)", "End"].join("\n");
-    applyEdits(ambiguous, [{ type: "remove", search: "Container(svc)" }]);
-    expect(warn).toHaveBeenCalledOnce();
-    const msg = String(warn.mock.calls[0][0]);
-    expect(msg).toContain("ambiguous pattern");
-    expect(msg).toContain("Container(svc)");
-    expect(msg).toContain("matches 2 lines");
-    expect(msg).toContain("using first");
-  });
-
-  it("does NOT warn about ambiguity when pattern matches exactly one line (boundary)", () => {
-    // Stryker mutated `matchCount > 1` to `>= 1` — that mutation would warn on
-    // every successful edit. The pin keeps the threshold honest.
-    const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
-    applyEdits(source, [{ type: "remove", search: "Rel(svc_a, svc_b" }]);
-    expect(warn).not.toHaveBeenCalled();
+    // First line now extends with INLINE because content had no \n.
+    expect(content.split("\n")[0]).toBe('Container(svc_a, "Service A")INLINE');
   });
 });

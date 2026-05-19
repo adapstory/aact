@@ -1,13 +1,13 @@
 import consola from "consola";
 
-import type { Element, Model } from "../model";
+import type { Element } from "../model";
 import { allElements, targetOf } from "../model";
 import {
   DEFAULT_ACL_NAME_PATTERNS,
   matchesAnyName,
 } from "./lib/namingPatterns";
 import { detectNamingConvention, joinName } from "./lib/namingUtils";
-import type { RuleDefinition, Violation } from "./types";
+import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
 
 export interface AclOptions {
   /** Tag, который маркирует ACL-контейнер. Default "acl". */
@@ -74,14 +74,15 @@ export const aclRule: RuleDefinition<AclOptions> = {
     return violations;
   },
 
-  fix(model: Model, violations, syntax, options) {
+  fix(ctx) {
+    const { model, violations, syntax, options } = ctx;
     const tag = options?.tag ?? "acl";
     const convention = detectNamingConvention(model);
-    const results = [];
+    const results: FixResult[] = [];
 
     for (const violation of violations) {
       const element = model.elements[violation.element];
-      if (!element) continue;
+      if (!element || !element.sourceLocation) continue;
 
       const externalRels = element.relations.filter(
         (r) => targetOf(model, r)?.external === true,
@@ -96,26 +97,40 @@ export const aclRule: RuleDefinition<AclOptions> = {
         continue;
       }
 
+      // Insert the new ACL container + its hop edge right after the
+      // offending element. Both new lines ship in one atomic block so
+      // we don't manufacture a second anchor for "after the new
+      // container" — that one wouldn't exist in the source yet.
+      const newDecls = [
+        syntax.containerDecl(aclName, `${element.label} ACL`, tag),
+        syntax.relationDecl(element.name, aclName),
+      ].join("\n");
+
+      const edits: SourceEdit[] = [
+        {
+          kind: "insert-after",
+          anchor: element.sourceLocation,
+          content: `\n${newDecls}`,
+        },
+        ...externalRels.flatMap((rel): SourceEdit[] =>
+          rel.sourceLocation
+            ? [
+                {
+                  kind: "replace",
+                  range: rel.sourceLocation,
+                  content: syntax.relationDecl(aclName, rel.to, rel.technology),
+                },
+              ]
+            : [],
+        ),
+      ];
+
+      if (edits.length === 0) continue;
+
       results.push({
         rule: "acl",
         description: `Add ACL layer for ${element.name}`,
-        edits: [
-          {
-            type: "add" as const,
-            search: syntax.containerPattern(element.name),
-            content: syntax.containerDecl(aclName, `${element.label} ACL`, tag),
-          },
-          {
-            type: "add" as const,
-            search: syntax.containerPattern(aclName),
-            content: syntax.relationDecl(element.name, aclName),
-          },
-          ...externalRels.map((rel) => ({
-            type: "replace" as const,
-            search: syntax.relationPattern(element.name, rel.to),
-            content: syntax.relationDecl(aclName, rel.to, rel.technology),
-          })),
-        ],
+        edits,
       });
     }
 

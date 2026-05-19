@@ -10,7 +10,7 @@ import {
   DEFAULT_REPO_NAME_PATTERNS,
   matchesAnyName,
 } from "./lib/namingPatterns";
-import type { FixResult, RuleDefinition, Violation } from "./types";
+import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
 
 export interface DbPerServiceOptions {
   /** Tags маркирующие repo/relay контейнеры — определяют owner of DB. */
@@ -112,7 +112,8 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
     return violations;
   },
 
-  fix(model, violations, syntax, options) {
+  fix(ctx) {
+    const { model, violations, syntax, options } = ctx;
     const ownerTags = options?.ownerTags ?? DEFAULT_OWNER_TAGS;
     const elementBoundaryMap = buildElementBoundaryMap(model);
     const results: FixResult[] = [];
@@ -133,11 +134,12 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
 
       const owner = resolveOwner(db.name, accessors, options);
 
-      const edits = accessors
+      const edits: SourceEdit[] = accessors
         .filter((c) => c !== owner)
-        .flatMap((accessor) => {
+        .flatMap((accessor): SourceEdit[] => {
           // Stryker disable next-line all
           const rel = accessor.relations.find((r) => r.to === db.name)!;
+          if (!rel.sourceLocation) return [];
 
           const redirectTarget = resolveRedirectTarget(
             accessor,
@@ -153,8 +155,8 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
           const tags = rel.tags.length > 0 ? rel.tags.join("+") : undefined;
           return [
             {
-              type: "replace" as const,
-              search: syntax.relationPattern(accessor.name, db.name),
+              kind: "replace",
+              range: rel.sourceLocation,
               content: syntax.relationDecl(
                 accessor.name,
                 redirectTarget.name,

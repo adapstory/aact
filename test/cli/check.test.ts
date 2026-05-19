@@ -134,6 +134,46 @@ describe("executeCheck — exit code matrix", () => {
     expect(mockWriteFile).toHaveBeenCalledOnce();
   });
 
+  it("surfaces fix.editConflict diagnostics when two rules want overlapping byte ranges", async () => {
+    // Both crud and dbPerService want to rewrite `Rel(orders, orders_db)`.
+    // The applier picks one (deterministic first-wins) and reports
+    // the other as a conflict — must NOT silently drop.
+    const conflictingModel = () =>
+      makeModel({
+        elements: [
+          { name: "orders", relations: [{ to: "orders_db" }] },
+          {
+            name: "orders_repo",
+            tags: ["repo"],
+            relations: [{ to: "orders_db" }],
+          },
+          { name: "extra", relations: [{ to: "orders_db" }] },
+          { name: "orders_db", kind: "ContainerDb" },
+        ],
+      });
+    mockLoadModel
+      .mockResolvedValueOnce({ model: conflictingModel(), issues: [] })
+      .mockResolvedValueOnce({ model: conflictingModel(), issues: [] });
+    mockReadFile.mockResolvedValue(
+      [
+        "Container(orders)",
+        'Container(orders_repo, "", $tags="repo")',
+        "Container(extra)",
+        "ContainerDb(orders_db)",
+        "Rel(orders, orders_db, lots-of-overlap)",
+        "Rel(orders_repo, orders_db, x)",
+        "Rel(extra, orders_db, y)",
+      ].join("\n"),
+    );
+    mockWriteFile.mockResolvedValue();
+
+    const result = await executeCheck(plantumlConfig, { fix: true });
+    const conflictDiags = result.diagnostics?.filter(
+      (d) => d.kind === "fix.editConflict",
+    );
+    expect(conflictDiags?.length ?? 0).toBeGreaterThan(0);
+  });
+
   it("exitCode 1 after --fix when violations remain (Codex P1 — was 0)", async () => {
     mockLoadModel
       .mockResolvedValueOnce({ model: violatingModel(), issues: [] })
@@ -311,7 +351,17 @@ describe("renderCheckText", () => {
               {
                 rule: "acl",
                 description: "add anti-corruption layer",
-                edits: [{ type: "add", search: "after_here" }],
+                edits: [
+                  {
+                    kind: "insert-after",
+                    anchor: {
+                      file: "x.puml",
+                      start: { line: 1, col: 1, offset: 0 },
+                      end: { line: 1, col: 10, offset: 10 },
+                    },
+                    content: "fake",
+                  },
+                ],
               },
             ],
             summary: { failed: 1, passed: 0, total: 1 },
@@ -343,7 +393,17 @@ describe("renderCheckText", () => {
               {
                 rule: "acl",
                 description: "add anti-corruption layer",
-                edits: [{ type: "add", search: "after_here" }],
+                edits: [
+                  {
+                    kind: "insert-after",
+                    anchor: {
+                      file: "x.puml",
+                      start: { line: 1, col: 1, offset: 0 },
+                      end: { line: 1, col: 10, offset: 10 },
+                    },
+                    content: "fake",
+                  },
+                ],
               },
             ],
             summary: { failed: 1, passed: 0, total: 1 },
