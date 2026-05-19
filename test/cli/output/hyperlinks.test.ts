@@ -8,7 +8,9 @@ const loc: SourceLocation = {
   end: { line: 12, col: 25, offset: 220 },
 };
 
-const ESC = String.fromCodePoint(0x1B);
+// ESC = 27 (0x1B) — chose decimal to sidestep the prettier/unicorn
+// hex-casing fight (prettier wants `0x1b`, unicorn `0x1B`).
+const ESC = String.fromCodePoint(27);
 
 describe("formatLocation", () => {
   it("renders <file>:<line>:<col> inline", () => {

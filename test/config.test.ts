@@ -1,4 +1,4 @@
-import type {AactConfigInput} from "../src/config";
+import type { AactConfigInput } from "../src/config";
 import { defineConfig } from "../src/config";
 import { defineRule } from "../src/rules";
 
