@@ -2,6 +2,11 @@ import type { Boundary, Model } from "../model";
 import { getBoundary, getElement } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
+/** Reserved options shape — `Record<string, never>` rejects unknown
+ *  keys today; future fields land via a non-empty interface and a
+ *  breaking-change note. */
+export type CohesionOptions = Record<string, never>;
+
 /**
  * Common Closure Principle: контейнеры одного boundary должны быть более
  * связаны между собой (cohesion) чем с внешними (coupling). Иначе
@@ -53,7 +58,7 @@ const getBoundaryCoupling = (model: Model, boundary: Boundary): number => {
   return result;
 };
 
-export const cohesionRule: RuleDefinition = {
+export const cohesionRule: RuleDefinition<CohesionOptions> = {
   name: "cohesion",
   description:
     "Each boundary should be more cohesive than coupled; parent boundaries less cohesive than inner ones",

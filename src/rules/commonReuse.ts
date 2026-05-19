@@ -2,6 +2,11 @@ import type { Boundary, Model, SourceLocation } from "../model";
 import { allElements } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
+/** Reserved options shape — `Record<string, never>` rejects unknown
+ *  keys today; future fields land via a non-empty interface and a
+ *  breaking-change note. */
+export type CommonReuseOptions = Record<string, never>;
+
 /**
  * Common Reuse Principle: если consumer использует часть public surface
  * другого boundary, он должен использовать всё. "Используешь часть —
@@ -64,7 +69,7 @@ const collectPublicAndUsage = (
   return { publicOf, used, firstEdgeLoc };
 };
 
-export const commonReuseRule: RuleDefinition = {
+export const commonReuseRule: RuleDefinition<CommonReuseOptions> = {
   name: "commonReuse",
   description:
     "Consumers using part of a boundary's public surface should use all of it",

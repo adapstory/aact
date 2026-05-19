@@ -2,6 +2,15 @@ import { allElements, getElement } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
 /**
+ * No options today. The shape is exported as `Record<string, never>`
+ * (strict empty) so unknown keys in `aact.config.ts` surface as
+ * compile errors instead of being silently accepted. When the rule
+ * gains real options, this becomes an interface with optional
+ * fields — that transition is breaking and goes in release notes.
+ */
+export type AcyclicOptions = Record<string, never>;
+
+/**
  * Acyclic Dependencies Principle: dependency graph не должен иметь циклов.
  * Per-container DFS, visited set предотвращает infinite loop. Dangling refs
  * (rel.to не в model.elements) — early return false; validateModel
@@ -13,7 +22,7 @@ import type { RuleDefinition, Violation } from "./types";
  * range so "click violation → jump to `Rel(...)` line" works without
  * any extra graph analysis.
  */
-export const acyclicRule: RuleDefinition = {
+export const acyclicRule: RuleDefinition<AcyclicOptions> = {
   name: "acyclic",
   description:
     "Dependency graph between containers must be acyclic (no cycles)",

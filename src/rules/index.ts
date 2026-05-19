@@ -2,10 +2,10 @@
 // экспортируемый как xxxRule. Lib helpers (applyEdits etc.) для users-as-library.
 
 export { type AclOptions, aclRule } from "./acl";
-export { acyclicRule } from "./acyclic";
+export { type AcyclicOptions, acyclicRule } from "./acyclic";
 export { type ApiGatewayOptions, apiGatewayRule } from "./apiGateway";
-export { cohesionRule } from "./cohesion";
-export { commonReuseRule } from "./commonReuse";
+export { type CohesionOptions, cohesionRule } from "./cohesion";
+export { type CommonReuseOptions, commonReuseRule } from "./commonReuse";
 export { type CrudOptions, crudRule } from "./crud";
 export { type DbPerServiceOptions, dbPerServiceRule } from "./dbPerService";
 export {
@@ -15,5 +15,8 @@ export {
   editLocation,
 } from "./lib/applyEdits";
 export { ruleRegistry } from "./registry";
-export { stableDependenciesRule } from "./stableDependencies";
+export {
+  type StableDependenciesOptions,
+  stableDependenciesRule,
+} from "./stableDependencies";
 export * from "./types";
