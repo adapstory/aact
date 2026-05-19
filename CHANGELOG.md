@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.12 — 2026-05-19
+
+Output mode for GitHub Code Scanning. `aact check --sarif` emits a
+standard SARIF v2.1.0 log that drops straight into
+`github/codeql-action/upload-sarif@v3`, surfacing every violation as
+a native PR code-scanning alert with rule metadata, source region,
+and stable fingerprints for cross-run alert continuity. The same
+`SourceLocation` ranges the chevrotain parsers populate (used by
+range-based `--fix` and OSC8 hyperlinks) now drive
+rustc-style underlines in SARIF consumers like `sarif-fmt`.
+
 ### Added
 
 - **SARIF v2.1.0 output** for `aact check`. Pass `--sarif` (or set
