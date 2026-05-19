@@ -91,6 +91,28 @@ const config: AactConfig = {
 export default config;
 ```
 
+## AI-агенты
+
+aact поставляет agent skill (`aact-architect`) и стабильный JSON-envelope, чтобы AI-агенты (Copilot, Claude, Codex, Cursor, Cline) могли работать с ним без парсинга текста:
+
+```bash
+# Установить скилл, чтобы агент знал когда вызывать aact
+npx aact skill install --claude     # Claude Code
+npx aact skill install --codex      # Codex (общий путь ~/.agents/skills)
+npx aact skill install --cursor     # Cursor (тот же общий путь)
+npx aact skill install --copilot    # GitHub Copilot (тот же общий путь)
+npx aact skill install --cline      # Cline
+npx aact skill install --all        # все клиенты сразу
+
+# Machine-readable команды (все поддерживают --json)
+npx aact model --json    # распарсенная C4-модель + диагностики
+npx aact check --json    # violations + suggestedFixes + каталог правил
+npx aact check --sarif   # SARIF v2.1.0 для GitHub Code Scanning
+npx aact analyze --json  # метрики связности и связанности
+```
+
+Exit codes: `0` чисто, `1` нарушения, `2` tool error. Форма envelope стабильна с `schemaVersion: 1` — полный контракт для агентов см. в [AGENTS.md](AGENTS.md).
+
 ## Использование как библиотеки
 
 ```ts
