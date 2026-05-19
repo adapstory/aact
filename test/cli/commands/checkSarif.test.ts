@@ -18,6 +18,7 @@ const envelopeWith = (
     violations,
     suggestedFixes: [],
     summary: { failed: 0, passed: 0, total: 0 },
+    rules: [],
   },
   diagnostics: [],
   meta: {

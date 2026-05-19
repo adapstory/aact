@@ -25,6 +25,14 @@ import { cliCommandWithConfig } from "../run";
 import { configArg, jsonArg, sarifArg } from "../sharedArgs";
 import { checkSarifAdapter } from "./checkSarif";
 
+/** Built-in rule names, indexed once — used by `buildRuleCatalogue`
+ *  to tag each effective rule as `"builtin"` or `"custom"` without
+ *  rebuilding the Set per call. `ruleRegistry` is static so the
+ *  Set is safe at module scope. */
+const BUILTIN_RULE_NAMES: ReadonlySet<string> = new Set(
+  ruleRegistry.map((r) => r.name),
+);
+
 // -----------------------------------------------------------------------------
 // Public data shape (envelope.data for `aact check`)
 // -----------------------------------------------------------------------------
@@ -63,11 +71,31 @@ export interface CheckFixesApplied {
 
 export type CheckMode = "check" | "dry-run" | "fix";
 
+/**
+ * Per-rule metadata bundled into every `check --json` envelope so
+ * agents and other consumers don't need a separate `aact rule list`
+ * call to know what each `ruleId` in `violations[]` means or
+ * whether it offers an auto-fix.
+ *
+ * `source` distinguishes built-in rules (shipped with aact) from
+ * `customRules` registered via `aact.config.ts`. `enabled` reflects
+ * the effective config (false when `rules.<name>: false`).
+ */
+export interface CheckRuleMetadata {
+  readonly name: string;
+  readonly description: string;
+  readonly source: "builtin" | "custom";
+  readonly enabled: boolean;
+  readonly hasFix: boolean;
+  readonly helpUri?: string;
+}
+
 export interface CheckData {
   readonly mode: CheckMode;
   readonly violations: readonly CheckViolation[];
   readonly suggestedFixes: readonly FixResult[];
   readonly summary: CheckSummary;
+  readonly rules: readonly CheckRuleMetadata[];
   readonly fixesApplied?: CheckFixesApplied;
 }
 
@@ -142,6 +170,26 @@ const runRules = (
   }
   return results;
 };
+
+const AACT_INFO_URI = "https://github.com/Byndyusoft/aact";
+
+const buildRuleCatalogue = (
+  rules: AactConfig["rules"],
+  effective: readonly RuleDefinition[],
+): readonly CheckRuleMetadata[] =>
+  effective.map((r) => {
+    const isBuiltin = BUILTIN_RULE_NAMES.has(r.name);
+    return {
+      name: r.name,
+      description: r.description,
+      source: isBuiltin ? "builtin" : "custom",
+      enabled: getRuleConfigValue(rules, r.name) !== false,
+      hasFix: typeof r.fix === "function",
+      // Built-ins link to upstream README anchors; custom rules can
+      // surface their own helpUri later if `RuleDefinition` grows one.
+      ...(isBuiltin ? { helpUri: `${AACT_INFO_URI}#${r.name}` } : {}),
+    };
+  });
 
 interface FixCapabilityResolution {
   readonly capability: FixCapability | null;
@@ -375,12 +423,15 @@ export const executeCheck = async (
     diagnostics.push(...result.conflictDiagnostics);
   }
 
+  const ruleCatalogue = buildRuleCatalogue(config.rules, effective);
+
   return {
     data: {
       mode,
       violations,
       suggestedFixes,
       summary,
+      rules: ruleCatalogue,
       ...(fixesApplied ? { fixesApplied } : {}),
     },
     exitCode: computeExitCode(violations.length, fixesApplied),

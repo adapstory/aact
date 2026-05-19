@@ -5,6 +5,7 @@ import { analyze } from "./commands/analyze";
 import { check } from "./commands/check";
 import { generate } from "./commands/generate";
 import { init } from "./commands/init";
+import { model } from "./commands/model";
 import { rule } from "./commands/rule";
 import { skill } from "./commands/skill";
 
@@ -14,7 +15,7 @@ const main = defineCommand({
     version,
     description: "Architecture analysis and compliance tool",
   },
-  subCommands: { init, check, analyze, generate, rule, skill },
+  subCommands: { init, check, analyze, model, generate, rule, skill },
 });
 
 void runMain(main);

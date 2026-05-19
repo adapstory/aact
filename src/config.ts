@@ -30,8 +30,11 @@ const ruleOption = <T extends v.ObjectEntries>(entries: T) =>
  * load time) — добавление нового формата = entry в registry, не breaking-bump.
  *
  * Rules — looseObject: typed entries для built-ins (autocomplete +
- * options валидация), extra keys разрешены для custom rules. Custom rule
- * options проверяются на check() time через rule.optionsSchema (если есть).
+ * options валидация через valibot strictObject), extra keys разрешены
+ * для custom rules. Custom rule options сейчас не валидируются
+ * runtime'ом — авторы кастомных правил отвечают за собственный
+ * type narrowing внутри `check()` / `fix()`. Per-rule options schema
+ * на `RuleDefinition` — open extension point, не реализован.
  *
  * CustomRules — array of RuleDefinition. Auto-enabled при load'е (не нужно
  * писать `rules: { myRule: true }`). Чтобы выключить — `rules.<name>: false`.
