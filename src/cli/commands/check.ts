@@ -26,7 +26,7 @@ import { configArg, jsonArg, sarifArg } from "../sharedArgs";
 import { checkSarifAdapter } from "./checkSarif";
 
 /** Built-in rule names, indexed once — used by `buildRuleCatalogue`
- *  to tag each effective rule as `"builtin"` or `"custom"` without
+ *  to tag each effective rule as `"built-in"` or `"custom"` without
  *  rebuilding the Set per call. `ruleRegistry` is static so the
  *  Set is safe at module scope. */
 const BUILTIN_RULE_NAMES: ReadonlySet<string> = new Set(
@@ -84,7 +84,7 @@ export type CheckMode = "check" | "dry-run" | "fix";
 export interface CheckRuleMetadata {
   readonly name: string;
   readonly description: string;
-  readonly source: "builtin" | "custom";
+  readonly source: "built-in" | "custom";
   readonly enabled: boolean;
   readonly hasFix: boolean;
   readonly helpUri?: string;
@@ -182,7 +182,7 @@ const buildRuleCatalogue = (
     return {
       name: r.name,
       description: r.description,
-      source: isBuiltin ? "builtin" : "custom",
+      source: isBuiltin ? "built-in" : "custom",
       enabled: getRuleConfigValue(rules, r.name) !== false,
       hasFix: typeof r.fix === "function",
       // Built-ins link to upstream README anchors; custom rules can

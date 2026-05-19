@@ -161,7 +161,12 @@ export default tseslint.config(
                 },
               },
             },
-            // index — public API barrel
+            // index — public API barrel. Also re-exports the
+            // envelope contract + per-command --json data shapes
+            // from cli/ so library users can type-check
+            // `aact <cmd> --json` output. Type-only re-exports;
+            // runtime doesn't pull cli command implementations
+            // into the library entrypoint.
             {
               from: { type: "index" },
               allow: {
@@ -173,6 +178,7 @@ export default tseslint.config(
                     "rule",
                     "analyze",
                     "config",
+                    "cli",
                   ],
                 },
               },

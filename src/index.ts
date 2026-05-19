@@ -1,3 +1,9 @@
+// Library API barrel. Anything re-exported here is public surface
+// (schemaVersion 1 contract for the `--json` envelope shape, plus
+// the rule / format / model primitives library users compose into
+// their own tests). Everything else under `src/` is internal and
+// may change without a major bump.
+
 export * from "./analyze";
 export * from "./config";
 export { knownFormatNames, loadFormat } from "./formats/registry";
@@ -17,3 +23,75 @@ export {
 } from "./formats/types";
 export * from "./model";
 export * from "./rules";
+
+// CLI envelope contract — consumers parsing `aact <command> --json`
+// output type-check `envelope.data` against the per-command shape.
+// schemaVersion bumps are reserved for breaking renames/removals;
+// additive changes ship without a bump.
+export type {
+  CliEnvelope,
+  CommandResult,
+  Diagnostic,
+  DiagnosticKind,
+  EnvelopeMeta,
+  ExitCode,
+  OutputMode,
+  Renderer,
+  Reporter,
+} from "./cli/output";
+
+// SARIF v2.1.0 surface — for consumers integrating `aact <command>
+// --sarif` output and for tooling that builds custom `SarifAdapter`s
+// against the same envelope.
+export type {
+  SarifAdapter,
+  SarifArtifactLocation,
+  SarifInvocation,
+  SarifLevel,
+  SarifLocation,
+  SarifLog,
+  SarifMessage,
+  SarifNotification,
+  SarifPhysicalLocation,
+  SarifRegion,
+  SarifReportingDescriptor,
+  SarifResult,
+  SarifRun,
+  SarifTool,
+  SarifToolDriver,
+} from "./cli/output";
+
+// Per-command `--json` data shapes. `envelope.data` is typed as one
+// of these depending on `envelope.command`. AnalysisReport (the
+// `analyze` shape) is already exported via the analyze barrel above.
+export type {
+  CheckData,
+  CheckFixesApplied,
+  CheckMode,
+  CheckRuleMetadata,
+  CheckSummary,
+  CheckViolation,
+} from "./cli/commands/check";
+export type {
+  GenerateData,
+  GeneratedFileInfo,
+  GenerateOutputSink,
+} from "./cli/commands/generate";
+export type {
+  InitCreated,
+  InitData,
+  InitFileKind,
+  InitSkipped,
+} from "./cli/commands/init";
+export type { ModelData } from "./cli/commands/model";
+export type {
+  RuleInfo,
+  RuleListData,
+  RuleListSummary,
+} from "./cli/commands/rule";
+export type {
+  InstallPlan,
+  SkillAction,
+  SkillData,
+  SkillPlanResult,
+} from "./cli/commands/skill";
