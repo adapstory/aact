@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.6 — 2026-05-19
+
 Unified CLI output layer. Every command now speaks the same versioned
 JSON envelope (`schemaVersion: 1`) and follows a tight exit-code
 contract. This is the v3 API break window — review the Breaking section
@@ -78,6 +80,16 @@ before upgrading from beta.5.
   `HumanReporter` and exits with `envelope.exitCode`. The only
   remaining command-side `process.stdout.write` lives in `generate.ts`
   for explicit `--output -` artefact streaming.
+- PlantUML loader rewritten on top of a chevrotain parser stack
+  (`src/formats/plantuml/parser/`: tokens / preParse / parser /
+  visitor / toModel). Replaces the Enteee `plantuml-parser` 0.4.0
+  adapter end-to-end; the dependency is removed. `SourceLocation`
+  now lands on every `Container` / `Boundary` / `Relation`, anchored
+  to the original `.puml` byte offsets through the pre-lex strip
+  passes. 14 out of 17 reference fixtures from `C4-PlantUML/samples`
+  load with zero parse errors; the 3 exclusions (sequence flavour
+  and deprecated `$index-1` old format) are pinned in tests and
+  documented in `grammar.md §8`.
 
 ### Migration
 
