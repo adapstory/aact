@@ -36,7 +36,8 @@ export const requireOwnerTagRule = defineRule({
       .filter((c) => operationalKinds.has(c.kind))
       .filter((c) => !c.tags.some((t) => t.startsWith(prefix)))
       .map((c) => ({
-        element: c.name,
+        target: c.name,
+        targetKind: "element" as const,
         message: `missing ownership tag (expected "${prefix}<team>")`,
       }));
   },

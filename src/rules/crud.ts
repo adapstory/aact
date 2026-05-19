@@ -264,7 +264,8 @@ export const crudRule: RuleDefinition<CrudOptions> = {
         // to the `Rel(...)` that broke the rule.
         const firstEdge = dbRelations[0];
         violations.push({
-          element: element.name,
+          target: element.name,
+          targetKind: "element" as const,
           message: `directly accesses database ${dbRelations.map((r) => r.to).join(", ")} — add a repo or relay`,
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
@@ -279,7 +280,8 @@ export const crudRule: RuleDefinition<CrudOptions> = {
         const nonDbTargets = nonDbRels.map((r) => r.to).join(", ");
         const firstEdge = nonDbRels[0];
         violations.push({
-          element: element.name,
+          target: element.name,
+          targetKind: "element" as const,
           message: `repo has non-database dependencies: ${nonDbTargets} — repos should only access databases`,
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
@@ -297,7 +299,7 @@ export const crudRule: RuleDefinition<CrudOptions> = {
     const results: FixResult[] = [];
 
     for (const violation of violations) {
-      const element = model.elements[violation.element];
+      const element = model.elements[violation.target];
       if (!element) continue;
 
       const fix = isRepo(element, options)

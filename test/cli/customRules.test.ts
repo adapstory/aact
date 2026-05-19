@@ -70,7 +70,11 @@ const noLegacyRule = defineRule({
     const tag = options?.tag ?? "legacy";
     return Object.values(model.elements)
       .filter((c) => c.tags.includes(tag))
-      .map((c) => ({ element: c.name, message: `tagged "${tag}"` }));
+      .map((c) => ({
+        target: c.name,
+        targetKind: "element" as const,
+        message: `tagged "${tag}"`,
+      }));
   },
 });
 
@@ -82,12 +86,16 @@ const noLegacyWithFixRule = defineRule({
     const tag = options?.tag ?? "legacy";
     return Object.values(model.elements)
       .filter((c) => c.tags.includes(tag))
-      .map((c) => ({ element: c.name, message: `tagged "${tag}"` }));
+      .map((c) => ({
+        target: c.name,
+        targetKind: "element" as const,
+        message: `tagged "${tag}"`,
+      }));
   },
   fix({ violations }) {
     return violations.map((v) => ({
       rule: "noLegacyFix",
-      description: `Remove legacy tag from ${v.element}`,
+      description: `Remove legacy tag from ${v.target}`,
       edits: [],
     }));
   },
@@ -199,7 +207,7 @@ describe("executeCheck — customRules integration", () => {
     expect(result.exitCode).toBe(1);
     const noLegacy = result.data.violations.find((v) => v.rule === "noLegacy");
     expect(noLegacy).toBeDefined();
-    expect(noLegacy?.element).toBe("svc_a");
+    expect(noLegacy?.target).toBe("svc_a");
   });
 
   it("auto-enables customRules without rules.<name> entry", async () => {

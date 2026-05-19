@@ -31,7 +31,7 @@ describe("stableDependenciesRule.check", () => {
       ],
     });
     const v = stableDependenciesRule.check(model);
-    const eToA = v.find((it) => it.element === "e" && it.message.includes("a"));
+    const eToA = v.find((it) => it.target === "e" && it.message.includes("a"));
     expect(eToA).toBeDefined();
     // Message format pin: covers StringLiteral mutants on the message
     expect(eToA!.message).toMatch(/stable module .I=\d\.\d{2}/);
@@ -103,7 +103,7 @@ describe("stableDependenciesRule.check", () => {
     // a → b should NOT trigger (equal stability).
     const v = stableDependenciesRule.check(model);
     expect(
-      v.find((it) => it.element === "a" && it.message.includes("b")),
+      v.find((it) => it.target === "a" && it.message.includes("b")),
     ).toBeUndefined();
   });
 
@@ -130,7 +130,7 @@ describe("stableDependenciesRule.check", () => {
       ],
     });
     const v = stableDependenciesRule.check(model);
-    const eToA = v.find((it) => it.element === "e" && it.message.includes("a"));
+    const eToA = v.find((it) => it.target === "e" && it.message.includes("a"));
     expect(eToA?.sourceLocation).toEqual(edgeLoc);
   });
 

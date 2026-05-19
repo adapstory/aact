@@ -60,7 +60,8 @@ export const bcIsolationRule = defineRule({
         if (targetIsApi || targetIsBroker) continue;
 
         violations.push({
-          element: container.name,
+          target: container.name,
+          targetKind: "element" as const,
           message: `crosses bounded contexts (${sourceBc} → ${targetBc}) via "${rel.to}" — route through *${apiSuffix} or a ${brokerTag}-tagged broker`,
         });
       }

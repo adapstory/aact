@@ -12,7 +12,7 @@ describe("cohesionRule.check", () => {
     });
     const v = cohesionRule.check(model);
     expect(v.length).toBeGreaterThan(0);
-    expect(v[0].element).toBe("b1");
+    expect(v[0].target).toBe("b1");
   });
 
   it("no violation when cohesion > coupling", () => {
@@ -52,7 +52,7 @@ describe("cohesionRule.check", () => {
       rootBoundaryNames: ["parent"],
     });
     const violations = cohesionRule.check(model);
-    expect(violations.find((v) => v.element === "parent")).toBeDefined();
+    expect(violations.find((v) => v.target === "parent")).toBeDefined();
   });
 
   it("flags parent cohesion ≥ inner cohesion sum", () => {
@@ -76,7 +76,7 @@ describe("cohesionRule.check", () => {
       .check(model)
       .find(
         (v) =>
-          v.element === "parent" &&
+          v.target === "parent" &&
           v.message.includes("less cohesive than its sub-boundaries"),
       );
     expect(tooCohesive).toBeDefined();
@@ -93,7 +93,7 @@ describe("cohesionRule.check", () => {
       rootBoundaryNames: ["parent"],
     });
     const violations = cohesionRule.check(model);
-    expect(violations.find((v) => v.element === "bA")).toBeDefined();
+    expect(violations.find((v) => v.target === "bA")).toBeDefined();
   });
 
   it("ignores dangling relation when computing cohesion/coupling", () => {
@@ -128,7 +128,7 @@ describe("cohesionRule.check", () => {
       boundaries: [{ name: "ctx", elementNames: ["a", "b"] }],
     });
     const v = cohesionRule.check(model);
-    expect(v.find((it) => it.element === "ctx")).toBeDefined();
+    expect(v.find((it) => it.target === "ctx")).toBeDefined();
   });
 
   it("violation message contains both coupling and cohesion numbers", () => {
@@ -187,7 +187,7 @@ describe("cohesionRule.check", () => {
     // parent.coupling should = 1 (a→ext_x), not include a→b (sibling within parent).
     // bA itself should violate (coupling=2: b sibling + ext_x external; cohesion=0).
     const violations = cohesionRule.check(model);
-    const bAViolation = violations.find((v) => v.element === "bA");
+    const bAViolation = violations.find((v) => v.target === "bA");
     expect(bAViolation).toBeDefined();
   });
 });

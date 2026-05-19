@@ -90,7 +90,8 @@ export const commonReuseRule: RuleDefinition = {
         const missing = [...pubNames].filter((n) => !usedNames.has(n));
         const loc = firstEdgeLoc.get(key);
         violations.push({
-          element: consumer.name,
+          target: consumer.name,
+          targetKind: "boundary" as const,
           message: `uses ${[...usedNames].join(", ")} of "${provider.name}" but not ${missing.join(", ")} — all public services of a context should be used together`,
           ...(loc ? { sourceLocation: loc } : {}),
         });

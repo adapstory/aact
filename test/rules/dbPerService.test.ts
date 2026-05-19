@@ -28,7 +28,9 @@ const pumlFix = async (puml: string, violationElement: string) => {
   const { model, source } = await loadPumlString(puml);
   const fixes = dbPerServiceRule.fix!({
     model,
-    violations: [{ element: violationElement, message: "" }],
+    violations: [
+      { target: violationElement, targetKind: "element" as const, message: "" },
+    ],
     syntax: plantumlSyntax,
     options: undefined,
   });
@@ -54,7 +56,7 @@ describe("dbPerServiceRule.check", () => {
     ]);
     const v = dbPerServiceRule.check(model);
     expect(v).toHaveLength(1);
-    expect(v[0].element).toBe("shared_db");
+    expect(v[0].target).toBe("shared_db");
     expect(v[0].message).toContain("a");
     expect(v[0].message).toContain("b");
   });
@@ -197,7 +199,9 @@ describe("dbPerServiceRule.fix", () => {
     expect(
       dbPerServiceRule.fix!({
         model,
-        violations: [{ element: "ghost", message: "" }],
+        violations: [
+          { target: "ghost", targetKind: "element" as const, message: "" },
+        ],
         syntax: plantumlSyntax,
         options: undefined,
       }),

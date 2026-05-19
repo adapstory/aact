@@ -62,7 +62,8 @@ export const aclRule: RuleDefinition<AclOptions> = {
         // violation, jump to the Rel line that broke the rule".
         const firstEdge = externalRelations[0];
         violations.push({
-          element: element.name,
+          target: element.name,
+          targetKind: "element" as const,
           message: `calls external ${label} ${names} without an ACL layer`,
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
@@ -81,7 +82,7 @@ export const aclRule: RuleDefinition<AclOptions> = {
     const results: FixResult[] = [];
 
     for (const violation of violations) {
-      const element = model.elements[violation.element];
+      const element = model.elements[violation.target];
       if (!element || !element.sourceLocation) continue;
 
       const externalRels = element.relations.filter(

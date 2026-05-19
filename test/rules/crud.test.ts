@@ -33,7 +33,9 @@ const pumlFix = async (
   const { model, source } = await loadPumlString(puml);
   const fixes = crudRule.fix!({
     model,
-    violations: [{ element: violationElement, message: "" }],
+    violations: [
+      { target: violationElement, targetKind: "element" as const, message: "" },
+    ],
     syntax: plantumlSyntax,
     options,
   });
@@ -58,7 +60,7 @@ describe("crudRule.check", () => {
     ]);
     const v = crudRule.check(model);
     expect(v).toHaveLength(1);
-    expect(v[0].element).toBe("orders");
+    expect(v[0].target).toBe("orders");
     expect(v[0].message).toMatch(/repo/);
   });
 
@@ -393,7 +395,9 @@ describe("crudRule.fix — edge cases", () => {
     expect(
       crudRule.fix!({
         model,
-        violations: [{ element: "ghost", message: "" }],
+        violations: [
+          { target: "ghost", targetKind: "element" as const, message: "" },
+        ],
         syntax: plantumlSyntax,
         options: undefined,
       }),

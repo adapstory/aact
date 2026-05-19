@@ -57,7 +57,8 @@ export const apiGatewayRule: RuleDefinition<ApiGatewayOptions> = {
         const techs = rel.technology?.split(", ") ?? [];
         if (!techs.some((t) => gatewayPattern.test(t))) {
           violations.push({
-            element: element.name,
+            target: element.name,
+            targetKind: "element" as const,
             message: `calls external "${rel.to}" without going through an API Gateway`,
             ...(rel.sourceLocation
               ? { sourceLocation: rel.sourceLocation }

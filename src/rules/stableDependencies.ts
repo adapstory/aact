@@ -66,7 +66,8 @@ export const stableDependenciesRule: RuleDefinition = {
           // acl/acyclic. Falls back to the source container in the
           // CLI layer when the loader didn't populate `sourceLocation`.
           violations.push({
-            element: c.name,
+            target: c.name,
+            targetKind: "element" as const,
             message: `stable module (I=${iSource.toFixed(2)}) depends on less stable "${rel.to}" (I=${iTarget.toFixed(2)}) — dependencies should point toward stability`,
             ...(rel.sourceLocation
               ? { sourceLocation: rel.sourceLocation }

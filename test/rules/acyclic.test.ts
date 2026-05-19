@@ -19,7 +19,7 @@ describe("acyclicRule.check", () => {
     });
     const v = acyclicRule.check(model);
     expect(v.length).toBeGreaterThan(0);
-    expect(v[0].element).toBe("a");
+    expect(v[0].target).toBe("a");
   });
 
   it("detects 2-cycle", () => {

@@ -312,7 +312,8 @@ describe("renderCheckText", () => {
           violations: [
             {
               rule: "acl",
-              element: "my_service",
+              target: "my_service",
+              targetKind: "element" as const,
               message: "calls external system",
               severity: "error",
             },
@@ -342,7 +343,8 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                element: "my_service",
+                target: "my_service",
+                targetKind: "element" as const,
                 message: "msg",
                 severity: "error",
               },
@@ -384,7 +386,8 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                element: "my_service",
+                target: "my_service",
+                targetKind: "element" as const,
                 message: "msg",
                 severity: "error",
               },
@@ -433,7 +436,8 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                element: "my_service",
+                target: "my_service",
+                targetKind: "element" as const,
                 message: "calls external",
                 severity: "error",
               },
@@ -466,7 +470,8 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                element: "my_service",
+                target: "my_service",
+                targetKind: "element" as const,
                 message: "calls external",
                 severity: "error",
                 sourceLocation: {

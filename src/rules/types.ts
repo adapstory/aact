@@ -1,17 +1,25 @@
 import type { FormatSyntax } from "../formats/types";
 import type { Model, SourceLocation } from "../model";
 
+/**
+ * A rule violation. `target` is the name of the offending node;
+ * `targetKind` says whether to look it up in `model.elements` or
+ * `model.boundaries`. Most rules fire on elements (acl, crud,
+ * acyclic, stableDependencies, apiGateway, dbPerService); two
+ * boundary-level rules (cohesion, commonReuse) set
+ * `targetKind: "boundary"` so consumers don't have to guess which
+ * lookup table to use.
+ *
+ * `sourceLocation` is optional but strongly recommended — rules
+ * that anchor on a specific relation / declaration give the CLI
+ * (and any LSP / agent consumer) precise click-to-jump. When
+ * omitted, the CLI falls back to the target node's own
+ * `sourceLocation`.
+ */
 export interface Violation {
-  readonly element: string;
+  readonly target: string;
+  readonly targetKind: "element" | "boundary";
   readonly message: string;
-  /**
-   * Optional location pointing at the offending construct in source.
-   * When omitted, the CLI falls back to
-   * `model.elements[element].sourceLocation` so that rules emitting
-   * just `element` + `message` still get diagnostic anchoring "for
-   * free". Rules that flag a specific relation / boundary / property
-   * may set this explicitly to point at the more precise byte range.
-   */
   readonly sourceLocation?: SourceLocation;
 }
 

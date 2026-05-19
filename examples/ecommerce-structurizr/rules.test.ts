@@ -39,7 +39,7 @@ describe("Rules demo on ecommerce Structurizr workspace", () => {
     const violations = apiGatewayRule.check(model);
     expect(violations).toBeDefined();
     for (const v of violations) {
-      console.log(`${v.element}: ${v.message}`);
+      console.log(`${v.target}: ${v.message}`);
     }
   });
 

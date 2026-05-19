@@ -40,7 +40,7 @@ describe("Rules on common-reuse.puml", () => {
   it("Cohesion — boundaries have more cohesion than coupling", () => {
     const violations = cohesionRule.check(model);
     for (const v of violations) {
-      console.log(`${v.element}: ${v.message}`);
+      console.log(`${v.target}: ${v.message}`);
     }
     expect(violations).toBeDefined();
   });
@@ -49,7 +49,7 @@ describe("Rules on common-reuse.puml", () => {
     const violations = commonReuseRule.check(model);
 
     expect(violations).toHaveLength(1);
-    expect(violations[0].element).toBe("inventory");
+    expect(violations[0].target).toBe("inventory");
     expect(violations[0].message).toContain("orders_events");
   });
 });

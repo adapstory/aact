@@ -32,7 +32,7 @@ describe("Microservices (Structurizr)", () => {
   it("ACL — only acl-tagged containers depend on externals", () => {
     const violations = aclRule.check(model);
     for (const v of violations) {
-      console.log(`${v.element}: ${v.message}`);
+      console.log(`${v.target}: ${v.message}`);
     }
     expect(violations).toBeDefined();
   });
@@ -52,7 +52,7 @@ describe("Microservices (Structurizr)", () => {
   it("Cohesion — boundaries have more cohesion than coupling", () => {
     const violations = cohesionRule.check(model);
     for (const v of violations) {
-      console.log(`${v.element}: ${v.message}`);
+      console.log(`${v.target}: ${v.message}`);
     }
     expect(violations).toBeDefined();
   });

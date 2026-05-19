@@ -30,7 +30,10 @@ import { configArg, jsonArg } from "../sharedArgs";
 
 export interface CheckViolation {
   readonly rule: string;
-  readonly element: string;
+  /** Name of the offending node — points into `model.elements` or
+   *  `model.boundaries` depending on `targetKind`. */
+  readonly target: string;
+  readonly targetKind: "element" | "boundary";
   readonly message: string;
   /** v1: always "error". Per-rule severity will be additive in a future bump. */
   readonly severity: "error";
@@ -38,7 +41,7 @@ export interface CheckViolation {
    * Optional location of the offending construct in source. Populated
    * either from `Violation.sourceLocation` if the rule set it
    * explicitly, or by looking up
-   * `model.elements[v.element].sourceLocation` as fallback.
+   * `model.elements[v.target].sourceLocation` as fallback.
    * Surfaces in the JSON envelope for agents and powers OSC8
    * hyperlinks in text mode (`terminal-link`).
    */
@@ -207,19 +210,19 @@ const flattenViolations = (
   const out: CheckViolation[] = [];
   for (const result of results) {
     for (const v of result.violations) {
-      // Fall back to the element's sourceLocation when the rule
-      // didn't set one. Boundary-level rules (cohesion) use the
-      // `element` field to carry a boundary name — fall through to
-      // `model.boundaries[name]` so those violations are anchored
-      // too. Rules that flag a specific relation should set
-      // `v.sourceLocation` explicitly for precision.
-      const sourceLocation =
-        v.sourceLocation ??
-        model.elements[v.element]?.sourceLocation ??
-        model.boundaries[v.element]?.sourceLocation;
+      // Anchor on the rule-set location if present; otherwise look
+      // up the target node by kind. `targetKind` removes the old
+      // "try both maps" guess that boundary-level rules used to
+      // depend on.
+      const fallbackLoc =
+        v.targetKind === "element"
+          ? model.elements[v.target]?.sourceLocation
+          : model.boundaries[v.target]?.sourceLocation;
+      const sourceLocation = v.sourceLocation ?? fallbackLoc;
       out.push({
         rule: result.name,
-        element: v.element,
+        target: v.target,
+        targetKind: v.targetKind,
         message: v.message,
         severity: "error",
         ...(sourceLocation ? { sourceLocation } : {}),
@@ -403,7 +406,7 @@ const renderGithubAnnotations = (
       ? `file=${loc.file},line=${loc.start.line},col=${loc.start.col},`
       : "";
     sink.write(
-      `::error ${locAttrs}title=${v.rule}::${v.element}: ${v.message}\n`,
+      `::error ${locAttrs}title=${v.rule}::${v.target}: ${v.message}\n`,
     );
   }
 };
@@ -433,7 +436,7 @@ const renderViolationsTable = (
       locText,
       sourceLocation: loc,
       rule: v.rule,
-      element: v.element,
+      target: v.target,
       message: v.message,
     };
   });
@@ -448,7 +451,7 @@ const renderViolationsTable = (
     const locCell = colors.dim(linked);
     const severity = colors.red("error");
     const ruleCell = colors.yellow(r.rule.padEnd(ruleWidth));
-    const subject = colors.bold(r.element);
+    const subject = colors.bold(r.target);
     sink.write(
       `  ${locCell}  ${severity}  ${ruleCell}  ${subject}: ${r.message}\n`,
     );

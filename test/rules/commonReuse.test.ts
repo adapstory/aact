@@ -105,7 +105,7 @@ describe("commonReuseRule.check", () => {
       ],
     });
     const v = commonReuseRule.check(model);
-    const violation = v.find((it) => it.element === "cons_ctx");
+    const violation = v.find((it) => it.target === "cons_ctx");
     expect(violation).toBeDefined();
     expect(violation!.message).toContain("p_a"); // used
     expect(violation!.message).toContain("p_b"); // missing
@@ -135,8 +135,8 @@ describe("commonReuseRule.check", () => {
       ],
     });
     const v = commonReuseRule.check(model);
-    expect(v.find((it) => it.element === "partial_ctx")).toBeDefined();
-    expect(v.find((it) => it.element === "full_ctx")).toBeUndefined();
+    expect(v.find((it) => it.target === "partial_ctx")).toBeDefined();
+    expect(v.find((it) => it.target === "full_ctx")).toBeUndefined();
   });
 
   it("anchors violation on the first cross-boundary edge's sourceLocation", () => {
@@ -166,7 +166,7 @@ describe("commonReuseRule.check", () => {
       ],
     });
     const v = commonReuseRule.check(model);
-    const violation = v.find((it) => it.element === "cons_ctx");
+    const violation = v.find((it) => it.target === "cons_ctx");
     expect(violation?.sourceLocation).toEqual(firstLoc);
   });
 

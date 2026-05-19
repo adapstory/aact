@@ -40,7 +40,7 @@ describe("aclRule.check", () => {
     });
     const v = aclRule.check(model);
     expect(v).toHaveLength(1);
-    expect(v[0].element).toBe("my_service");
+    expect(v[0].target).toBe("my_service");
     expect(v[0].message).toContain("ext_system");
   });
 
@@ -109,7 +109,9 @@ const pumlFix = async (
   const { model, source } = await loadPumlString(puml);
   const fixes = aclRule.fix!({
     model,
-    violations: [{ element: violationElement, message: "" }],
+    violations: [
+      { target: violationElement, targetKind: "element" as const, message: "" },
+    ],
     syntax: plantumlSyntax,
     options,
   });
@@ -203,7 +205,7 @@ describe("aclRule.fix (plantuml syntax)", () => {
   });
 
   it("targets the violation's element by name when multiple services exist", async () => {
-    // Stryker mutated `c.name === violation.element` to `true` — that
+    // Stryker mutated `c.name === violation.target` to `true` — that
     // mutation would wrap the wrong container. Pin: when `beta` is the
     // violation, only `beta`'s relations get rerouted.
     const twoServices = [
@@ -232,7 +234,9 @@ describe("aclRule.fix (plantuml syntax)", () => {
     const { model } = await loadPumlString(singleExternalPuml);
     const result = aclRule.fix!({
       model,
-      violations: [{ element: "ghost", message: "" }],
+      violations: [
+        { target: "ghost", targetKind: "element" as const, message: "" },
+      ],
       syntax: plantumlSyntax,
       options: undefined,
     });

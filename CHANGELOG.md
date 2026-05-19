@@ -6,6 +6,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed (breaking — rule API)
+
+- `Violation.element` renamed to `Violation.target` and gains a
+  required `targetKind: "element" | "boundary"` discriminator. Most
+  rules fire on elements (acl, crud, acyclic, stableDependencies,
+  apiGateway, dbPerService) and emit `targetKind: "element"`; the
+  two boundary-level rules (cohesion, commonReuse) emit
+  `targetKind: "boundary"`. The old `element: string` field lied
+  for boundary-level rules — agents and LSP consumers that did
+  `model.elements[v.element]` lookup got `undefined` on cohesion /
+  commonReuse violations. The discriminator removes the guess.
+- `CheckViolation` JSON envelope field follows: the old
+  `data.violations[].element` is replaced by `.target` and
+  `.targetKind`.
+- Custom rules: rename the `element` field in returned violations to
+  `target` and add `targetKind: "element"` (or `"boundary"` for
+  boundary-level rules). TypeScript surfaces every call site at
+  compile time; no runtime fallback shipped.
+
+### Added — public exports
+
+These types were defined internally but never re-exported from the
+library barrel, so users couldn't declare variables / function
+signatures with them through `import { … } from "aact"`:
+
+- `editLocation` helper from `rules/lib/applyEdits` — for custom
+  applier callers that need the byte range of an edit without
+  re-matching the discriminant.
+- `ApplyEditsResult` / `EditConflict` — the return shape and
+  conflict entry of `applyEdits`.
+- `RelationDeclOptions` — opts arg type of `FormatSyntax.relationDecl`.
+- `LoadableFormat` / `GeneratableFormat` / `FixableFormat` —
+  the narrowed `Format` types produced by the `canLoad` /
+  `canGenerate` / `canFix` type guards.
+
 ## v3.0.0-beta.10 — 2026-05-19
 
 Range-based `--fix` engine replaces the string-matching applier. Every

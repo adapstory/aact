@@ -73,7 +73,8 @@ export const cohesionRule: RuleDefinition = {
 
       if (cohesion <= coupling) {
         violations.push({
-          element: boundary.name,
+          target: boundary.name,
+          targetKind: "boundary" as const,
           message: `coupling (${coupling}) ≥ cohesion (${cohesion}) — more cross-boundary dependencies than internal connections`,
           ...(loc ? { sourceLocation: loc } : {}),
         });
@@ -89,7 +90,8 @@ export const cohesionRule: RuleDefinition = {
         );
         if (cohesion >= innerCohesionSum) {
           violations.push({
-            element: boundary.name,
+            target: boundary.name,
+            targetKind: "boundary" as const,
             message: `parent cohesion (${cohesion}) ≥ sum of inner cohesions (${innerCohesionSum}) — parent boundary should be less cohesive than its sub-boundaries`,
             ...(loc ? { sourceLocation: loc } : {}),
           });

@@ -102,7 +102,8 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
     for (const [db, { accessors, firstEdgeLocation }] of dbAccessMap) {
       if (accessors.length > 1) {
         violations.push({
-          element: db,
+          target: db,
+          targetKind: "element" as const,
           message: `shared between ${accessors.join(", ")} — each database should have a single owner`,
           ...(firstEdgeLocation ? { sourceLocation: firstEdgeLocation } : {}),
         });
@@ -121,7 +122,7 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
     for (const violation of violations) {
       // Stryker disable all
       const db = allElements(model).find(
-        (c) => c.name === violation.element && c.kind === "ContainerDb",
+        (c) => c.name === violation.target && c.kind === "ContainerDb",
       );
       // Stryker restore all
       if (!db) continue;

@@ -286,7 +286,7 @@ const noDeprecatedTag = {
   check(model) {
     return Object.values(model.elements)
       .filter((c) => c.tags.includes("deprecated"))
-      .map((c) => ({ element: c.name, message: 'has "deprecated" tag' }));
+      .map((c) => ({ target: c.name, targetKind: "element" as const, message: 'has "deprecated" tag' }));
   },
 };
 

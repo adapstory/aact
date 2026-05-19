@@ -42,7 +42,8 @@ export const acyclicRule: RuleDefinition = {
       if (findCycle(element.name, element.name, new Set())) {
         const firstRel = element.relations[0];
         violations.push({
-          element: element.name,
+          target: element.name,
+          targetKind: "element" as const,
           message: "participates in a dependency cycle",
           ...(firstRel?.sourceLocation
             ? { sourceLocation: firstRel.sourceLocation }
