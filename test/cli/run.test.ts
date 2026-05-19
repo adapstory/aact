@@ -142,9 +142,13 @@ describe("cliCommandWithConfig", () => {
     rules: {},
     customRules: [],
   };
+  const fakeLoaded = {
+    config: fakeConfig,
+    configPath: "/abs/path/aact.config.ts",
+  };
 
   it("invokes execute with loaded config", async () => {
-    mockLoadConfig.mockResolvedValue(fakeConfig);
+    mockLoadConfig.mockResolvedValue(fakeLoaded);
     const execute = vi
       .fn()
       .mockResolvedValue({ data: { ok: true }, exitCode: 0 });
@@ -212,7 +216,7 @@ describe("cliCommandWithConfig", () => {
   });
 
   it("converts execute throw into exit 2 envelope with source from config", async () => {
-    mockLoadConfig.mockResolvedValue(fakeConfig);
+    mockLoadConfig.mockResolvedValue(fakeLoaded);
 
     const cmd = cliCommandWithConfig({
       name: "needs-cfg",
@@ -237,7 +241,7 @@ describe("cliCommandWithConfig", () => {
   });
 
   it("propagates execute exitCode in success path", async () => {
-    mockLoadConfig.mockResolvedValue(fakeConfig);
+    mockLoadConfig.mockResolvedValue(fakeLoaded);
 
     const cmd = cliCommandWithConfig({
       name: "needs-cfg",

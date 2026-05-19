@@ -68,9 +68,9 @@ describe("loadAndValidateConfig", () => {
       config: { source: { type: "plantuml", path: "test.puml" } },
     });
 
-    const result = await loadAndValidateConfig();
-    expect(result.source.type).toBe("plantuml");
-    expect(result.source.path).toBe("test.puml");
+    const { config } = await loadAndValidateConfig();
+    expect(config.source.type).toBe("plantuml");
+    expect(config.source.path).toBe("test.puml");
   });
 
   it("accepts empty-object form for option-less rules (symmetry with option-bearing)", async () => {
@@ -90,9 +90,9 @@ describe("loadAndValidateConfig", () => {
         },
       },
     });
-    const result = await loadAndValidateConfig();
-    expect(result.rules?.acyclic).toEqual({});
-    expect(result.rules?.cohesion).toEqual({});
+    const { config } = await loadAndValidateConfig();
+    expect(config.rules?.acyclic).toEqual({});
+    expect(config.rules?.cohesion).toEqual({});
   });
 
   it("rejects unknown keys inside an option-less rule object", async () => {

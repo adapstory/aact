@@ -133,9 +133,9 @@ describe("loadAndValidateConfig — customRules shape validation", () => {
 
   it("accepts valid customRules array", async () => {
     setupConfig({ customRules: [noLegacyRule] });
-    const result = await loadAndValidateConfig();
-    expect(result.customRules).toHaveLength(1);
-    expect(result.customRules?.[0]?.name).toBe("noLegacy");
+    const { config } = await loadAndValidateConfig();
+    expect(config.customRules).toHaveLength(1);
+    expect(config.customRules?.[0]?.name).toBe("noLegacy");
   });
 
   it("throws when customRules entry missing name", async () => {
@@ -185,8 +185,8 @@ describe("loadAndValidateConfig — customRules shape validation", () => {
       customRules: [noLegacyRule],
       rules: { noLegacy: { tag: "legacy" } },
     });
-    const result = await loadAndValidateConfig();
-    expect(result.rules).toBeDefined();
+    const { config } = await loadAndValidateConfig();
+    expect(config.rules).toBeDefined();
   });
 });
 

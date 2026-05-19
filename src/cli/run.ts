@@ -187,13 +187,18 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
       const startedAt = Date.now();
       const cliJson = readJsonFlag(ctx.args);
       const cliSarif = readSarifFlag(ctx.args);
-      const configPath = readConfigArg(ctx.args);
+      const explicitConfigPath = readConfigArg(ctx.args);
 
       let config: AactConfig | null = null;
+      let resolvedConfigPath: string | null = explicitConfigPath ?? null;
       let loadError: unknown = null;
 
       try {
-        config = await loadAndValidateConfig(configPath);
+        const loaded = await loadAndValidateConfig(explicitConfigPath);
+        config = loaded.config;
+        // Prefer the path c12 actually resolved (covers both explicit
+        // `--config <path>` and default discovery in cwd / parents).
+        resolvedConfigPath = loaded.configPath ?? explicitConfigPath ?? null;
       } catch (error) {
         loadError = error;
       }
@@ -206,7 +211,7 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
           command: opts.name,
           error: loadError ?? new Error("Config did not load"),
           startedAt,
-          configPath: configPath ?? null,
+          configPath: resolvedConfigPath,
           source: null,
         });
         await reporter.emit({ envelope } as CommandResult<TData>);
@@ -225,7 +230,7 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
           name: opts.name,
           exec,
           startedAt,
-          configPath: configPath ?? null,
+          configPath: resolvedConfigPath,
           source: loadedConfig.source.path,
         });
         await reporter.emit(result);
@@ -235,7 +240,7 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
           command: opts.name,
           error,
           startedAt,
-          configPath: configPath ?? null,
+          configPath: resolvedConfigPath,
           source: loadedConfig.source.path,
         });
         await reporter.emit({ envelope } as CommandResult<TData>);

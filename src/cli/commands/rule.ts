@@ -75,7 +75,8 @@ const loadConfigOptional = async (
   configPath: string | undefined,
 ): Promise<AactConfig | null> => {
   try {
-    return await loadAndValidateConfig(configPath);
+    const { config } = await loadAndValidateConfig(configPath);
+    return config;
   } catch (error) {
     if (error instanceof ToolError && error.kind === "config.missingSource") {
       return null;

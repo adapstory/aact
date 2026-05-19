@@ -103,15 +103,27 @@ const describeError = (error: unknown): string => {
   return String(error);
 };
 
+interface RawConfigResult {
+  readonly raw: unknown;
+  /** Absolute path to the config file c12 actually resolved (whether
+   *  via explicit `--config` or default discovery in cwd / parents).
+   *  `null` when no file was found — c12 returns an empty config in
+   *  that case, which we surface as `config.missingSource` upstream. */
+  readonly configFile: string | null;
+}
+
 const loadRawConfig = async (
   configPath: string | undefined,
-): Promise<unknown> => {
+): Promise<RawConfigResult> => {
   try {
-    const { config } = await loadConfig({
+    const result = await loadConfig({
       name: "aact",
       ...(configPath ? { configFile: configPath } : {}),
     });
-    return config;
+    return {
+      raw: result.config,
+      configFile: result.configFile ?? null,
+    };
   } catch (error) {
     throw new ToolError(
       "config.loadFailed",
@@ -144,10 +156,20 @@ const isAbsent = (raw: unknown): boolean => {
   return typeof raw === "object" && Object.keys(raw).length === 0;
 };
 
+export interface LoadedConfig {
+  readonly config: AactConfig;
+  /** Absolute path to the resolved config file. `null` when caller
+   *  explicitly passed no file (e.g. `rule list` swallows
+   *  `config.missingSource`). Surfaces in `envelope.meta.configPath`
+   *  so agents see *where* the config was loaded from, not just
+   *  whether a `--config` flag was used. */
+  readonly configPath: string | null;
+}
+
 export const loadAndValidateConfig = async (
   configPath?: string,
-): Promise<AactConfig> => {
-  const raw = await loadRawConfig(configPath);
+): Promise<LoadedConfig> => {
+  const { raw, configFile } = await loadRawConfig(configPath);
 
   if (isAbsent(raw)) {
     throw new ToolError(
@@ -178,14 +200,17 @@ export const loadAndValidateConfig = async (
     : undefined;
 
   return {
-    ...parsed,
-    customRules,
-    source: {
-      path: rawSource.path,
-      type,
-      ...("writePath" in rawSource && rawSource.writePath !== undefined
-        ? { writePath: rawSource.writePath }
-        : {}),
+    config: {
+      ...parsed,
+      customRules,
+      source: {
+        path: rawSource.path,
+        type,
+        ...("writePath" in rawSource && rawSource.writePath !== undefined
+          ? { writePath: rawSource.writePath }
+          : {}),
+      },
     },
+    configPath: configFile,
   };
 };

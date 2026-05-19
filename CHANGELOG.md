@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- **`envelope.meta.configPath` now reflects the resolved config
+  file path even without an explicit `--config` flag.** Beta.15
+  returned `null` whenever c12 discovered `aact.config.ts`
+  automatically in cwd / parents — the path was loaded but
+  discarded before it reached the envelope. Now the resolved
+  absolute path surfaces in every `--json` envelope so agents
+  see _where_ the config came from.
+
 ## v3.0.0-beta.15 — 2026-05-19
 
 Two themes: source-location hyperlinks now actually navigate in
