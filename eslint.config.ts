@@ -22,6 +22,9 @@ export default tseslint.config(
       "coverage/",
       "reports/",
       ".stryker-tmp/",
+      // Cloned parser references (Java/structurizr-dsl etc.) — fetched
+      // on demand by scripts/fetch-parser-refs.sh, not our code.
+      ".parser-refs/",
       "stryker.config.mjs",
     ],
   },

@@ -98,7 +98,7 @@ describe("validateModel", () => {
     });
   });
 
-  it("flags container-in-boundary-not-in-model", () => {
+  it("flags element-in-boundary-not-in-model", () => {
     const { model } = buildModel({
       elements: [],
       boundaries: [
@@ -180,7 +180,7 @@ describe("validateModel", () => {
     expect(isDuplicateElement(containers, "c")).toBe(false);
   });
 
-  it("buildModel emits duplicate-container-name issue", () => {
+  it("buildModel emits duplicate-element-name issue", () => {
     const { issues } = buildModel({
       elements: [
         {
