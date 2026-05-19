@@ -6,6 +6,63 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed
+
+- **`aact analyze` redesigned around structural metrics that work
+  on any DSL / PUML out of the box.** The previous output mixed an
+  unconfigurable `Sync API calls` / `Async API calls` pair driven
+  by a hardcoded `["http","grpc","tcp"]` list with no escape hatch
+  — in real PUML where `technology` is often empty, both numbers
+  were `0`. The new shape:
+  - **`elementsByKind`** — per-`ElementKind` count.
+  - **`relationsByStyle`** — global `{ sync, async, unspecified }`
+    breakdown. Classified by relation tags first (`async` / `sync`
+    — primary signal, portable across DSLs; Structurizr DSL emits
+    `async` automatically from `interactionStyle: "Asynchronous"`),
+    with an opt-in technology fallback when configured.
+  - **`boundaries[].syncCoupling` / `.asyncCoupling` /
+    `.unspecifiedCoupling`** — per-boundary fragility split. Total
+    matches existing `.coupling`. Sync-heavy coupling out of a
+    boundary surfaces latency-cascade risk.
+  - **`boundaries[].ratio`** — `cohesion / (cohesion + coupling)`;
+    `null` when both are zero.
+  - **`fanIn` / `fanOut`** — top-N elements by afferent / efferent
+    coupling (default `topN = 5`). Respects an `exclude` filter
+    (tags + glob) to drop infrastructure noise from the ranking
+    without distorting other elements' counts.
+  - **`cycles`** — `{ count, smallest }` from Tarjan SCC; self-loops
+    are excluded (those are surfaced by `validateModel` as
+    `self-relation` ModelIssues).
+- **`AactConfig.analyze`** — new config section:
+  ```ts
+  analyze: {
+    syncTechnologies?: string[];   // case-insensitive substring fallback
+    asyncTechnologies?: string[];
+    exclude?: { tags?: string[]; namePatterns?: string[] };  // hotspot noise filter
+    topN?: number;                 // default 5
+  }
+  ```
+  Defaults to empty — pure tag-driven classification with no
+  exclude filter. Plumbed through to the library `analyzeArchitecture`
+  for direct consumers.
+
+### Fixed
+
+- **`Databases` count now includes `ComponentDb` elements**, not just
+  `ContainerDb`. The earlier hardcoded `kind === "ContainerDb"` check
+  silently dropped component-level data stores from the metric.
+
+### Removed (breaking on `AnalysisReport` / `AnalyzeOptions`)
+
+- `AnalysisReport.syncApiCalls` / `asyncApiCalls` — replaced by
+  `relationsByStyle` (global) and `boundaries[].syncCoupling` etc.
+  (per-boundary, only on coupling edges where fragility matters).
+- `AnalyzeOptions.apiTechnologies` — replaced by the
+  `syncTechnologies` / `asyncTechnologies` pair with explicit
+  semantics. Library users migrating: rename
+  `{ apiTechnologies: [...] }` to `{ syncTechnologies: [...] }` and
+  add `asyncTechnologies` if you want symmetric classification.
+
 ### Fixed
 
 - **Source-location hyperlinks now navigate to line/column in every

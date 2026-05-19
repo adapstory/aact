@@ -81,6 +81,24 @@ export const AactConfigSchema = v.strictObject({
   // shape глубже массива. Структурная проверка делается в check.ts на activation
   // time (name/check required, conflict detection vs built-ins).
   customRules: v.optional(v.array(v.any())),
+  analyze: v.optional(
+    v.strictObject({
+      /** Technology substrings (case-insensitive) used as fallback
+       *  classifier when a relation has no explicit `sync`/`async` tag. */
+      syncTechnologies: v.optional(v.array(v.string())),
+      asyncTechnologies: v.optional(v.array(v.string())),
+      /** Element filter for fan-in / fan-out hotspot rankings.
+       *  Structural metrics (boundaries, cycles) stay full-graph. */
+      exclude: v.optional(
+        v.strictObject({
+          tags: v.optional(v.array(v.string())),
+          namePatterns: v.optional(v.array(v.string())),
+        }),
+      ),
+      /** Top-N hotspot list size. Default 5. */
+      topN: v.optional(v.number()),
+    }),
+  ),
   generate: v.optional(
     v.strictObject({
       kubernetes: v.optional(
@@ -154,6 +172,7 @@ export interface AactConfigInput<
       };
   readonly rules?: AactRulesConfig<C>;
   readonly customRules?: C;
+  readonly analyze?: v.InferInput<typeof AactConfigSchema>["analyze"];
   readonly generate?: v.InferInput<typeof AactConfigSchema>["generate"];
   readonly output?: v.InferInput<typeof AactConfigSchema>["output"];
 }
@@ -167,6 +186,7 @@ export interface AactConfig {
   };
   readonly rules?: BuiltinRulesConfig & Readonly<Record<string, unknown>>;
   readonly customRules?: readonly RuleDefinition[];
+  readonly analyze?: v.InferOutput<typeof AactConfigSchema>["analyze"];
   readonly generate?: v.InferOutput<typeof AactConfigSchema>["generate"];
   readonly output?: v.InferOutput<typeof AactConfigSchema>["output"];
 }

@@ -189,8 +189,9 @@ describe("aact analyze", () => {
     const result = await runCli(["analyze"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Elements:");
-    expect(result.stdout).toContain("Sync API calls:");
+    expect(result.stdout).toContain("Relations:");
     expect(result.stdout).toContain("Databases:");
+    expect(result.stdout).toContain("Cycles:");
   });
 
   it("--json emits a v1 envelope on stdout with AnalysisReport data", async () => {
@@ -206,10 +207,13 @@ describe("aact analyze", () => {
 
     const data = envelope.data as Record<string, unknown>;
     expect(data).toHaveProperty("elementsCount");
-    expect(data).toHaveProperty("syncApiCalls");
-    expect(data).toHaveProperty("asyncApiCalls");
+    expect(data).toHaveProperty("elementsByKind");
+    expect(data).toHaveProperty("relationsByStyle");
     expect(data).toHaveProperty("databases");
     expect(data).toHaveProperty("boundaries");
+    expect(data).toHaveProperty("fanIn");
+    expect(data).toHaveProperty("fanOut");
+    expect(data).toHaveProperty("cycles");
 
     const meta = envelope.meta as Record<string, unknown>;
     expect(meta).toHaveProperty("aactVersion");

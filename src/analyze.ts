@@ -1,30 +1,80 @@
-import type { Boundary, Element, Model, Relation } from "./model";
-import { allElements, getBoundary, getElement } from "./model";
+import type { Boundary, Element, ElementKind, Model, Relation } from "./model";
+import { allElements, getBoundary } from "./model";
+import { matchesAnyName } from "./rules/lib/namingPatterns";
 
 export interface CouplingRelation {
   from: string;
   to: string;
 }
 
+/** Sync/async classification for a single relation. */
+export type RelationStyle = "sync" | "async" | "unspecified";
+
 export interface BoundaryAnalysis {
   name: string;
   label: string;
+  /** Edges that start and end inside this boundary's element set. */
   cohesion: number;
+  /** Edges that cross this boundary's element set — going either to a
+   *  sibling sub-boundary, to an unrelated element, or outside the
+   *  parent's scope (attributed to the parent in that case). */
   coupling: number;
+  /** Of `coupling`, how many are classified as synchronous interactions. */
+  syncCoupling: number;
+  asyncCoupling: number;
+  unspecifiedCoupling: number;
+  /** `cohesion / (cohesion + coupling)` — 1.0 = pure cluster, 0.0 = boundary
+   *  is fiction over a chatty graph. `null` when both numerator and
+   *  denominator are 0 (empty boundary). */
+  ratio: number | null;
   couplingRelations: CouplingRelation[];
 }
 
-interface DatabasesInfo {
+export interface DatabasesInfo {
   count: number;
   consumes: number;
 }
 
+export interface ElementCoupling {
+  name: string;
+  count: number;
+}
+
+export interface CyclesInfo {
+  /** Number of strongly-connected components with > 1 element. Self-loops
+   *  (single-element cycles) are surfaced by `validateModel` as
+   *  `self-relation` issues and excluded from this count to avoid
+   *  double-counting. */
+  count: number;
+  /** Element names of the smallest non-trivial cycle, in traversal order.
+   *  `null` when no cycles exist. */
+  smallest: readonly string[] | null;
+}
+
+export interface RelationStyleCounts {
+  sync: number;
+  async: number;
+  unspecified: number;
+}
+
 export interface AnalysisReport {
   elementsCount: number;
-  syncApiCalls: number;
-  asyncApiCalls: number;
+  /** Per-`ElementKind` count — sanity overview ("we have 12 Containers and
+   *  3 ContainerDbs"). */
+  elementsByKind: Readonly<Partial<Record<ElementKind, number>>>;
   databases: DatabasesInfo;
+  /** Sync / async / unspecified breakdown of all relations in the model.
+   *  Classified by tag first, then by `analyze.{syncTechnologies,asyncTechnologies}`
+   *  fallback if configured. */
+  relationsByStyle: RelationStyleCounts;
   boundaries: BoundaryAnalysis[];
+  /** Top-N elements by incoming relations (afferent coupling). Honours
+   *  `analyze.exclude` to drop infrastructure noise from the ranking. */
+  fanIn: readonly ElementCoupling[];
+  /** Top-N elements by outgoing relations (efferent coupling). Same
+   *  `exclude` rules as `fanIn`. */
+  fanOut: readonly ElementCoupling[];
+  cycles: CyclesInfo;
 }
 
 export interface AnalyzedArchitecture {
@@ -37,23 +87,79 @@ interface RelationWithSource {
   relation: Relation;
 }
 
+/**
+ * Analyzer configuration. All fields optional — defaults give pure
+ * tag-driven classification with no exclude filter and `topN = 5`.
+ *
+ * Plumbed from `aact.config.ts → analyze` at the CLI layer; library
+ * users pass directly to `analyzeArchitecture(model, options)`.
+ */
 export interface AnalyzeOptions {
-  apiTechnologies?: readonly string[];
+  /** Technology substrings (case-insensitive) that classify a relation
+   *  as synchronous when it has no explicit `sync`/`async` tag.
+   *  Empty by default — opt-in only. Matched against `Relation.technology`. */
+  readonly syncTechnologies?: readonly string[];
+  /** Technology substrings (case-insensitive) for async fallback.
+   *  Empty by default. */
+  readonly asyncTechnologies?: readonly string[];
+  /** Filter noise (shared infra, libraries) from element-level fan-in /
+   *  fan-out rankings. Does NOT affect boundary cohesion/coupling or
+   *  cycle detection — those are structural and the excluded element's
+   *  edges still count for other elements. */
+  readonly exclude?: {
+    readonly tags?: readonly string[];
+    readonly namePatterns?: readonly string[];
+  };
+  /** How many top fan-in / fan-out hotspots to surface. Default 5. */
+  readonly topN?: number;
 }
 
-const DEFAULT_API_TECHNOLOGIES = ["http", "grpc", "tcp"];
+const DEFAULT_TOP_N = 5;
+
+const matchesAnyTech = (tech: string, patterns: readonly string[]): boolean => {
+  const lower = tech.toLowerCase();
+  return patterns.some((p) => lower.includes(p.toLowerCase()));
+};
+
+const classifyStyle = (
+  relation: Relation,
+  options: AnalyzeOptions | undefined,
+): RelationStyle => {
+  // Tag is the explicit, DSL-portable signal — Structurizr DSL emits
+  // `async` from `interactionStyle: "Asynchronous"`, PUML users tag
+  // manually. Always preferred over the technology heuristic.
+  if (relation.tags.includes("async")) return "async";
+  if (relation.tags.includes("sync")) return "sync";
+  const tech = relation.technology;
+  if (!tech) return "unspecified";
+  const sync = options?.syncTechnologies ?? [];
+  const async = options?.asyncTechnologies ?? [];
+  if (async.length > 0 && matchesAnyTech(tech, async)) return "async";
+  if (sync.length > 0 && matchesAnyTech(tech, sync)) return "sync";
+  return "unspecified";
+};
 
 const allRelations = (model: Model): RelationWithSource[] =>
   allElements(model).flatMap((element) =>
     element.relations.map((relation) => ({ from: element, relation })),
   );
 
-const classifyRelation = (
+const incrementStyleBucket = (
+  boundary: BoundaryAnalysis,
+  style: RelationStyle,
+): void => {
+  if (style === "sync") boundary.syncCoupling++;
+  else if (style === "async") boundary.asyncCoupling++;
+  else boundary.unspecifiedCoupling++;
+};
+
+const classifyRelationForBoundary = (
   names: Set<string>,
   childNames: Set<string> | undefined,
   parentBoundary: Boundary | undefined,
   from: Element,
   relation: Relation,
+  style: RelationStyle,
   result: BoundaryAnalysis,
   parentResult: BoundaryAnalysis | undefined,
 ): void => {
@@ -68,10 +174,12 @@ const classifyRelation = (
 
   if (!parentBoundary || isInParentSibling) {
     result.coupling++;
+    incrementStyleBucket(result, style);
     result.couplingRelations.push({ from: from.name, to: relation.to });
     if (parentResult) parentResult.cohesion++;
   } else if (parentResult) {
     parentResult.coupling++;
+    incrementStyleBucket(parentResult, style);
     parentResult.couplingRelations.push({
       from: from.name,
       to: relation.to,
@@ -121,92 +229,242 @@ const buildBoundaryLookups = (model: Model): Map<string, BoundaryLookups> => {
   return result;
 };
 
-const isSyncApiCall = (
-  model: Model,
-  it: RelationWithSource,
-  apiTechnologies: readonly string[],
-): boolean => {
-  if (it.relation.tags.includes("async")) return false;
-  const target = getElement(model, it.relation.to);
-  if (target?.external === true && target.kind === "System") return true;
-  return apiTechnologies.some((t) =>
-    (it.relation.technology ?? "").toLowerCase().includes(t),
-  );
+const computeRatio = (cohesion: number, coupling: number): number | null => {
+  const total = cohesion + coupling;
+  if (total === 0) return null;
+  return cohesion / total;
 };
 
-const analyzeModel = (
+const analyzeBoundaries = (
   model: Model,
-  options?: AnalyzeOptions,
-): AnalysisReport => {
-  const apiTechnologies = options?.apiTechnologies ?? DEFAULT_API_TECHNOLOGIES;
-  const relations = allRelations(model);
-
-  const asyncApiCalls = relations.filter((it) =>
-    it.relation.tags.includes("async"),
-  );
-  const syncApiCalls = relations.filter((it) =>
-    isSyncApiCall(model, it, apiTechnologies),
-  );
-
+  relations: readonly RelationWithSource[],
+  styles: ReadonlyMap<Relation, RelationStyle>,
+): BoundaryAnalysis[] => {
   const lookups = buildBoundaryLookups(model);
-
-  const boundaryResults = new Map<string, BoundaryAnalysis>();
+  const results = new Map<string, BoundaryAnalysis>();
   for (const boundary of Object.values(model.boundaries)) {
-    boundaryResults.set(boundary.name, {
+    results.set(boundary.name, {
       name: boundary.name,
       label: boundary.label,
       cohesion: 0,
       coupling: 0,
+      syncCoupling: 0,
+      asyncCoupling: 0,
+      unspecifiedCoupling: 0,
+      ratio: null,
       couplingRelations: [],
     });
   }
-
   for (const boundary of Object.values(model.boundaries)) {
     const { nameSet, childNames, parentBoundary } = lookups.get(boundary.name)!;
-    const result = boundaryResults.get(boundary.name)!;
+    const result = results.get(boundary.name)!;
     const parentResult = parentBoundary
-      ? boundaryResults.get(parentBoundary.name)
+      ? results.get(parentBoundary.name)
       : undefined;
-
     for (const { from, relation } of relations) {
-      classifyRelation(
+      classifyRelationForBoundary(
         nameSet,
         childNames,
         parentBoundary,
         from,
         relation,
+        styles.get(relation) ?? "unspecified",
         result,
         parentResult,
       );
     }
   }
-
-  return {
-    elementsCount: allElements(model).length,
-    syncApiCalls: syncApiCalls.length,
-    asyncApiCalls: asyncApiCalls.length,
-    databases: analyzeDatabases(model),
-    boundaries: [...boundaryResults.values()],
-  };
+  // Finalise ratio for each boundary
+  for (const r of results.values()) {
+    r.ratio = computeRatio(r.cohesion, r.coupling);
+  }
+  return [...results.values()];
 };
 
 const analyzeDatabases = (model: Model): DatabasesInfo => {
   const dbNames = new Set(
     allElements(model)
-      .filter((it) => it.kind === "ContainerDb")
+      .filter((it) => it.kind === "ContainerDb" || it.kind === "ComponentDb")
       .map((it) => it.name),
   );
-
   let consumes = 0;
   for (const element of allElements(model)) {
     for (const r of element.relations) {
       if (dbNames.has(r.to)) consumes++;
     }
   }
+  return { count: dbNames.size, consumes };
+};
+
+const countByKind = (model: Model): Partial<Record<ElementKind, number>> => {
+  const out: Partial<Record<ElementKind, number>> = {};
+  for (const el of allElements(model)) {
+    out[el.kind] = (out[el.kind] ?? 0) + 1;
+  }
+  return out;
+};
+
+const isExcluded = (
+  el: Element,
+  options: AnalyzeOptions | undefined,
+): boolean => {
+  const tags = options?.exclude?.tags;
+  if (tags?.some((t) => el.tags.includes(t))) return true;
+  const patterns = options?.exclude?.namePatterns;
+  if (patterns && patterns.length > 0 && matchesAnyName(el.name, patterns)) {
+    return true;
+  }
+  return false;
+};
+
+const topN = <T extends { count: number }>(
+  items: readonly T[],
+  n: number,
+): T[] =>
+  [...items]
+    .filter((it) => it.count > 0)
+    .sort((a, b) => b.count - a.count || 0)
+    .slice(0, n);
+
+const analyzeHotspots = (
+  model: Model,
+  options: AnalyzeOptions | undefined,
+): { fanIn: ElementCoupling[]; fanOut: ElementCoupling[] } => {
+  const elements = allElements(model);
+  const elementNames = new Set(elements.map((e) => e.name));
+  const inCounts = new Map<string, number>();
+  const outCounts = new Map<string, number>();
+  for (const el of elements) {
+    outCounts.set(el.name, 0);
+    inCounts.set(el.name, 0);
+  }
+  for (const el of elements) {
+    for (const r of el.relations) {
+      // Edges to dangling targets still count as outgoing — the relation
+      // exists in source; validateModel surfaces the danglingness
+      // separately. We just don't credit a non-existent element with
+      // an incoming edge.
+      outCounts.set(el.name, (outCounts.get(el.name) ?? 0) + 1);
+      if (elementNames.has(r.to)) {
+        inCounts.set(r.to, (inCounts.get(r.to) ?? 0) + 1);
+      }
+    }
+  }
+  const limit = options?.topN ?? DEFAULT_TOP_N;
+  const eligible = elements.filter((e) => !isExcluded(e, options));
+  const fanIn = topN(
+    eligible.map((e) => ({ name: e.name, count: inCounts.get(e.name) ?? 0 })),
+    limit,
+  );
+  const fanOut = topN(
+    eligible.map((e) => ({ name: e.name, count: outCounts.get(e.name) ?? 0 })),
+    limit,
+  );
+  return { fanIn, fanOut };
+};
+
+/**
+ * Tarjan's strongly-connected-components — single linear pass, gives all
+ * SCCs of the element graph in O(V + E). An SCC of size > 1 is a true
+ * cycle ("distributed monolith" risk); single-element SCCs with a
+ * self-edge are surfaced by `validateModel` as `self-relation` issues
+ * and intentionally excluded here.
+ *
+ * Implemented recursively — Node.js default stack handles the C4 scale
+ * comfortably (V ≤ a few thousand). If the analyser ever runs against
+ * model graphs that approach Node's stack limit, swap for an explicit
+ * worklist; the algorithm itself is stack-based but the recursion is
+ * the simplest faithful translation.
+ */
+const findCycles = (model: Model): CyclesInfo => {
+  const elements = allElements(model);
+  const elementNames = new Set(elements.map((e) => e.name));
+  const adjacency = new Map<string, string[]>();
+  for (const el of elements) {
+    adjacency.set(
+      el.name,
+      el.relations.map((r) => r.to).filter((to) => elementNames.has(to)),
+    );
+  }
+  let index = 0;
+  const indices = new Map<string, number>();
+  const lowlink = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const sccs: string[][] = [];
+
+  const strongconnect = (v: string): void => {
+    indices.set(v, index);
+    lowlink.set(v, index);
+    index++;
+    stack.push(v);
+    onStack.add(v);
+
+    for (const w of adjacency.get(v) ?? []) {
+      if (!indices.has(w)) {
+        strongconnect(w);
+        lowlink.set(v, Math.min(lowlink.get(v)!, lowlink.get(w)!));
+      } else if (onStack.has(w)) {
+        lowlink.set(v, Math.min(lowlink.get(v)!, indices.get(w)!));
+      }
+    }
+
+    if (lowlink.get(v) === indices.get(v)) {
+      const component: string[] = [];
+      let w: string;
+      do {
+        w = stack.pop()!;
+        onStack.delete(w);
+        component.push(w);
+      } while (w !== v);
+      sccs.push(component);
+    }
+  };
+
+  for (const v of elementNames) {
+    if (!indices.has(v)) strongconnect(v);
+  }
+
+  // Filter to actual cycles: SCCs with size > 1. Self-loops (size-1
+  // SCCs with a self-edge) are surfaced as ModelIssue separately.
+  const cycles = sccs.filter((scc) => scc.length > 1);
+  if (cycles.length === 0) return { count: 0, smallest: null };
+  cycles.sort((a, b) => a.length - b.length);
+  return { count: cycles.length, smallest: cycles[0] };
+};
+
+const analyzeModel = (
+  model: Model,
+  options?: AnalyzeOptions,
+): AnalysisReport => {
+  const relations = allRelations(model);
+  const styles = new Map<Relation, RelationStyle>(
+    relations.map(({ relation }) => [
+      relation,
+      classifyStyle(relation, options),
+    ]),
+  );
+  const counts: RelationStyleCounts = {
+    sync: 0,
+    async: 0,
+    unspecified: 0,
+  };
+  for (const style of styles.values()) {
+    counts[style]++;
+  }
+
+  const boundaries = analyzeBoundaries(model, relations, styles);
+  const { fanIn, fanOut } = analyzeHotspots(model, options);
 
   return {
-    count: dbNames.size,
-    consumes,
+    elementsCount: allElements(model).length,
+    elementsByKind: countByKind(model),
+    databases: analyzeDatabases(model),
+    relationsByStyle: counts,
+    boundaries,
+    fanIn,
+    fanOut,
+    cycles: findCycles(model),
   };
 };
 
