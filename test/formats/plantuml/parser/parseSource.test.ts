@@ -174,4 +174,23 @@ describe("parseSource — canonical fixtures from .parser-refs/C4-PlantUML/sampl
       expect(result.parseErrors.length).toBeGreaterThan(0);
     },
   );
+
+  // Backslash-continuation preprocessor — pinned as known gap. The
+  // `!define LONG_MACRO(x) \\\n body` form leaks the continuation
+  // line into the parser, which surfaces parse errors without
+  // crashing. Tests both behaviours so a future fix or regression
+  // is loud.
+  it("multi-line preprocessor with backslash continuation surfaces parse errors (known gap)", () => {
+    const src = String.raw`@startuml
+!define LONG_MACRO(x) \
+  x + 1
+Container(api, "API")
+@enduml
+`;
+    const result = parseSource(src, FILE);
+    expect(result.parseErrors.length).toBeGreaterThan(0);
+    // Despite the parse error, the parser recovers and the in-scope
+    // Container survives.
+    expect(result.model.containers["api"]).toBeDefined();
+  });
 });

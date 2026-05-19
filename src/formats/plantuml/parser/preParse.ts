@@ -42,9 +42,9 @@
  *      `Add*Tag` (`AddElementTag`, `AddRelTag`, `AddBoundaryTag`,
  *      `AddNodeTag`, `Add*PersonTag`/`Add*SystemTag`/etc.),
  *      `Update*Style` (`UpdateElementStyle`, `UpdateRelStyle`,
- *      `Update*BoundaryStyle`). Opaque macros may span multiple lines
- *      if their named-arg list wraps; that case is rare in practice
- *      and is logged as a known limitation in `grammar.md`.
+ *      `Update*BoundaryStyle`). The implementation walks balanced
+ *      parens across newlines, so multi-line opaque calls (named-arg
+ *      lists wrapped onto several lines) strip cleanly.
  *
  *   4. `stripDeploymentBlocks` — `Deployment_Node`, `Node`, `Node_L`,
  *      `Node_R`, `Deployment_Node_L`, `Deployment_Node_R`. Per
