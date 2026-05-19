@@ -38,6 +38,14 @@ Overlapping edits between rules are detected and surfaced as
   content-builders: `containerDecl` and `relationDecl`. The
   `containerPattern` / `relationPattern` regex builders are gone —
   range-based edits don't need them.
+- `relationDecl` signature changed from positional
+  `(from, to, tech?, tags?)` to `(from, to, opts?: RelationDeclOptions)`
+  where `opts = { description?, technology?, tags? }`. The old shape
+  conflated `description` (PUML positional 3 = label) with
+  `technology` (positional 4 = techn) — every rule fix that passed
+  `rel.technology` was actually overwriting the label slot. Now both
+  fields land in the correct PUML / Structurizr DSL positions and
+  survive a rewire intact.
 - `applyEdits(source, edits)` returns a structured result
   `{ content, applied, conflicts }`. Pure function, no `consola.warn`
   side effects — the CLI surfaces conflicts as diagnostics instead.

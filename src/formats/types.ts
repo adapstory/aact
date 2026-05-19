@@ -20,7 +20,23 @@ import type { Model, ModelIssue } from "../model";
  */
 export interface FormatSyntax {
   containerDecl(name: string, label: string, tags?: string): string;
-  relationDecl(from: string, to: string, tech?: string, tags?: string): string;
+  /**
+   * Build a relation declaration. `opts` carries the relation's
+   * payload (description / technology / tags) — kept as an object so
+   * callers don't have to pass `undefined` placeholders to skip a
+   * field, and so future relation attributes (sprite, link, async
+   * marker) can land as additive optional keys without breaking
+   * plugins. Maps cleanly to both C4-PUML positional slots
+   * (`Rel(from, to, label, techn, …)`) and Structurizr DSL
+   * (`from -> to "description" "technology"`).
+   */
+  relationDecl(from: string, to: string, opts?: RelationDeclOptions): string;
+}
+
+export interface RelationDeclOptions {
+  readonly description?: string;
+  readonly technology?: string;
+  readonly tags?: string;
 }
 
 export interface FixCapability {

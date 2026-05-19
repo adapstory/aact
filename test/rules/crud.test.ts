@@ -459,11 +459,9 @@ describe("crudRule.fix (structurizr syntax)", () => {
     );
     expect(decl).toContain('orders_repo = container "Orders Repo"');
     expect(decl).toContain('tags "repo"');
-    const rel = structurizrDslSyntax.relationDecl(
-      "orders",
-      "orders_repo",
-      "PostgreSQL",
-    );
-    expect(rel).toBe('orders -> orders_repo "PostgreSQL"');
+    const rel = structurizrDslSyntax.relationDecl("orders", "orders_repo", {
+      technology: "PostgreSQL",
+    });
+    expect(rel).toBe('orders -> orders_repo "" "PostgreSQL"');
   });
 });

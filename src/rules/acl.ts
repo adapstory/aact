@@ -118,7 +118,11 @@ export const aclRule: RuleDefinition<AclOptions> = {
                 {
                   kind: "replace",
                   range: rel.sourceLocation,
-                  content: syntax.relationDecl(aclName, rel.to, rel.technology),
+                  content: syntax.relationDecl(aclName, rel.to, {
+                    description: rel.description,
+                    technology: rel.technology,
+                    tags: rel.tags.length > 0 ? rel.tags.join("+") : undefined,
+                  }),
                 },
               ]
             : [],

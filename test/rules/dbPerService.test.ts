@@ -355,11 +355,9 @@ describe("dbPerServiceRule.fix", () => {
 
 describe("dbPerServiceRule.fix (structurizr syntax)", () => {
   it("emits structurizr DSL content via FormatSyntax helper", () => {
-    const rel = structurizrDslSyntax.relationDecl(
-      "payments",
-      "orders_repo",
-      "JDBC",
-    );
-    expect(rel).toBe('payments -> orders_repo "JDBC"');
+    const rel = structurizrDslSyntax.relationDecl("payments", "orders_repo", {
+      technology: "JDBC",
+    });
+    expect(rel).toBe('payments -> orders_repo "" "JDBC"');
   });
 });

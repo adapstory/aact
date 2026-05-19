@@ -1053,19 +1053,34 @@ describe("structurizrDslSyntax helpers", () => {
     ).toBe('orders_acl = container "Orders ACL" {\n    tags "acl"\n}');
   });
 
-  it("relationDecl emits technology in quotes when present", () => {
-    expect(structurizrDslSyntax.relationDecl("a", "b", "REST")).toBe(
-      'a -> b "REST"',
-    );
+  it("relationDecl emits description and technology in DSL slots", () => {
+    expect(
+      structurizrDslSyntax.relationDecl("a", "b", {
+        description: "reads",
+        technology: "REST",
+      }),
+    ).toBe('a -> b "reads" "REST"');
   });
 
   it("relationDecl with tags appends a tags block", () => {
-    expect(structurizrDslSyntax.relationDecl("a", "b", "REST", "async")).toBe(
-      'a -> b "REST" {\n    tags "async"\n}',
-    );
+    expect(
+      structurizrDslSyntax.relationDecl("a", "b", {
+        description: "reads",
+        technology: "REST",
+        tags: "async",
+      }),
+    ).toBe('a -> b "reads" "REST" {\n    tags "async"\n}');
   });
 
-  it("relationDecl tolerates missing technology", () => {
+  it("relationDecl tolerates missing opts and emits a bare arrow", () => {
     expect(structurizrDslSyntax.relationDecl("a", "b")).toBe("a -> b");
+  });
+
+  it("relationDecl emits an empty description placeholder when only technology is set", () => {
+    // Structurizr DSL is positional — technology can't be specified
+    // without a (possibly empty) description in front of it.
+    expect(
+      structurizrDslSyntax.relationDecl("a", "b", { technology: "REST" }),
+    ).toBe('a -> b "" "REST"');
   });
 });

@@ -7,11 +7,22 @@ export const structurizrDslSyntax: FormatSyntax = {
     }
     return `${name} = container "${label}"`;
   },
-  relationDecl: (from, to, tech, tags) => {
-    const techPart = tech ? ` "${tech}"` : "";
-    if (tags) {
-      return `${from} -> ${to}${techPart} {\n    tags "${tags}"\n}`;
+  // Structurizr DSL relationship: `from -> to "description" "technology"`,
+  // with an optional `{ tags "..." }` block for tag overrides. Both
+  // slot strings are positional and quote-wrapped; an empty
+  // description survives the round-trip as `""`.
+  relationDecl: (from, to, opts) => {
+    const description = opts?.description;
+    const technology = opts?.technology;
+    const parts = [`${from} -> ${to}`];
+    if (description !== undefined || technology) {
+      parts.push(`"${description ?? ""}"`);
     }
-    return `${from} -> ${to}${techPart}`;
+    if (technology) parts.push(`"${technology}"`);
+    const head = parts.join(" ");
+    if (opts?.tags) {
+      return `${head} {\n    tags "${opts.tags}"\n}`;
+    }
+    return head;
   },
 };

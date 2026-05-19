@@ -851,13 +851,28 @@ describe("plantumlSyntax helpers", () => {
     ).toBe('Container(orders_acl, "Orders ACL", "", "", $tags="acl+repo")');
   });
 
-  it("relationDecl renders technology and tags when present", () => {
-    expect(plantumlSyntax.relationDecl("a", "b", "REST", "async")).toBe(
-      'Rel(a, b, "REST", $tags="async")',
-    );
+  it("relationDecl places description in PUML position 3 (label) and technology in position 4 (techn)", () => {
+    // C4-PUML stdlib: Rel(from, to, label, techn, descr, sprite, tags, link).
+    // Pin: rule fixes that pass `description` + `technology` end up in
+    // the right slots and don't conflate them.
+    expect(
+      plantumlSyntax.relationDecl("a", "b", {
+        description: "reads",
+        technology: "PostgreSQL",
+        tags: "async",
+      }),
+    ).toBe('Rel(a, b, "reads", "PostgreSQL", $tags="async")');
   });
 
-  it("relationDecl tolerates missing technology", () => {
+  it("relationDecl tolerates missing opts and emits empty label", () => {
     expect(plantumlSyntax.relationDecl("a", "b")).toBe('Rel(a, b, "")');
+  });
+
+  it("relationDecl emits technology without a label when description is absent", () => {
+    // PUML positional ordering — empty label slot stays "" so technology
+    // lands in position 4.
+    expect(plantumlSyntax.relationDecl("a", "b", { technology: "JDBC" })).toBe(
+      'Rel(a, b, "", "JDBC")',
+    );
   });
 });

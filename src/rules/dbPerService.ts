@@ -157,12 +157,11 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
             {
               kind: "replace",
               range: rel.sourceLocation,
-              content: syntax.relationDecl(
-                accessor.name,
-                redirectTarget.name,
-                rel.technology ?? "",
+              content: syntax.relationDecl(accessor.name, redirectTarget.name, {
+                description: rel.description,
+                technology: rel.technology,
                 tags,
-              ),
+              }),
             },
           ];
         });

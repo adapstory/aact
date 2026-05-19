@@ -148,11 +148,11 @@ const fixNonRepoAccessesDb = (
         {
           kind: "replace",
           range: rel.sourceLocation,
-          content: syntax.relationDecl(
-            accessor.name,
-            redirectTarget.name,
-            rel.technology,
-          ),
+          content: syntax.relationDecl(accessor.name, redirectTarget.name, {
+            description: rel.description,
+            technology: rel.technology,
+            tags: rel.tags.length > 0 ? rel.tags.join("+") : undefined,
+          }),
         },
       ];
     }
@@ -188,7 +188,9 @@ const fixNonRepoAccessesDb = (
         deriveRepoLabel(db.name),
         ownerTags[0] ?? "repo",
       ),
-      syntax.relationDecl(repoName, db.name, rel.technology),
+      syntax.relationDecl(repoName, db.name, {
+        technology: rel.technology,
+      }),
     ].join("\n");
     return [
       {
@@ -199,7 +201,11 @@ const fixNonRepoAccessesDb = (
       {
         kind: "replace",
         range: rel.sourceLocation,
-        content: syntax.relationDecl(accessor.name, repoName, rel.technology),
+        content: syntax.relationDecl(accessor.name, repoName, {
+          description: rel.description,
+          technology: rel.technology,
+          tags: rel.tags.length > 0 ? rel.tags.join("+") : undefined,
+        }),
       },
     ];
   });
