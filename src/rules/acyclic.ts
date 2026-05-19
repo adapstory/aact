@@ -6,6 +6,12 @@ import type { RuleDefinition, Violation } from "./types";
  * Per-container DFS, visited set предотвращает infinite loop. Dangling refs
  * (rel.to не в model.containers) — early return false; validateModel
  * surface'ит их отдельно.
+ *
+ * Violation anchoring: emit the first outgoing relation's
+ * `sourceLocation`. On the C4 scale (V ≤ 300) it is the cycle edge
+ * with high probability; the parser carries the relation's byte
+ * range so "click violation → jump to `Rel(...)` line" works without
+ * any extra graph analysis.
  */
 export const acyclicRule: RuleDefinition = {
   name: "acyclic",
@@ -34,9 +40,13 @@ export const acyclicRule: RuleDefinition = {
 
     for (const container of allContainers(model)) {
       if (findCycle(container.name, container.name, new Set())) {
+        const firstRel = container.relations[0];
         violations.push({
           container: container.name,
           message: "participates in a dependency cycle",
+          ...(firstRel?.sourceLocation
+            ? { sourceLocation: firstRel.sourceLocation }
+            : {}),
         });
       }
     }

@@ -1,7 +1,7 @@
 import consola from "consola";
 
-import type {Model} from "../model";
-import { allContainers,  targetOf } from "../model";
+import type { Model } from "../model";
+import { allContainers, targetOf } from "../model";
 import { detectNamingConvention, joinName } from "./lib/namingUtils";
 import type { RuleDefinition, Violation } from "./types";
 
@@ -34,9 +34,15 @@ export const aclRule: RuleDefinition<AclOptions> = {
       if (!container.tags.includes(tag) && externalRelations.length > 0) {
         const names = externalRelations.map((r) => r.to).join(", ");
         const label = externalRelations.length === 1 ? "system" : "systems";
+        // Anchor on the first offending edge — lint-style "click on
+        // violation, jump to the Rel line that broke the rule".
+        const firstEdge = externalRelations[0];
         violations.push({
           container: container.name,
           message: `calls external ${label} ${names} without an ACL layer`,
+          ...(firstEdge.sourceLocation
+            ? { sourceLocation: firstEdge.sourceLocation }
+            : {}),
         });
       }
     }

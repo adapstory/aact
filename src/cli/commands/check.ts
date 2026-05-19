@@ -8,6 +8,7 @@ import { loadFormat } from "../../formats/registry";
 import type { FixCapability, SourceSyntax } from "../../formats/types";
 import { canFix } from "../../formats/types";
 import type { Model, SourceLocation } from "../../model";
+import { formatLocation } from "../../model";
 import { applyEdits } from "../../rules/lib/applyEdits";
 import { ruleRegistry } from "../../rules/registry";
 import type { FixResult, RuleDefinition, Violation } from "../../rules/types";
@@ -197,11 +198,15 @@ const flattenViolations = (
   for (const result of results) {
     for (const v of result.violations) {
       // Fall back to the container's sourceLocation when the rule
-      // didn't set one. Rules that flag a relation or boundary may
-      // set v.sourceLocation explicitly to anchor diagnostics more
-      // precisely.
+      // didn't set one. Boundary-level rules (cohesion) use the
+      // `container` field to carry a boundary name — fall through to
+      // `model.boundaries[name]` so those violations are anchored
+      // too. Rules that flag a specific relation should set
+      // `v.sourceLocation` explicitly for precision.
       const sourceLocation =
-        v.sourceLocation ?? model.containers[v.container]?.sourceLocation;
+        v.sourceLocation ??
+        model.containers[v.container]?.sourceLocation ??
+        model.boundaries[v.container]?.sourceLocation;
       out.push({
         rule: result.name,
         container: v.container,
@@ -357,35 +362,52 @@ const renderGithubAnnotations = (
   }
 };
 
+/**
+ * Lint-style violation table, one line per violation:
+ *
+ *   path/arch.dsl:12:5  error  acl   payments_api: calls external system X
+ *   path/arch.dsl:18:1  error  crud  payments_api: directly accesses db_users
+ *
+ * Columns auto-align by widest cell. The location column is clickable
+ * (OSC8) when stdout is a TTY-with-hyperlinks; falls back to plain
+ * text in CI / piped output. Violations without `sourceLocation` show
+ * a dim `<file>:?:?` placeholder so column alignment stays stable.
+ */
 const renderViolationsTable = (
   data: CheckData,
   sink: NodeJS.WritableStream,
 ): void => {
-  const failedRules = new Map<string, CheckViolation[]>();
-  for (const v of data.violations) {
-    const list = failedRules.get(v.rule) ?? [];
-    list.push(v);
-    failedRules.set(v.rule, list);
-  }
+  if (data.violations.length === 0) return;
 
-  for (const [rule, vs] of failedRules) {
-    const label = vs.length === 1 ? "violation" : "violations";
-    const countLabel = colors.red(`${vs.length} ${label}`);
-    sink.write(`${colors.bold(colors.red(rule))}  ${countLabel}\n`);
-    const maxLen = Math.max(...vs.map((v) => v.container.length));
-    for (const v of vs) {
-      // Order matters: pad → link → color.
-      // - padEnd on the raw text first so visual alignment is correct
-      //   (OSC8 escape sequences would inflate `.length`).
-      // - linkSourceLocation wraps with `\e]8;;file://...\e\\` — no-op
-      //   when terminal doesn't support OSC8.
-      // - colors.bold adds SGR around the whole thing last.
-      const padded = v.container.padEnd(maxLen);
-      const linked = linkSourceLocation(padded, v.sourceLocation);
-      sink.write(`  ${colors.bold(linked)}  ${v.message}\n`);
-    }
-    sink.write("\n");
+  // Pre-compute the cells so we can right-align all three columns.
+  const rows = data.violations.map((v) => {
+    const loc = v.sourceLocation;
+    const locText = loc ? formatLocation(loc) : "";
+    return {
+      locText,
+      sourceLocation: loc,
+      rule: v.rule,
+      container: v.container,
+      message: v.message,
+    };
+  });
+
+  const locWidth = Math.max(...rows.map((r) => r.locText.length), 1);
+  const ruleWidth = Math.max(...rows.map((r) => r.rule.length));
+
+  for (const r of rows) {
+    // Order: pad → link → color (OSC8 escapes would skew .length).
+    const paddedLoc = r.locText.padEnd(locWidth);
+    const linked = linkSourceLocation(paddedLoc, r.sourceLocation);
+    const locCell = colors.dim(linked);
+    const severity = colors.red("error");
+    const ruleCell = colors.yellow(r.rule.padEnd(ruleWidth));
+    const subject = colors.bold(r.container);
+    sink.write(
+      `  ${locCell}  ${severity}  ${ruleCell}  ${subject}: ${r.message}\n`,
+    );
   }
+  sink.write("\n");
 };
 
 const renderBoxSummary = (

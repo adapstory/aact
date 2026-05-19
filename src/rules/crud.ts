@@ -1,16 +1,13 @@
 import consola from "consola";
 
-import type {Container, Model} from "../model";
-import { allContainers,   targetOf } from "../model";
+import type { Container, Model } from "../model";
+import { allContainers, targetOf } from "../model";
 import {
   buildContainerBoundaryMap,
   resolveRedirectTarget,
 } from "./lib/boundaryUtils";
-import type {NamingConvention} from "./lib/namingUtils";
-import {
-  detectNamingConvention,
-  joinName
-} from "./lib/namingUtils";
+import type { NamingConvention } from "./lib/namingUtils";
+import { detectNamingConvention, joinName } from "./lib/namingUtils";
 import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
 
 export interface CrudOptions {
@@ -195,25 +192,30 @@ export const crudRule: RuleDefinition<CrudOptions> = {
       const isRepo = repoTags.some((tag) => container.tags.includes(tag));
 
       if (!isRepo && dbRelations.length > 0) {
+        // Anchor on the first direct-db edge — lint-style click jumps
+        // to the `Rel(...)` that broke the rule.
+        const firstEdge = dbRelations[0];
         violations.push({
           container: container.name,
           message: `directly accesses database ${dbRelations.map((r) => r.to).join(", ")} — add a repo or relay`,
+          ...(firstEdge.sourceLocation
+            ? { sourceLocation: firstEdge.sourceLocation }
+            : {}),
         });
       }
 
-      if (
-        isRepo &&
-        container.relations.some(
-          (r) => targetOf(model, r)?.kind !== "ContainerDb",
-        )
-      ) {
-        const nonDbTargets = container.relations
-          .filter((r) => targetOf(model, r)?.kind !== "ContainerDb")
-          .map((r) => r.to)
-          .join(", ");
+      const nonDbRels = container.relations.filter(
+        (r) => targetOf(model, r)?.kind !== "ContainerDb",
+      );
+      if (isRepo && nonDbRels.length > 0) {
+        const nonDbTargets = nonDbRels.map((r) => r.to).join(", ");
+        const firstEdge = nonDbRels[0];
         violations.push({
           container: container.name,
           message: `repo has non-database dependencies: ${nonDbTargets} — repos should only access databases`,
+          ...(firstEdge.sourceLocation
+            ? { sourceLocation: firstEdge.sourceLocation }
+            : {}),
         });
       }
     }

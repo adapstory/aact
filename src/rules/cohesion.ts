@@ -1,5 +1,5 @@
-import type {Boundary, Model} from "../model";
-import {  getBoundary, getContainer  } from "../model";
+import type { Boundary, Model } from "../model";
+import { getBoundary, getContainer } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
 /**
@@ -65,10 +65,17 @@ export const cohesionRule: RuleDefinition = {
       const cohesion = getBoundaryCohesion(model, boundary);
       const coupling = getBoundaryCoupling(model, boundary);
 
+      // Cohesion violations live on the boundary — anchor on its
+      // declaration line. The `container` field carries the boundary
+      // name (legacy field name from when the Violation type didn't
+      // distinguish; the CLI envelope renders it identically).
+      const loc = boundary.sourceLocation;
+
       if (cohesion <= coupling) {
         violations.push({
           container: boundary.name,
           message: `coupling (${coupling}) ≥ cohesion (${cohesion}) — more cross-boundary dependencies than internal connections`,
+          ...(loc ? { sourceLocation: loc } : {}),
         });
       }
 
@@ -84,6 +91,7 @@ export const cohesionRule: RuleDefinition = {
           violations.push({
             container: boundary.name,
             message: `parent cohesion (${cohesion}) ≥ sum of inner cohesions (${innerCohesionSum}) — parent boundary should be less cohesive than its sub-boundaries`,
+            ...(loc ? { sourceLocation: loc } : {}),
           });
         }
       }

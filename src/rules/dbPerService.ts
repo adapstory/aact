@@ -1,7 +1,7 @@
 import consola from "consola";
 
-import type {Container} from "../model";
-import { allContainers,  targetOf } from "../model";
+import type { Container, SourceLocation } from "../model";
+import { allContainers, targetOf } from "../model";
 import {
   buildContainerBoundaryMap,
   resolveRedirectTarget,
@@ -51,23 +51,36 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
 
   check(model) {
     const violations: Violation[] = [];
-    const dbAccessMap = new Map<string, string[]>();
+    // Track accessor name + first edge pointing at each db so we can
+    // anchor diagnostics on the actual `Rel(accessor, db, ...)` line.
+    interface DbAccess {
+      readonly accessors: string[];
+      readonly firstEdgeLocation: SourceLocation | undefined;
+    }
+    const dbAccessMap = new Map<string, DbAccess>();
 
     for (const container of allContainers(model)) {
       for (const rel of container.relations) {
         if (targetOf(model, rel)?.kind === "ContainerDb") {
-          const accessors = dbAccessMap.get(rel.to) ?? [];
-          accessors.push(container.name);
-          dbAccessMap.set(rel.to, accessors);
+          const existing = dbAccessMap.get(rel.to);
+          if (existing) {
+            existing.accessors.push(container.name);
+          } else {
+            dbAccessMap.set(rel.to, {
+              accessors: [container.name],
+              firstEdgeLocation: rel.sourceLocation,
+            });
+          }
         }
       }
     }
 
-    for (const [db, accessors] of dbAccessMap) {
+    for (const [db, { accessors, firstEdgeLocation }] of dbAccessMap) {
       if (accessors.length > 1) {
         violations.push({
           container: db,
           message: `shared between ${accessors.join(", ")} — each database should have a single owner`,
+          ...(firstEdgeLocation ? { sourceLocation: firstEdgeLocation } : {}),
         });
       }
     }
