@@ -21,10 +21,33 @@ export const getBoundary = (m: Model, name: string): Boundary | undefined =>
 
 /**
  * Resolve целевого Element'а по Relation.to (name-ref). Самый частый
- * pattern в правилах: `targetOf(model, rel)?.kind === "ContainerDb"`.
+ * pattern в правилах: `isDatabaseElement(targetOf(model, rel))`.
  */
 export const targetOf = (m: Model, rel: Relation): Element | undefined =>
   m.elements[rel.to];
+
+/**
+ * Single source of truth for "is this element a database?" across
+ * rules and analyze. Covers both C4 stdlib database kinds:
+ * `ContainerDb` (level-2 container data store) and `ComponentDb`
+ * (level-3 component data store). When either kind shows up in a
+ * model — Structurizr DSL infers `ContainerDb` from `technology:
+ * "postgresql"`, PlantUML stdlib exposes both via `ContainerDb(…)`
+ * and `ComponentDb(…)` macros — every consumer (analyze metrics,
+ * `crud` repository rule, `dbPerService` ownership rule,
+ * Kubernetes generator) treats them identically.
+ *
+ * Returns `false` for `undefined` so callers can write
+ * `isDatabaseElement(getElement(m, name))` without a null guard.
+ */
+export const isDatabaseElement = (el: Element | undefined): boolean =>
+  el?.kind === "ContainerDb" || el?.kind === "ComponentDb";
+
+/** Convenience: kind-only predicate. Useful when you have just the
+ *  kind (e.g. iterating `ElementKind` enum values) and don't need
+ *  the full `Element` object. */
+export const isDatabaseKind = (kind: Element["kind"] | undefined): boolean =>
+  kind === "ContainerDb" || kind === "ComponentDb";
 
 /**
  * Все elements в model как массив. Удобно для `.filter()` / `.map()`,

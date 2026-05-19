@@ -1,7 +1,7 @@
 import consola from "consola";
 
 import type { Element, SourceLocation } from "../model";
-import { allElements, getElement, targetOf } from "../model";
+import { allElements, getElement, isDatabaseElement, targetOf } from "../model";
 import {
   buildElementBoundaryMap,
   resolveRedirectTarget,
@@ -101,7 +101,7 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
 
     for (const element of allElements(model)) {
       for (const rel of element.relations) {
-        if (targetOf(model, rel)?.kind === "ContainerDb") {
+        if (isDatabaseElement(targetOf(model, rel))) {
           const existing = dbAccessMap.get(rel.to);
           const edge = { name: element.name, edgeLocation: rel.sourceLocation };
           if (existing) existing.push(edge);
@@ -149,7 +149,7 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
     for (const violation of violations) {
       // Stryker disable all
       const db = allElements(model).find(
-        (c) => c.name === violation.target && c.kind === "ContainerDb",
+        (c) => c.name === violation.target && isDatabaseElement(c),
       );
       // Stryker restore all
       if (!db) continue;

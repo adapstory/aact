@@ -2,7 +2,7 @@ import consola from "consola";
 
 import type { FormatSyntax } from "../formats/types";
 import type { Element, Model } from "../model";
-import { allElements, getElement, targetOf } from "../model";
+import { allElements, getElement, isDatabaseElement, targetOf } from "../model";
 import {
   buildElementBoundaryMap,
   resolveRedirectTarget,
@@ -92,8 +92,8 @@ const fixNonRepoAccessesDb = (
   convention: NamingConvention,
 ): FixResult | undefined => {
   const ownerTags = options?.repoTags ?? DEFAULT_REPO_TAGS;
-  const dbRels = accessor.relations.filter(
-    (r) => targetOf(model, r)?.kind === "ContainerDb",
+  const dbRels = accessor.relations.filter((r) =>
+    isDatabaseElement(targetOf(model, r)),
   );
   const elementBoundaryMap = buildElementBoundaryMap(model);
 
@@ -230,7 +230,7 @@ const fixRepoWithNonDbDeps = (
   model: Model,
 ): FixResult | undefined => {
   const nonDbRels = repo.relations.filter(
-    (r) => targetOf(model, r)?.kind !== "ContainerDb",
+    (r) => !isDatabaseElement(targetOf(model, r)),
   );
   if (nonDbRels.length === 0) return undefined;
 
@@ -260,8 +260,8 @@ export const crudRule: RuleDefinition<CrudOptions> = {
     const violations: Violation[] = [];
 
     for (const element of allElements(model)) {
-      const dbRelations = element.relations.filter(
-        (r) => targetOf(model, r)?.kind === "ContainerDb",
+      const dbRelations = element.relations.filter((r) =>
+        isDatabaseElement(targetOf(model, r)),
       );
       const isRepoContainer = isRepo(element, options);
 
@@ -292,7 +292,7 @@ export const crudRule: RuleDefinition<CrudOptions> = {
       }
 
       const nonDbRels = element.relations.filter(
-        (r) => targetOf(model, r)?.kind !== "ContainerDb",
+        (r) => !isDatabaseElement(targetOf(model, r)),
       );
       if (isRepoContainer && nonDbRels.length > 0) {
         const nonDbTargets = nonDbRels.map((r) => r.to).join(", ");

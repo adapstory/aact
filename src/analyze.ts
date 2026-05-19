@@ -1,5 +1,5 @@
 import type { Boundary, Element, ElementKind, Model, Relation } from "./model";
-import { allElements, getBoundary } from "./model";
+import { allElements, getBoundary, isDatabaseElement } from "./model";
 import { matchesAnyName } from "./rules/lib/namingPatterns";
 
 export interface CouplingRelation {
@@ -284,7 +284,7 @@ const analyzeBoundaries = (
 const analyzeDatabases = (model: Model): DatabasesInfo => {
   const dbNames = new Set(
     allElements(model)
-      .filter((it) => it.kind === "ContainerDb" || it.kind === "ComponentDb")
+      .filter((it) => isDatabaseElement(it))
       .map((it) => it.name),
   );
   let consumes = 0;

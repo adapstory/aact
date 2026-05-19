@@ -1,6 +1,7 @@
 import YAML from "yaml";
 
 import type { Element, Model, Relation } from "../../model";
+import { isDatabaseKind } from "../../model";
 import type { FormatOutput } from "../types";
 
 export interface KubernetesGenerateOptions {
@@ -23,7 +24,7 @@ const buildEnvVar = (
   const targetKebab = toKebab(relation.to);
   const targetUpper = toEnvKey(targetKebab);
 
-  if (targetKind === "ContainerDb") {
+  if (isDatabaseKind(targetKind)) {
     const value = options.dbConnectionTemplate.replaceAll(
       "{name}",
       sourceKebab,

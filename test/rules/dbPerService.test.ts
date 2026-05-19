@@ -95,6 +95,21 @@ describe("dbPerServiceRule.check", () => {
     expect(v.sourceLocation).toEqual(dbLoc);
   });
 
+  it("treats ComponentDb the same as ContainerDb (shared DB detection)", () => {
+    // The C4 stdlib distinguishes ContainerDb (level-2) from
+    // ComponentDb (level-3); both denote data stores. The rule
+    // should fire on either kind being shared between multiple
+    // accessors, not just ContainerDb.
+    const model = buildModel([
+      { name: "a", relations: [{ to: "shared_comp_db" }] },
+      { name: "b", relations: [{ to: "shared_comp_db" }] },
+      { name: "shared_comp_db", kind: "ComponentDb" },
+    ]);
+    const v = dbPerServiceRule.check(model);
+    expect(v).toHaveLength(1);
+    expect(v[0].target).toBe("shared_comp_db");
+  });
+
   it("each accessor edge becomes a related location with accessor name as label", () => {
     const edgeA = {
       file: "arch.puml",

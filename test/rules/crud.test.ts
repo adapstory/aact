@@ -64,6 +64,36 @@ describe("crudRule.check", () => {
     expect(v[0].message).toMatch(/repo/);
   });
 
+  it("treats ComponentDb the same as ContainerDb (direct-access detection)", () => {
+    // The C4 stdlib has both `ContainerDb` (level-2) and
+    // `ComponentDb` (level-3) for data stores; the rule must fire
+    // on either when a non-repo accesses one directly.
+    const model = buildModel([
+      { name: "orders", relations: [{ to: "comp_db" }] },
+      { name: "comp_db", kind: "ComponentDb" },
+    ]);
+    const v = crudRule.check(model);
+    expect(v).toHaveLength(1);
+    expect(v[0].target).toBe("orders");
+  });
+
+  it("repos may access ComponentDb without violation, but not non-DB elements", () => {
+    // Inverse direction: a repo accessing a ComponentDb is fine
+    // (it's a DB). Accessing something else fires the rule.
+    const model = buildModel([
+      {
+        name: "user_repo",
+        tags: ["repo"],
+        relations: [{ to: "user_comp_db" }, { to: "other_svc" }],
+      },
+      { name: "user_comp_db", kind: "ComponentDb" },
+      { name: "other_svc" },
+    ]);
+    const v = crudRule.check(model);
+    expect(v).toHaveLength(1);
+    expect(v[0].message).toMatch(/non-database/);
+  });
+
   it("violation when repo has non-DB dependencies", () => {
     const model = buildModel([
       {

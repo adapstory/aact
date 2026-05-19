@@ -1,7 +1,7 @@
 import consola from "consola";
 
 import type { Boundary, Element, Model } from "../../model";
-import { allElements, getElement } from "../../model";
+import { allElements, getElement, isDatabaseElement } from "../../model";
 
 /**
  * Maps container name → boundary that contains it. Используется fix-функциями
@@ -35,7 +35,7 @@ export const findPublicApiCandidate = (
     .filter((c): c is Element => c !== undefined)
     .filter(
       (c) =>
-        c.kind !== "ContainerDb" && !ownerTags.some((t) => c.tags.includes(t)),
+        !isDatabaseElement(c) && !ownerTags.some((t) => c.tags.includes(t)),
     );
 
   // Stryker disable next-line ConditionalExpression
