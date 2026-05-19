@@ -245,6 +245,46 @@ describe("aact analyze", () => {
   });
 });
 
+describe("aact model", () => {
+  it("renders the normalized model as text by default", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["model"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Elements:");
+    expect(result.stdout).toContain("Boundaries:");
+    expect(result.stdout).toContain("Relations:");
+  });
+
+  it("--json emits a v1 envelope on stdout with full Model + issues", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["model", "--json"]);
+    expect(result.exitCode).toBe(0);
+
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe("model");
+    expect(envelope.ok).toBe(true);
+    expect(envelope.exitCode).toBe(0);
+
+    const data = envelope.data as Record<string, unknown>;
+    expect(data).toHaveProperty("model");
+    expect(data).toHaveProperty("issues");
+    const model = data.model as Record<string, unknown>;
+    expect(model).toHaveProperty("elements");
+    expect(model).toHaveProperty("boundaries");
+    expect(model).toHaveProperty("rootBoundaryNames");
+  });
+
+  it("--json exits 2 on missing source file (model command never crashes)", async () => {
+    await runCli(["init"]);
+    await fs.rm(path.join(workDir, "architecture.puml"));
+    const result = await runCli(["model", "--json"]);
+    expect(result.exitCode).toBe(2);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(envelope.data).toBeNull();
+  });
+});
+
 describe("aact check --fix demo loop", () => {
   it("init → check reports violation → fix applies → re-check is clean", async () => {
     await runCli(["init"]);
