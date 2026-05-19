@@ -45,4 +45,28 @@ describe("resolveOutputMode", () => {
   it("returns text when config is null", () => {
     expect(resolveOutputMode({ config: null })).toBe("text");
   });
+
+  it("returns sarif when --sarif flag is set", () => {
+    expect(resolveOutputMode({ cliSarif: true })).toBe("sarif");
+  });
+
+  it("returns sarif when config.output.mode is sarif and CLI flag unset", () => {
+    const config: AactConfig = {
+      ...baseConfig,
+      output: { mode: "sarif" },
+    };
+    expect(resolveOutputMode({ config })).toBe("sarif");
+  });
+
+  it("--sarif outranks --json when both flags are passed", () => {
+    expect(resolveOutputMode({ cliJson: true, cliSarif: true })).toBe("sarif");
+  });
+
+  it("--sarif beats config.output.mode = json", () => {
+    const config: AactConfig = {
+      ...baseConfig,
+      output: { mode: "json" },
+    };
+    expect(resolveOutputMode({ cliSarif: true, config })).toBe("sarif");
+  });
 });

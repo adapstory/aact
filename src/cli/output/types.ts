@@ -4,7 +4,7 @@
  * IDE plugins) lock onto this shape.
  */
 
-export type OutputMode = "text" | "json";
+export type OutputMode = "text" | "json" | "sarif";
 
 export type ExitCode = 0 | 1 | 2;
 

@@ -80,7 +80,7 @@ export const AactConfigSchema = v.strictObject({
   ),
   output: v.optional(
     v.strictObject({
-      mode: v.optional(v.picklist(["text", "json"])),
+      mode: v.optional(v.picklist(["text", "json", "sarif"])),
     }),
   ),
 });

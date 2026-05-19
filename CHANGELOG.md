@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- **SARIF v2.1.0 output** for `aact check`. Pass `--sarif` (or set
+  `output.mode: "sarif"` in `aact.config.ts`) to emit the
+  industry-standard static-analysis log on stdout. Drops straight
+  into `github/codeql-action/upload-sarif@v3` and surfaces aact
+  violations as native PR code-scanning alerts — no handcrafted
+  workflow-annotation scripts needed.
+
+  The emitted log includes the full rule catalogue under
+  `tool.driver.rules[]` (id, name, description, helpUri), every
+  violation as a `result` with `ruleId` / `level` / `message` /
+  `locations[].physicalLocation.{artifactLocation,region}`, plus
+  stable `partialFingerprints` so GitHub keeps alerts continuous
+  across edits that shift line numbers.
+
+  `--sarif` outranks `--json` if both are supplied; commands
+  without a SARIF-specific adapter (init, skill, analyze, generate)
+  still produce a valid empty log so `--sarif` never crashes.
+
+- `SarifAdapter<TData>`, `SarifReporter`, and the SARIF v2.1.0
+  type surface (`SarifLog`, `SarifRun`, `SarifResult`, …) are
+  exported from `aact` for library consumers building their own
+  output paths or extending the SARIF emit with custom properties.
+
 ## v3.0.0-beta.11 — 2026-05-19
 
 API ergonomics + terminology cleanup. Two changes that custom rule

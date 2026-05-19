@@ -22,7 +22,8 @@ import type { Diagnostic, ExitCode, Renderer } from "../output";
 import { linkSourceLocation } from "../output/hyperlinks";
 import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
-import { configArg, jsonArg } from "../sharedArgs";
+import { configArg, jsonArg, sarifArg } from "../sharedArgs";
+import { checkSarifAdapter } from "./checkSarif";
 
 // -----------------------------------------------------------------------------
 // Public data shape (envelope.data for `aact check`)
@@ -603,6 +604,7 @@ export const check = cliCommandWithConfig({
   args: {
     ...configArg,
     ...jsonArg,
+    ...sarifArg,
     fix: {
       type: "boolean",
       description: "Apply auto-fixes to the source file",
@@ -614,5 +616,6 @@ export const check = cliCommandWithConfig({
     },
   },
   renderText: renderCheckText,
+  sarifAdapter: checkSarifAdapter,
   execute: (ctx, config) => executeCheck(config, ctx.args as CheckArgs),
 });

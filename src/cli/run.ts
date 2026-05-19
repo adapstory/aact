@@ -10,6 +10,7 @@ import type {
   OutputMode,
   Renderer,
   Reporter,
+  SarifAdapter,
 } from "./output";
 import {
   buildEnvelope,
@@ -17,6 +18,7 @@ import {
   HumanReporter,
   JsonReporter,
   resolveOutputMode,
+  SarifReporter,
 } from "./output";
 
 /**
@@ -38,6 +40,11 @@ interface BaseOpts<TArgs extends ArgsDef, TData> {
   readonly meta: CommandMeta;
   readonly args: TArgs;
   readonly renderText: Renderer<TData>;
+  /** Optional — map this command's envelope to a SARIF v2.1.0 log
+   *  for `--sarif` output. Commands without an adapter still produce
+   *  a valid empty SARIF log (so `aact <whatever> --sarif` doesn't
+   *  surprise CI), only `check` ships a meaningful mapping today. */
+  readonly sarifAdapter?: SarifAdapter<TData>;
 }
 
 export interface PlainCommandOpts<
@@ -64,6 +71,11 @@ const readJsonFlag = (args: unknown): boolean =>
   args !== null &&
   (args as Record<string, unknown>).json === true;
 
+const readSarifFlag = (args: unknown): boolean =>
+  typeof args === "object" &&
+  args !== null &&
+  (args as Record<string, unknown>).sarif === true;
+
 const readConfigArg = (args: unknown): string | undefined => {
   if (typeof args !== "object" || args === null) return undefined;
   const value = (args as Record<string, unknown>).config;
@@ -73,8 +85,20 @@ const readConfigArg = (args: unknown): string | undefined => {
 const pickReporter = <TData>(
   mode: OutputMode,
   renderer: Renderer<TData>,
-): Reporter<TData> =>
-  mode === "json" ? new JsonReporter<TData>() : new HumanReporter(renderer);
+  sarifAdapter?: SarifAdapter<TData>,
+): Reporter<TData> => {
+  switch (mode) {
+    case "json": {
+      return new JsonReporter<TData>();
+    }
+    case "sarif": {
+      return new SarifReporter<TData>(sarifAdapter);
+    }
+    default: {
+      return new HumanReporter(renderer);
+    }
+  }
+};
 
 const exitWith = (code: ExitCode): never => {
   // eslint-disable-next-line n/no-process-exit
@@ -119,8 +143,9 @@ export const cliCommand = <TArgs extends ArgsDef, TData>(
     async run(ctx) {
       const startedAt = Date.now();
       const cliJson = readJsonFlag(ctx.args);
-      const mode = resolveOutputMode({ cliJson });
-      const reporter = pickReporter(mode, opts.renderText);
+      const cliSarif = readSarifFlag(ctx.args);
+      const mode = resolveOutputMode({ cliJson, cliSarif });
+      const reporter = pickReporter(mode, opts.renderText, opts.sarifAdapter);
 
       try {
         const exec = await opts.execute(ctx);
@@ -161,6 +186,7 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
     async run(ctx) {
       const startedAt = Date.now();
       const cliJson = readJsonFlag(ctx.args);
+      const cliSarif = readSarifFlag(ctx.args);
       const configPath = readConfigArg(ctx.args);
 
       let config: AactConfig | null = null;
@@ -172,8 +198,8 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
         loadError = error;
       }
 
-      const mode = resolveOutputMode({ cliJson, config });
-      const reporter = pickReporter(mode, opts.renderText);
+      const mode = resolveOutputMode({ cliJson, cliSarif, config });
+      const reporter = pickReporter(mode, opts.renderText, opts.sarifAdapter);
 
       if (loadError !== null || config === null) {
         const envelope = buildErrorEnvelope({

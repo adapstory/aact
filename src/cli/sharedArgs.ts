@@ -23,3 +23,12 @@ export const jsonArg = {
       "Emit JSON envelope on stdout (machine-readable for CI / agents)",
   },
 } as const satisfies ArgsDef;
+
+export const sarifArg = {
+  sarif: {
+    type: "boolean",
+    description:
+      "Emit SARIF v2.1.0 on stdout (uploadable to GitHub Code Scanning, " +
+      "SonarQube, etc.). Outranks --json if both are set.",
+  },
+} as const satisfies ArgsDef;

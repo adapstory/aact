@@ -8,6 +8,22 @@ export {
 export { JsonReporter } from "./jsonReporter";
 export type { ResolveModeArgs } from "./resolveMode";
 export { resolveOutputMode } from "./resolveMode";
+export type {
+  SarifAdapter,
+  SarifArtifactLocation,
+  SarifLevel,
+  SarifLocation,
+  SarifLog,
+  SarifMessage,
+  SarifPhysicalLocation,
+  SarifRegion,
+  SarifReportingDescriptor,
+  SarifResult,
+  SarifRun,
+  SarifTool,
+  SarifToolDriver,
+} from "./sarifReporter";
+export { SarifReporter } from "./sarifReporter";
 export { ToolError } from "./toolError";
 export type {
   CliEnvelope,
