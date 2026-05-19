@@ -490,6 +490,11 @@ export const toModel = (file: FileNode): PumlToModelResult => {
       // loader did via Map collision; we use a fresh Container with
       // the alias as the name so downstream rules can still inspect
       // it. The validator catches both endpoint mismatches.
+      //
+      // `sourceLocation` borrows the first-use site (the relation
+      // that referenced this alias) so diagnostics like "container
+      // 'missing' is referenced but not declared" point at a real
+      // position in the source file.
       acc.containers.set(emit.from, {
         name: emit.from,
         label: emit.from,
@@ -498,6 +503,7 @@ export const toModel = (file: FileNode): PumlToModelResult => {
         description: "",
         tags: [],
         relations: [emit.relation],
+        sourceLocation: emit.relation.sourceLocation,
       });
       continue;
     }

@@ -132,6 +132,15 @@ describe("PUML toModel — relation macros → Container.relations", () => {
     expect(model.containers["missing"]).toBeDefined();
     expect(model.containers["missing"].relations[0].to).toBe("b");
   });
+
+  it("dangling-source placeholder borrows sourceLocation from first-use Rel call", () => {
+    const src = `@startuml\nContainer(b, "B")\nRel(missing, b, "calls")\n@enduml\n`;
+    const expected = src.indexOf("Rel(");
+    const { model } = lower(src);
+    const m = model.containers["missing"];
+    expect(m.sourceLocation?.start.offset).toBe(expected);
+    expect(m.sourceLocation?.file).toBe(FILE);
+  });
 });
 
 describe("PUML toModel — boundaries", () => {
