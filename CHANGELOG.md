@@ -6,6 +6,53 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- **`aact check --sarif` no longer crashes on tool errors.** Running
+  `check --config missing.ts --sarif` (or any path where the wrapper
+  builds a `data: null` error envelope) used to throw
+  `TypeError: Cannot read properties of null (reading 'violations')`
+  because `checkSarifAdapter` dereferenced data before the
+  envelope's exit code was checked. The reporter now short-circuits
+  for `exitCode === 2 || data === null` and emits the SARIF
+  spec-canonical shape: `runs[].invocations[]` with
+  `executionSuccessful: false` and every diagnostic as
+  `toolExecutionNotifications[]`.
+- **`artifactLocation.uri` is now repo-relative + resolves correctly
+  under macOS `/tmp` symlink.** Absolute paths like
+  `/Users/dev/proj/architecture.puml` failed to attach to PR diffs
+  in GitHub Code Scanning, which matches against repo-relative
+  paths. The adapter now resolves the repo root via
+  `git rev-parse --show-toplevel` (fall back to `cwd` outside a
+  git checkout), canonicalises both base and file through
+  `realpathSync` so the macOS symlink stops breaking relativization
+  silently, and tags relative URIs with
+  `uriBaseId: "SRCROOT"`. The base itself ships as
+  `originalUriBaseIds.SRCROOT = file://<repo-root>/` built through
+  `pathToFileURL` (handles spaces, non-ASCII, Windows drive
+  letters).
+- **`partialFingerprints` now ships under
+  `primaryLocationLineHash`** — the conventional key GitHub Code
+  Scanning uses for cross-run alert continuity (ESLint SARIF
+  formatter, Semgrep, etc. all agree on it). The namespaced
+  `aactViolationHash` carries the same value for multi-tool
+  workflows that want to filter aact alerts specifically.
+
+### Added
+
+- **`AcyclicOptions` / `CohesionOptions` / `CommonReuseOptions` /
+  `StableDependenciesOptions`** exported from `aact`. The four
+  option-less built-ins now ship `Record<string, never>` aliases
+  so the eight built-ins are symmetric at the type level. Strict-
+  empty rejects unknown keys (`rules: { acyclic: { foo: 1 } }`
+  fails compile + runtime validation today); when any rule gains
+  real options the type widens to a non-empty interface and lands
+  in a documented breaking change.
+- **`BuiltinRulesConfig`** entries for those four rules accept
+  `boolean | XOptions` instead of `boolean` only. `rules:
+{ acyclic: {} }` now compiles AND passes runtime validation —
+  config shape is symmetric with the option-bearing rules.
+
 ## v3.0.0-beta.12 — 2026-05-19
 
 Output mode for GitHub Code Scanning. `aact check --sarif` emits a
