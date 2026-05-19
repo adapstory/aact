@@ -307,7 +307,7 @@ inside aact reads from these.
 | Plugin        | `!plugin <fqn>`                                                                                                                                                            | `raw.plugins[]`                   |
 | Script        | `!script <filename>` / `!script <language> { ... }`                                                                                                                        | `raw.scripts[]`                   |
 
-The parser preserves enough byte-range info that re-emit is faithful
+The parser preserves enough source-range info that re-emit is faithful
 character-for-character.
 
 ## 3. Parsed-then-info-issue

@@ -2,7 +2,7 @@
  * Public entry point for the C4-PlantUML chevrotain parser.
  *
  *   parseSource(text, filePath)
- *     → preParse  (strip non-C4 material, preserve byte offsets)
+ *     → preParse  (strip non-C4 material, preserve source offsets)
  *     → tokenise  (chevrotain lexer)
  *     → parse     (CST)
  *     → AST       (visitor)

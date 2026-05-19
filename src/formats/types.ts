@@ -12,8 +12,8 @@ import type { Model, ModelIssue } from "../model";
 
 /**
  * Format-specific content builders used by rule `fix` functions.
- * Range-based fix engine anchors edits on `SourceLocation` byte
- * offsets, so the syntax helper only emits *new* content (containers
+ * Range-based fix engine anchors edits on `SourceLocation` source
+ * ranges, so the syntax helper only emits *new* content (containers
  * / relations) — pattern matching is no longer needed. Future
  * builders (boundaryDecl, propertyDecl, …) plug in as additive
  * optional methods without breaking plugins.

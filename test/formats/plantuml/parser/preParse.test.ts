@@ -9,9 +9,9 @@ import {
 
 const FILE = "test.puml";
 
-describe("PUML preParse — byte-length preservation", () => {
+describe("PUML preParse — length preservation", () => {
   // Critical invariant: every pass must replace stripped content with
-  // whitespace of identical byte length so chevrotain offsets stay
+  // whitespace of identical length so chevrotain offsets stay
   // anchored to the original file. SourceLocation correctness depends
   // on this for every downstream Model node.
   it("stripPreprocessor preserves length", () => {

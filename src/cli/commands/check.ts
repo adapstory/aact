@@ -263,11 +263,11 @@ const applyFixes = async (
   // Pool every edit from every fix into one batch — the range-based
   // applier resolves offset conflicts globally (reverse-order splice)
   // instead of running each fix sequentially on the already-mutated
-  // string, which would invalidate the byte ranges of later fixes.
+  // string, which would invalidate the source ranges of later fixes.
   const allEdits = fixes.flatMap((f) => f.edits);
   const { content, conflicts } = applyEdits(source, allEdits);
 
-  // Conflicts mean two fix edits wanted overlapping byte ranges. The
+  // Conflicts mean two fix edits wanted overlapping source ranges. The
   // applier kept the first one (deterministic), but the user needs
   // to know we silently dropped the second — otherwise `--fix`
   // becomes a "wrote the file but some rules didn't land" trap.
@@ -400,7 +400,7 @@ const renderGithubAnnotations = (
     //   ::error file=<path>,line=<L>,col=<C>,title=<rule>::<msg>
     // Without `file`/`line` the annotation appears only in the
     // workflow log; with them it surfaces as an inline PR comment
-    // anchored to the offending byte (`SourceLocation` from Model).
+    // anchored to the offending position (`SourceLocation` from Model).
     const loc = v.sourceLocation;
     const locAttrs = loc
       ? `file=${loc.file},line=${loc.start.line},col=${loc.start.col},`

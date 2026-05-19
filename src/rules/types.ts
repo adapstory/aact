@@ -24,18 +24,19 @@ export interface Violation {
 }
 
 /**
- * A single source-code edit, expressed in terms of byte ranges from the
+ * A single source-code edit, expressed in terms of source ranges
+ * (UTF-16 code-unit offsets — see `SourcePosition.offset`) from the
  * model's `SourceLocation`. The loader populates `SourceLocation` on
  * every Element / Boundary / Relation it emits; rules anchor edits on
  * those locations so the applier never has to guess what text to match.
  *
  * Four variants cover the full surface:
- *   - `replace`     — replace the bytes covered by `range` with `content`
- *   - `remove`      — delete the bytes covered by `range`
+ *   - `replace`       — replace the characters covered by `range` with `content`
+ *   - `remove`        — delete the characters covered by `range`
  *   - `insert-after`  — splice `content` immediately after `anchor.end.offset`
  *   - `insert-before` — splice `content` immediately before `anchor.start.offset`
  *
- * The applier is a pure byte-splicer (see `applyEdits`). It does not
+ * The applier is a pure string splicer (see `applyEdits`). It does not
  * interpret indentation, newlines, or comments — rules are responsible
  * for emitting `content` already framed (leading `\n`, trailing
  * whitespace, etc.) as required by the target format.

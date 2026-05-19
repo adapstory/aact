@@ -95,7 +95,7 @@ describe("aclRule.check", () => {
 });
 
 // PUML fixtures load through the real chevrotain parser so rule.fix
-// emits edits with byte-accurate `SourceLocation`s. `applyEdits()`
+// emits edits with position-accurate `SourceLocation`s. `applyEdits()`
 // slices the same source on those offsets — what we assert on is the
 // post-fix PUML, exactly what `aact check --fix` writes to disk.
 const STDLIB =
@@ -295,7 +295,7 @@ describe("aclRule.fix (plantuml syntax)", () => {
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it("inserts the ACL block at the byte immediately after the offending Container line", async () => {
+  it("inserts the ACL block at the position immediately after the offending Container line", async () => {
     // Anchor semantics: `insert-after element.sourceLocation` must
     // land between the original Container line and whatever comes
     // next. Pin: no whitespace surprises, the new declarations land
@@ -338,7 +338,7 @@ describe("aclRule.fix (plantuml syntax)", () => {
 describe("aclRule.fix (structurizr syntax)", () => {
   // Smaller surface — Structurizr DSL `fix` exists for users who set
   // `source.writePath` to their `workspace.dsl`. We verify that the
-  // FormatSyntax helper produces DSL-shaped content (the actual byte
+  // FormatSyntax helper produces DSL-shaped content (the actual position
   // splicing is identical to PUML — covered above).
   it("emits FormatSyntax-shaped content for structurizr DSL", () => {
     // Range-based fix path is covered end-to-end via PUML above; here

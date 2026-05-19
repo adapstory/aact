@@ -105,7 +105,7 @@ describe("Format API — fix capability shape", () => {
 
       // Smoke: each content-builder returns a non-empty string for
       // trivial input. Patterns are gone in v3 — edits anchor on
-      // `SourceLocation` byte ranges, not text search.
+      // `SourceLocation` source ranges, not text search.
       expect(syntax.containerDecl("svc", "Service").length).toBeGreaterThan(0);
       expect(syntax.relationDecl("a", "b").length).toBeGreaterThan(0);
     },

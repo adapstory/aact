@@ -144,7 +144,7 @@ Argument order differs from element macros — `$tags` and `$link` come
 **before** `$descr`. Default-value spacing in the stdlib uses `$descr = ""`
 (spaces around `=`) for boundaries, unlike `$techn=""` (no spaces) on
 elements. Reproduced literally above; semantically irrelevant to the
-parser but pinned for byte-exact traceability.
+parser but pinned for position-exact traceability.
 
 ### Relationships
 
@@ -289,7 +289,7 @@ for the rest ("multiple diagrams found; using the first").
 | Oracle                                     | Use                                                                                                                                                                                                                                                                |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **PlantUML CLI** (`brew install plantuml`) | Runs the actual PlantUML host. Useful to confirm a given input is a syntactically valid PlantUML file — independent of whether it is _also_ a valid C4 file. We do not currently wire this into the test loop, but it is available for ad-hoc disagreement triage. |
-| `.parser-refs/C4-PlantUML/samples/`        | Real-world canonical C4-PUML files (Big Bank plc, message bus, techtribesjs, etc.). The test corpus mines `input → expected Model` pairs from these — but always re-expressed in our fixture style, never copied byte-for-byte.                                    |
+| `.parser-refs/C4-PlantUML/samples/`        | Real-world canonical C4-PUML files (Big Bank plc, message bus, techtribesjs, etc.). The test corpus mines `input → expected Model` pairs from these — but always re-expressed in our fixture style, never copied character-for-character.                          |
 
 ## 8. Non-goals
 
@@ -314,7 +314,7 @@ for the rest ("multiple diagrams found; using the first").
 The C4-PUML stdlib lets `$index=Index()-1` evaluate at render time as
 `Index() - 1`. Our grammar does not model arithmetic, so a pre-lex
 pass strips the `[op N]` tail after any function-call's closing `)`
-(byte-length preserved). The strip is safe: `Index()` already
+(length preserved — UTF-16 code units). The strip is safe: `Index()` already
 collapses to `Relation.order = undefined` in `toModel`, so the
 architectural meaning ("auto-numbering offset, no fixed order") is
 preserved verbatim. Pattern: `\)\s*[+\-*/]\s*\d+` → `)            `.

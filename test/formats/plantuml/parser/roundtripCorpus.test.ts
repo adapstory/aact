@@ -18,7 +18,7 @@ import type { Boundary, Element, Model } from "../../../../src/model";
  * Excluded fields (deliberately not preserved — see grammar.md §2):
  *
  *   - SourceLocation (regenerated from the generator's output —
- *     never matches the original file's byte offsets).
+ *     never matches the original file character offsets).
  *   - sprite (generator emits but the resulting `$sprite=...` is on
  *     a positional slot whose semantics aren't symmetric for
  *     Context family).

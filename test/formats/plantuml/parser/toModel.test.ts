@@ -186,7 +186,7 @@ describe("PUML toModel — boundaries", () => {
 });
 
 describe("PUML toModel — SourceLocation fidelity", () => {
-  it("Container.sourceLocation start.offset matches original .puml byte", () => {
+  it("Container.sourceLocation start.offset matches original .puml position", () => {
     const src = `@startuml\nContainer(api, "API")\n@enduml\n`;
     const expected = src.indexOf("Container");
     const { model } = lower(src);

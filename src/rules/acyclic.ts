@@ -9,7 +9,7 @@ import type { RuleDefinition, Violation } from "./types";
  *
  * Violation anchoring: emit the first outgoing relation's
  * `sourceLocation`. On the C4 scale (V ≤ 300) it is the cycle edge
- * with high probability; the parser carries the relation's byte
+ * with high probability; the parser carries the relation's source
  * range so "click violation → jump to `Rel(...)` line" works without
  * any extra graph analysis.
  */

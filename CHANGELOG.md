@@ -32,7 +32,7 @@ library barrel, so users couldn't declare variables / function
 signatures with them through `import { … } from "aact"`:
 
 - `editLocation` helper from `rules/lib/applyEdits` — for custom
-  applier callers that need the byte range of an edit without
+  applier callers that need the source range of an edit without
   re-matching the discriminant.
 - `ApplyEditsResult` / `EditConflict` — the return shape and
   conflict entry of `applyEdits`.
@@ -44,9 +44,10 @@ signatures with them through `import { … } from "aact"`:
 ## v3.0.0-beta.10 — 2026-05-19
 
 Range-based `--fix` engine replaces the string-matching applier. Every
-fix edit now anchors on a real `SourceLocation` byte range (chevrotain
+fix edit now anchors on a real `SourceLocation` source range
+(UTF-16 code-unit offsets — see `SourcePosition.offset`; chevrotain
 parsers populate them on every Element / Boundary / Relation), so the
-applier is a pure byte-splicer — no more `[warn] ambiguous pattern`
+applier is a pure string splicer — no more `[warn] ambiguous pattern`
 fallbacks, no guessing which of two same-looking lines the rule meant.
 Overlapping edits between rules are detected and surfaced as
 `fix.editConflict` diagnostics instead of silently dropped.
@@ -101,7 +102,7 @@ Overlapping edits between rules are detected and surfaced as
 ### Added
 
 - `fix.editConflict` diagnostic kind. Emitted when two fix edits want
-  to touch overlapping byte ranges. The applier keeps the first one
+  to touch overlapping source ranges. The applier keeps the first one
   (deterministic, input order), reports the rest with `kept` /
   `skipped` / `keptAt` / `skippedAt` context. Re-running `--fix`
   after a conflict picks up the dropped edit if it's still applicable.
@@ -169,7 +170,7 @@ unchanged.
   `commonReuse` were the last two falling back to the source element's
   location through the CLI helper; both now point directly at the
   offending edge. With this every text-mode lint line and every
-  GitHub-annotation comment lands on the byte the rule flagged.
+  GitHub-annotation comment lands on the source position the rule flagged.
 
 ### Changed
 
@@ -243,7 +244,7 @@ in a single `--fix` pass without spurious `_repo` duplicates.
   precisely.
 - `file=<path>,line=<L>,col=<C>` attributes on GitHub Actions
   error annotations — violations surface as inline PR comments
-  anchored to the offending byte instead of generic workflow-log
+  anchored to the offending position instead of generic workflow-log
   entries.
 - 5 built-in rules now anchor violations on the precise relation /
   boundary that broke the principle (acl, acyclic, crud,
@@ -288,9 +289,10 @@ in a single `--fix` pass without spurious `_repo` duplicates.
 
 Architecture-as-code parsers rewritten from scratch on chevrotain;
 every third-party parsing dependency is dropped. `SourceLocation`
-(file + line + byte offset) now lands on every `Container` /
-`Boundary` / `Relation`, anchored to original-file bytes through
-whitespace-preserving pre-lex strip passes.
+(file + line + UTF-16 code-unit offset) now lands on every `Container` /
+`Boundary` / `Relation`, anchored to original-file positions through
+whitespace-preserving pre-lex strip passes (each pass preserves
+string length so chevrotain offsets line up with the input).
 
 ### Added
 

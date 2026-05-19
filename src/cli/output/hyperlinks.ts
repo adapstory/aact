@@ -24,7 +24,7 @@ export interface HyperlinkOptions {
 
 /**
  * Build a `file://<abs>:<line>:<col>` URI that VSCode's integrated
- * terminal parses to jump to the exact byte; iTerm2, Ghostty, and
+ * terminal parses to jump to the exact position; iTerm2, Ghostty, and
  * Windows Terminal open the file in the OS default editor (line:col
  * is ignored harmlessly). The line and column are 1-based.
  */

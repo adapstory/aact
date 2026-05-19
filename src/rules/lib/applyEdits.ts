@@ -2,7 +2,7 @@ import type { SourceLocation } from "../../model";
 import type { SourceEdit } from "../types";
 
 /**
- * Where the edit's affected byte range lives. `replace`/`remove`
+ * Where the edit's affected source range lives. `replace`/`remove`
  * report their `range`, the two insert kinds their `anchor`.
  * Exposed because CLI / diagnostic consumers need to format the
  * location uniformly without re-matching the discriminant.
@@ -11,15 +11,15 @@ export const editLocation = (e: SourceEdit): SourceLocation =>
   "range" in e ? e.range : e.anchor;
 
 /**
- * Pure byte-splicer for `SourceEdit`s. Edits carry full `SourceLocation`
- * byte ranges (loaders populate them on every Element / Boundary /
+ * Pure string splicer for `SourceEdit`s. Edits carry `SourceLocation`
+ * source ranges — UTF-16 code-unit offsets, matching JS string
+ * semantics (loaders populate them on every Element / Boundary /
  * Relation), so the applier never has to match text patterns or guess
  * which line is meant. Three rules:
  *
  *   1. Edits are applied in *reverse* offset order. That way splicing
- *      earlier offsets never shifts the byte coordinates of later
- *      edits — the same pattern LSP / VS Code's `TextDocumentEdit`
- *      uses.
+ *      earlier offsets never shifts the coordinates of later edits —
+ *      the same pattern LSP / VS Code's `TextDocumentEdit` uses.
  *   2. Two edits whose touched ranges overlap conflict. The applier
  *      keeps the first one (in input order) and reports the
  *      subsequent ones as `conflicts` — the CLI surfaces them as
@@ -33,7 +33,7 @@ export const editLocation = (e: SourceEdit): SourceLocation =>
  * `applied` to count successful fixes and `conflicts` to emit
  * diagnostics; library consumers can do the same. The function is
  * agnostic to source format — it works on PUML, Structurizr DSL,
- * Kubernetes YAML, or anything else byte-addressable.
+ * Kubernetes YAML, or any other source string the offsets index into.
  */
 export interface ApplyEditsResult {
   readonly content: string;

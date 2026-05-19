@@ -9,14 +9,15 @@
  * would mean every real-world `.puml` file fails to lex.
  *
  * Approach: rewrite the **raw source** before tokenisation, replacing
- * out-of-scope content with whitespace **of the same byte length**.
+ * out-of-scope content with whitespace **of the same length** (JS
+ * string length = UTF-16 code units, the unit chevrotain operates on).
  * This is the only safe transform — chevrotain's `positionTracking:
- * "full"` records byte offsets from the start of the lexer input, so
- * if we shorten the source by even one character every downstream
+ * "full"` records code-unit offsets from the start of the lexer input,
+ * so if we shorten the source by even one character every downstream
  * `SourceLocation` is wrong. Whitespace-preserving strip keeps offsets
  * identical between the stripped buffer and the original file, so the
- * `range` carried by every AST node points at the same byte in the
- * user's `.puml` that they typed.
+ * `range` carried by every AST node points at the same position in
+ * the user's `.puml` that they typed.
  *
  * Passes (applied in order):
  *
@@ -79,7 +80,7 @@ export interface PreParseIssue {
 }
 
 export interface PreParseResult {
-  /** Source text after all strip passes — same byte length as input. */
+  /** Source text after all strip passes — same length as input (UTF-16 code units). */
   readonly text: string;
   /** Info-level notes raised by the passes. */
   readonly issues: readonly PreParseIssue[];
@@ -245,9 +246,9 @@ const OPAQUE_MACRO_RE = new RegExp(
 /**
  * Strip lines opening with a known opaque macro call. The macro may
  * span multiple lines (multi-line `$arg=` list), so we balance the
- * parentheses byte-by-byte starting at the opening `(`.
+ * parentheses character-by-character starting at the opening `(`.
  *
- * `text` is rewritten in place; the same number of bytes is preserved
+ * `text` is rewritten in place; the same string length is preserved
  * (paren-counter walks the buffer character by character).
  */
 export const stripOpaqueMacros = (text: string): string => {
@@ -455,7 +456,7 @@ export const keepFirstDiagram = (
 // ── Composite ───────────────────────────────────────────────────────
 
 /**
- * Apply all pre-lex passes in order. Each pass preserves byte length,
+ * Apply all pre-lex passes in order. Each pass preserves string length,
  * so the resulting `text` has identical offsets for surviving content.
  */
 export const preParse = (text: string, file: string): PreParseResult => {

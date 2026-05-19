@@ -134,7 +134,7 @@ describe("executeCheck — exit code matrix", () => {
     expect(mockWriteFile).toHaveBeenCalledOnce();
   });
 
-  it("surfaces fix.editConflict diagnostics when two rules want overlapping byte ranges", async () => {
+  it("surfaces fix.editConflict diagnostics when two rules want overlapping source ranges", async () => {
     // Both crud and dbPerService want to rewrite `Rel(orders, orders_db)`.
     // The applier picks one (deterministic first-wins) and reports
     // the other as a conflict — must NOT silently drop.
