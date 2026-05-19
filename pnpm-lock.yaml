@@ -25,6 +25,9 @@ importers:
       pathe:
         specifier: ^2.0.3
         version: 2.0.3
+      picomatch:
+        specifier: ^4.0.4
+        version: 4.0.4
       terminal-link:
         specifier: ^5.0.0
         version: 5.0.0
@@ -59,6 +62,9 @@ importers:
       "@types/node":
         specifier: ^22.10.0
         version: 22.19.19
+      "@types/picomatch":
+        specifier: ^4.0.3
+        version: 4.0.3
       "@vitest/coverage-v8":
         specifier: ^4.1.6
         version: 4.1.6(vitest@4.1.6)
@@ -2347,6 +2353,12 @@ packages:
     resolution:
       {
         integrity: sha512-dyh/xO2Fh5bYrfWaaqGrRQQGkNdmYw6AmaAUvYeUMNTWQtvb796ikLdmTchRmOlOiIJ1TDXfWgVx1QkUlQ6Hew==,
+      }
+
+  "@types/picomatch@4.0.3":
+    resolution:
+      {
+        integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==,
       }
 
   "@types/resolve@1.20.2":
@@ -5009,13 +5021,6 @@ packages:
       }
     engines: { node: ">=8.6" }
 
-  picomatch@4.0.3:
-    resolution:
-      {
-        integrity: sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q==,
-      }
-    engines: { node: ">=12" }
-
   picomatch@4.0.4:
     resolution:
       {
@@ -7192,10 +7197,10 @@ snapshots:
       "@rollup/pluginutils": 5.3.0(rollup@4.57.1)
       commondir: 1.0.1
       estree-walker: 2.0.2
-      fdir: 6.5.0(picomatch@4.0.3)
+      fdir: 6.5.0(picomatch@4.0.4)
       is-reference: 1.2.1
       magic-string: 0.30.21
-      picomatch: 4.0.3
+      picomatch: 4.0.4
     optionalDependencies:
       rollup: 4.57.1
 
@@ -7226,7 +7231,7 @@ snapshots:
     dependencies:
       "@types/estree": 1.0.8
       estree-walker: 2.0.2
-      picomatch: 4.0.3
+      picomatch: 4.0.4
     optionalDependencies:
       rollup: 4.57.1
 
@@ -7472,6 +7477,8 @@ snapshots:
   "@types/node@22.19.19":
     dependencies:
       undici-types: 6.21.0
+
+  "@types/picomatch@4.0.3": {}
 
   "@types/resolve@1.20.2": {}
 
@@ -8503,10 +8510,6 @@ snapshots:
     dependencies:
       walk-up-path: 4.0.0
 
-  fdir@6.5.0(picomatch@4.0.3):
-    optionalDependencies:
-      picomatch: 4.0.3
-
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
@@ -9101,8 +9104,6 @@ snapshots:
 
   picomatch@2.3.1: {}
 
-  picomatch@4.0.3: {}
-
   picomatch@4.0.4: {}
 
   pidtree@0.6.0: {}
@@ -9627,8 +9628,8 @@ snapshots:
 
   tinyglobby@0.2.15:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.3)
-      picomatch: 4.0.3
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
 
   tinyglobby@0.2.16:
     dependencies:
@@ -9649,7 +9650,7 @@ snapshots:
 
   ts-declaration-location@1.0.7(typescript@5.9.3):
     dependencies:
-      picomatch: 4.0.3
+      picomatch: 4.0.4
       typescript: 5.9.3
 
   tslib@2.8.1: {}
@@ -9806,7 +9807,7 @@ snapshots:
       magic-string: 0.30.21
       obug: 2.1.1
       pathe: 2.0.3
-      picomatch: 4.0.3
+      picomatch: 4.0.4
       std-env: 4.1.0
       tinybench: 2.9.0
       tinyexec: 1.0.2

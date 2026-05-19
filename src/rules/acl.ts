@@ -1,14 +1,42 @@
 import consola from "consola";
 
-import type { Model } from "../model";
+import type { Container, Model } from "../model";
 import { allContainers, targetOf } from "../model";
+import {
+  DEFAULT_ACL_NAME_PATTERNS,
+  matchesAnyName,
+} from "./lib/namingPatterns";
 import { detectNamingConvention, joinName } from "./lib/namingUtils";
 import type { RuleDefinition, Violation } from "./types";
 
 export interface AclOptions {
   /** Tag, который маркирует ACL-контейнер. Default "acl". */
   readonly tag?: string;
+  /**
+   * Picomatch globs (case-insensitive). Container counts as an ACL
+   * even without an explicit tag if its name matches any pattern.
+   * Default covers common naming conventions: `*_adapter`,
+   * `*_wrapper`, `*_client`, `*_connector`, `*_integration` and
+   * PascalCase variants. Override in `aact.config.ts` for
+   * project-specific conventions.
+   */
+  readonly namePatterns?: readonly string[];
 }
+
+/** Pick up explicit tag OR a name-convention match — covers legacy
+ *  archives without explicit `acl` tags, agent-generated diagrams
+ *  with naming conventions, and tagged-by-the-book modern projects. */
+const isAcl = (
+  container: Container,
+  options: AclOptions | undefined,
+): boolean => {
+  const tag = options?.tag ?? "acl";
+  if (container.tags.includes(tag)) return true;
+  return matchesAnyName(
+    container.name,
+    options?.namePatterns ?? DEFAULT_ACL_NAME_PATTERNS,
+  );
+};
 
 /**
  * Anti-corruption Layer: контейнер, который зовёт внешние системы, должен
@@ -23,7 +51,6 @@ export const aclRule: RuleDefinition<AclOptions> = {
     "Containers calling external systems must be tagged as ACL (Anti-corruption Layer)",
 
   check(model, options) {
-    const tag = options?.tag ?? "acl";
     const violations: Violation[] = [];
 
     for (const container of allContainers(model)) {
@@ -31,7 +58,7 @@ export const aclRule: RuleDefinition<AclOptions> = {
         (r) => targetOf(model, r)?.external === true,
       );
 
-      if (!container.tags.includes(tag) && externalRelations.length > 0) {
+      if (!isAcl(container, options) && externalRelations.length > 0) {
         const names = externalRelations.map((r) => r.to).join(", ");
         const label = externalRelations.length === 1 ? "system" : "systems";
         // Anchor on the first offending edge — lint-style "click on

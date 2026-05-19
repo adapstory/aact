@@ -1,4 +1,9 @@
+import type { Container } from "../model";
 import { allContainers, targetOf } from "../model";
+import {
+  DEFAULT_ACL_NAME_PATTERNS,
+  matchesAnyName,
+} from "./lib/namingPatterns";
 import type { RuleDefinition, Violation } from "./types";
 
 export interface ApiGatewayOptions {
@@ -6,7 +11,29 @@ export interface ApiGatewayOptions {
   readonly aclTag?: string;
   /** Regex для определения "это gateway technology". Default /gateway/i. */
   readonly gatewayPattern?: RegExp;
+  /**
+   * Picomatch globs (case-insensitive). Container counts as an ACL
+   * even without an explicit tag if its name matches any pattern.
+   * Shared semantics with `acl.namePatterns` — see that option for
+   * default list and rationale.
+   */
+  readonly aclNamePatterns?: readonly string[];
 }
+
+/** ACL identity = explicit tag OR name-convention match. Mirrors the
+ *  `isAcl` helper in `acl.ts` (kept inline to avoid coupling rules
+ *  through helper imports). */
+const isAcl = (
+  container: Container,
+  options: ApiGatewayOptions | undefined,
+): boolean => {
+  const tag = options?.aclTag ?? "acl";
+  if (container.tags.includes(tag)) return true;
+  return matchesAnyName(
+    container.name,
+    options?.aclNamePatterns ?? DEFAULT_ACL_NAME_PATTERNS,
+  );
+};
 
 /**
  * API Gateway pattern: ACL-контейнеры, зовущие внешние системы, должны
@@ -18,12 +45,11 @@ export const apiGatewayRule: RuleDefinition<ApiGatewayOptions> = {
     "ACL containers calling external systems must route through an API Gateway",
 
   check(model, options) {
-    const aclTag = options?.aclTag ?? "acl";
     const gatewayPattern = options?.gatewayPattern ?? /gateway/i;
     const violations: Violation[] = [];
 
     for (const container of allContainers(model)) {
-      if (!container.tags.includes(aclTag)) continue;
+      if (!isAcl(container, options)) continue;
 
       for (const rel of container.relations) {
         if (targetOf(model, rel)?.external !== true) continue;
@@ -33,6 +59,9 @@ export const apiGatewayRule: RuleDefinition<ApiGatewayOptions> = {
           violations.push({
             container: container.name,
             message: `calls external "${rel.to}" without going through an API Gateway`,
+            ...(rel.sourceLocation
+              ? { sourceLocation: rel.sourceLocation }
+              : {}),
           });
         }
       }

@@ -410,17 +410,19 @@ describe("dbPerServiceRule.fix", () => {
       "orders_db",
     );
     expect(results[0].edits).toHaveLength(2);
-    // Owner = analytics (first alphabetic among untagged accessors).
-    // Extras = orders_repo, payments — both redirect to the owner.
+    // Owner = orders_repo (name matches `*_repo` default pattern,
+    // so dbPerService treats it as the canonical owner even without
+    // an explicit `repo` tag).
+    // Extras = payments, analytics — both redirect to orders_repo.
     const searches = results[0].edits.map((e) => e.search);
-    expect(searches.some((s) => s.includes("Rel(orders_repo, orders_db"))).toBe(
+    expect(searches.some((s) => s.includes("Rel(analytics, orders_db"))).toBe(
       true,
     );
     expect(searches.some((s) => s.includes("Rel(payments, orders_db"))).toBe(
       true,
     );
     for (const e of results[0].edits) {
-      expect(e.content).toContain("analytics");
+      expect(e.content).toContain("orders_repo");
     }
   });
 

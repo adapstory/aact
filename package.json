@@ -79,6 +79,7 @@
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^22.10.0",
+    "@types/picomatch": "^4.0.3",
     "@vitest/coverage-v8": "^4.1.6",
     "@vitest/eslint-plugin": "^1.6.17",
     "changelogen": "^0.6.2",
@@ -114,6 +115,7 @@
     "consola": "^3.4.2",
     "jiti": "^2.7.0",
     "pathe": "^2.0.3",
+    "picomatch": "^4.0.4",
     "terminal-link": "^5.0.0",
     "valibot": "^1.4.0",
     "yaml": "2.9.0"

@@ -6,27 +6,51 @@ import {
   buildContainerBoundaryMap,
   resolveRedirectTarget,
 } from "./lib/boundaryUtils";
+import {
+  DEFAULT_REPO_NAME_PATTERNS,
+  matchesAnyName,
+} from "./lib/namingPatterns";
 import type { FixResult, RuleDefinition, Violation } from "./types";
 
 export interface DbPerServiceOptions {
   /** Tags маркирующие repo/relay контейнеры — определяют owner of DB. */
   readonly ownerTags?: readonly string[];
+  /**
+   * Picomatch globs (case-insensitive). Container counts as an owner
+   * (repo/relay) even without an explicit tag if its name matches
+   * any pattern. Mirrors `crud.repoNamePatterns` — same defaults,
+   * same intent. Configure independently when DB-owner naming
+   * conventions diverge from generic repo conventions.
+   */
+  readonly ownerNamePatterns?: readonly string[];
 }
 
 const DEFAULT_OWNER_TAGS: readonly string[] = ["repo", "relay"];
 
+/** Owner identity: explicit tag OR name-convention match. */
+const isOwner = (
+  container: Container,
+  options: DbPerServiceOptions | undefined,
+): boolean => {
+  const tags = options?.ownerTags ?? DEFAULT_OWNER_TAGS;
+  if (tags.some((t) => container.tags.includes(t))) return true;
+  return matchesAnyName(
+    container.name,
+    options?.ownerNamePatterns ?? DEFAULT_REPO_NAME_PATTERNS,
+  );
+};
+
 const resolveOwner = (
   dbName: string,
   accessors: readonly Container[],
-  ownerTags: readonly string[],
+  options: DbPerServiceOptions | undefined,
 ): Container => {
-  const tagged = accessors.filter((c) =>
-    c.tags.some((t) => ownerTags.includes(t)),
-  );
+  const tagged = accessors.filter((c) => isOwner(c, options));
 
   if (tagged.length === 0) {
+    const tagNames = (options?.ownerTags ?? DEFAULT_OWNER_TAGS).join("/");
     consola.warn(
-      `Cannot determine owner of ${dbName}: no ${ownerTags.join("/")} tagged accessor found, using ${accessors[0].name}`,
+      `Cannot determine owner of ${dbName}: no ${tagNames} tagged accessor found, using ${accessors[0].name}`,
     );
     return accessors[0];
   }
@@ -107,7 +131,7 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
       // Stryker disable next-line all
       if (accessors.length <= 1) continue;
 
-      const owner = resolveOwner(db.name, accessors, ownerTags);
+      const owner = resolveOwner(db.name, accessors, options);
 
       const edits = accessors
         .filter((c) => c !== owner)

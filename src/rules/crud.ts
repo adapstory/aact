@@ -6,6 +6,10 @@ import {
   buildContainerBoundaryMap,
   resolveRedirectTarget,
 } from "./lib/boundaryUtils";
+import {
+  DEFAULT_REPO_NAME_PATTERNS,
+  matchesAnyName,
+} from "./lib/namingPatterns";
 import type { NamingConvention } from "./lib/namingUtils";
 import { detectNamingConvention, joinName } from "./lib/namingUtils";
 import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
@@ -13,9 +17,34 @@ import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
 export interface CrudOptions {
   /** Tags маркирующие repo/relay контейнеры. Default ["repo", "relay"]. */
   readonly repoTags?: readonly string[];
+  /**
+   * Picomatch globs (case-insensitive). Container counts as a repo
+   * even without an explicit tag if its name matches any pattern.
+   * Closes the legacy-archive use case where naming convention
+   * (`*_repository`, `*Storage`) carries the intent that the project
+   * never got around to expressing as explicit tags. Default covers
+   * `*_repo`, `*_repository`, `*_storage`, `*_dao`, `*_store` and
+   * PascalCase variants.
+   */
+  readonly repoNamePatterns?: readonly string[];
 }
 
 const DEFAULT_REPO_TAGS: readonly string[] = ["repo", "relay"];
+
+/** Repo identity: explicit tag OR name-convention match. Used by both
+ *  check (to decide whether direct-db access from `c` is allowed) and
+ *  fix (to spot an existing repo by name when offering to rewire). */
+const isRepo = (
+  container: Container,
+  options: CrudOptions | undefined,
+): boolean => {
+  const tags = options?.repoTags ?? DEFAULT_REPO_TAGS;
+  if (tags.some((t) => container.tags.includes(t))) return true;
+  return matchesAnyName(
+    container.name,
+    options?.repoNamePatterns ?? DEFAULT_REPO_NAME_PATTERNS,
+  );
+};
 
 const stripDbWord = (name: string): string => {
   const lower = name.toLowerCase();
@@ -54,9 +83,10 @@ const fixNonRepoAccessesDb = (
   accessor: Container,
   model: Model,
   syntax: FixSyntax,
-  ownerTags: readonly string[],
+  options: CrudOptions | undefined,
   convention: NamingConvention,
 ): FixResult | undefined => {
+  const ownerTags = options?.repoTags ?? DEFAULT_REPO_TAGS;
   const dbRels = accessor.relations.filter(
     (r) => targetOf(model, r)?.kind === "ContainerDb",
   );
@@ -66,12 +96,16 @@ const fixNonRepoAccessesDb = (
     const db = targetOf(model, rel);
     if (!db) return [];
 
+    // Find any existing repo for `db` — including one identified by
+    // name convention (e.g. `user_repository` in a legacy archive
+    // without explicit `repo` tags). Per Safin's feedback: prefer
+    // re-using an existing container over creating a new one.
     // Stryker disable next-line ConditionalExpression
     const existingRepo = allContainers(model).find(
       (c) =>
         c !== accessor &&
         c.relations.some((r) => r.to === db.name) &&
-        ownerTags.some((t) => c.tags.includes(t)),
+        isRepo(c, options),
     );
 
     if (existingRepo) {
@@ -85,7 +119,31 @@ const fixNonRepoAccessesDb = (
         "crud",
       );
       if (!redirectTarget) return [];
+      // If the existing repo was identified by name convention only
+      // (no explicit tag), the rewire alone isn't enough — re-running
+      // `check` would still flag the same accessor because
+      // `existingRepo.tags` lacks the repo tag. Emit a redeclaration
+      // of the repo with the canonical tag attached so the rule
+      // converges in one --fix pass.
+      const repoNeedsTagging = !ownerTags.some((t) =>
+        existingRepo.tags.includes(t),
+      );
+      const canonicalRepoTag = ownerTags[0] ?? "repo";
+      const tagEdits: SourceEdit[] = repoNeedsTagging
+        ? [
+            {
+              type: "replace" as const,
+              search: syntax.containerPattern(existingRepo.name),
+              content: syntax.containerDecl(
+                existingRepo.name,
+                existingRepo.label,
+                canonicalRepoTag,
+              ),
+            },
+          ]
+        : [];
       return [
+        ...tagEdits,
         {
           type: "replace" as const,
           search: syntax.relationPattern(accessor.name, db.name),
@@ -182,16 +240,15 @@ export const crudRule: RuleDefinition<CrudOptions> = {
     "Direct database access only through repo/relay containers; repos must access databases only",
 
   check(model, options) {
-    const repoTags = options?.repoTags ?? DEFAULT_REPO_TAGS;
     const violations: Violation[] = [];
 
     for (const container of allContainers(model)) {
       const dbRelations = container.relations.filter(
         (r) => targetOf(model, r)?.kind === "ContainerDb",
       );
-      const isRepo = repoTags.some((tag) => container.tags.includes(tag));
+      const isRepoContainer = isRepo(container, options);
 
-      if (!isRepo && dbRelations.length > 0) {
+      if (!isRepoContainer && dbRelations.length > 0) {
         // Anchor on the first direct-db edge — lint-style click jumps
         // to the `Rel(...)` that broke the rule.
         const firstEdge = dbRelations[0];
@@ -207,7 +264,7 @@ export const crudRule: RuleDefinition<CrudOptions> = {
       const nonDbRels = container.relations.filter(
         (r) => targetOf(model, r)?.kind !== "ContainerDb",
       );
-      if (isRepo && nonDbRels.length > 0) {
+      if (isRepoContainer && nonDbRels.length > 0) {
         const nonDbTargets = nonDbRels.map((r) => r.to).join(", ");
         const firstEdge = nonDbRels[0];
         violations.push({
@@ -224,7 +281,6 @@ export const crudRule: RuleDefinition<CrudOptions> = {
   },
 
   fix(model, violations, syntax, options) {
-    const ownerTags = options?.repoTags ?? DEFAULT_REPO_TAGS;
     const convention = detectNamingConvention(model);
     const results: FixResult[] = [];
 
@@ -232,10 +288,9 @@ export const crudRule: RuleDefinition<CrudOptions> = {
       const container = model.containers[violation.container];
       if (!container) continue;
 
-      const isRepo = ownerTags.some((t) => container.tags.includes(t));
-      const fix = isRepo
+      const fix = isRepo(container, options)
         ? fixRepoWithNonDbDeps(container, model, syntax)
-        : fixNonRepoAccessesDb(container, model, syntax, ownerTags, convention);
+        : fixNonRepoAccessesDb(container, model, syntax, options, convention);
       if (fix) results.push(fix);
     }
 
