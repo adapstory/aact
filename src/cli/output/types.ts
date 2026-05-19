@@ -20,6 +20,7 @@ export type DiagnosticKind =
   | "model.boundaryCycle"
   | "model.duplicateContainerName"
   | "model.duplicateBoundaryName"
+  | "model.duplicateIdentifier"
   | "model.selfRelation"
   | "model.unknownKind"
   // Model load-time errors

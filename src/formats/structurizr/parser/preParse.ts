@@ -439,10 +439,13 @@ export const stripDeploymentBlocks = (
     // (`live = deploymentEnvironment "X" { ... }`), the `live =`
     // tokens are already in `out`. Pop them so the orphan assignment
     // doesn't trip the parser.
+    const last = out.at(-1);
+    const beforeLast = out.at(-2);
     if (
-      out.length >= 2 &&
-      tokenMatcher(out.at(-1), Equals) &&
-      tokenMatcher(out.at(-2), Identifier)
+      last &&
+      beforeLast &&
+      tokenMatcher(last, Equals) &&
+      tokenMatcher(beforeLast, Identifier)
     ) {
       out.pop(); // Equals
       out.pop(); // Identifier

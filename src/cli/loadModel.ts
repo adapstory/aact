@@ -15,6 +15,7 @@ const issueKindMap: Record<ModelIssue["kind"], DiagnosticKind> = {
   "boundary-cycle": "model.boundaryCycle",
   "duplicate-container-name": "model.duplicateContainerName",
   "duplicate-boundary-name": "model.duplicateBoundaryName",
+  "duplicate-identifier": "model.duplicateIdentifier",
   "self-relation": "model.selfRelation",
   "unknown-kind": "model.unknownKind",
 };
@@ -36,6 +37,9 @@ const issueContext = (issue: ModelIssue): Record<string, string> => {
     case "duplicate-container-name":
     case "duplicate-boundary-name": {
       return { name: issue.name };
+    }
+    case "duplicate-identifier": {
+      return { identifier: issue.identifier };
     }
     case "self-relation": {
       return { container: issue.container };
@@ -65,6 +69,9 @@ const issueMessage = (issue: ModelIssue): string => {
     }
     case "duplicate-boundary-name": {
       return `Duplicate boundary name "${issue.name}"`;
+    }
+    case "duplicate-identifier": {
+      return `Duplicate DSL identifier "${issue.identifier}" registered for two distinct elements`;
     }
     case "self-relation": {
       return `Container "${issue.container}" has a relation to itself`;
