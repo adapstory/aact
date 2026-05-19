@@ -50,9 +50,11 @@ export interface CheckViolation {
    * Optional location of the offending construct in source. Populated
    * either from `Violation.sourceLocation` if the rule set it
    * explicitly, or by looking up
-   * `model.elements[v.target].sourceLocation` as fallback.
-   * Surfaces in the JSON envelope for agents and powers OSC8
-   * hyperlinks in text mode (`terminal-link`).
+   * `model.elements[v.target].sourceLocation` as fallback. Carried
+   * in the JSON envelope for agents; text mode wraps it in a
+   * per-terminal OSC 8 hyperlink via `linkSourceLocation` so the
+   * file:line:col anchor is Cmd-clickable in VSCode / Cursor /
+   * Zed / Ghostty / iTerm2 / WezTerm / Kitty.
    */
   readonly sourceLocation?: SourceLocation;
 }
@@ -497,7 +499,10 @@ const renderViolationsTable = (
   const ruleWidth = Math.max(...rows.map((r) => r.rule.length));
 
   for (const r of rows) {
-    // Order: pad → link → color (OSC8 escapes would skew .length).
+    // Order: pad → link → color (OSC 8 escapes would skew .length).
+    // linkSourceLocation reads AACT_FILE_OPENER env to pick the
+    // URL scheme — see src/cli/output/hyperlinks.ts for the
+    // per-terminal logic.
     const paddedLoc = r.locText.padEnd(locWidth);
     const linked = linkSourceLocation(paddedLoc, r.sourceLocation);
     const locCell = colors.dim(linked);

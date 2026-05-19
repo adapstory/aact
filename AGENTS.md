@@ -67,6 +67,31 @@ Agents must branch on these — do not collapse them. The envelope shape
 is defined in `src/cli/output/types.ts`; additions are additive,
 removals or renames require a `schemaVersion` bump.
 
+## Source-location hyperlinks
+
+`aact check` text mode emits each violation with a Cmd-clickable
+`<file>:<line>:<col>` anchor. The terminal hyperlink scheme is
+host-aware:
+
+| Terminal                                | Click target                          |
+| --------------------------------------- | ------------------------------------- |
+| VSCode / Cursor integrated terminal     | jumps to line:col in editor           |
+| Zed integrated terminal                 | jumps to line:col in editor           |
+| Ghostty / iTerm2 / WezTerm / Kitty etc. | opens `$AACT_FILE_OPENER` at line:col |
+| Piped / non-TTY (`jq`, `> log.txt`, CI) | plain text — no escapes               |
+
+`AACT_FILE_OPENER` accepts the same vocabulary as OpenAI Codex's
+`file_opener` setting — `vscode` (default), `vscode-insiders`,
+`cursor`, `windsurf`, `zed`, or `none`. Set it once in your shell:
+
+```bash
+export AACT_FILE_OPENER=cursor    # opens cursor://file/<abs>:line:col
+```
+
+In VSCode / Cursor / Zed integrated terminals the env var is
+ignored — those editors handle their own terminal-link parser
+and jumping happens internally.
+
 ## Setup (contributors)
 
 Use **pnpm 11**, not npm or yarn. Node ≥22 (CI runs 22 and 24).

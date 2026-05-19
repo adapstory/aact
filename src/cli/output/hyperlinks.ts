@@ -3,45 +3,142 @@ import terminalLink from "terminal-link";
 import type { SourceLocation } from "../../model";
 
 /**
- * Terminal hyperlink helpers for source-location anchoring.
+ * Terminal hyperlinks for source-location anchoring.
  *
- * Architectural seam: `SourceLocation` is structured data carried by
- * `Violation` / `Container` / `Boundary` / `Relation`. JSON envelope
- * passes it through as-is — agentic consumers (Claude Code, Codex
- * CLI, dashboards) inspect `range.start.line` etc. directly. Text
- * mode wraps the same data in OSC8 hyperlinks via these helpers.
+ * The challenge with `file:line:col` Cmd-click navigation is that
+ * **no single URL convention works across all terminal hosts**:
  *
- * Detection (`terminal-link.isSupported`) honours `NO_COLOR` / `CI`
- * env, VSCode integrated terminal quirks, Windows Terminal, and
- * older tmux without OSC8 forward. Falls back to plain text
- * automatically — no opt-out flag is needed today.
+ * - VSCode integrated terminal parses `file://<abs>:<line>:<col>`
+ *   with its private terminal-link parser. Cursor inherits the
+ *   same parser (Cursor is a VSCode fork). Plain `file://` URLs
+ *   from the host OS handler can't carry `:line:col` — it's an
+ *   internal convention.
+ *
+ * - Zed has built-in autodetection of `<file>:<line>:<col>` plain
+ *   text. Wrapping it in OSC 8 with any external URL scheme
+ *   bypasses Zed's "open in this Zed window" flow and routes
+ *   through the OS handler instead. Zed has no URL scheme of its
+ *   own yet (zed-industries/zed#8482).
+ *
+ * - Ghostty / iTerm2 / WezTerm / Kitty / Alacritty pass OSC 8
+ *   URLs to the OS URL handler. Ghostty maintainers explicitly
+ *   refuse to add `path:line:col` autodetection because the
+ *   convention isn't standardised. The only URL format that
+ *   survives the round-trip is an editor-specific deeplink —
+ *   `vscode://file/...`, `cursor://file/...`, etc. — which macOS
+ *   / Linux routes to the registered editor.
+ *
+ * **Resolution.** We emit plain `<file>:<line>:<col>` as the
+ * visible display text (auto-detected by VSCode / Cursor / Zed
+ * integrated terminals and by most modern external terminals
+ * with Smart Selection) and wrap it in a per-host URL when the
+ * terminal advertises OSC 8 support:
+ *
+ * | Host (env detection)        | OSC 8 URL                              |
+ * | --------------------------- | -------------------------------------- |
+ * | `TERM_PROGRAM=vscode`       | `file://abs:line:col` (VSCode private) |
+ * | `CURSOR_TRACE_ID` set       | `file://abs:line:col` (Cursor inherits)|
+ * | `TERM_PROGRAM=zed`          | (plain text — Zed autodetects)         |
+ * | everything else, OSC 8 ok   | `<file_opener>://file/abs:line:col`    |
+ * | no OSC 8 (piped / CI)       | (plain text)                           |
+ *
+ * The `<file_opener>` scheme is configurable, mirroring OpenAI
+ * Codex's `file_opener` setting so users only need to set it
+ * once across the agent-CLI ecosystem. Supported schemes:
+ *
+ * - `vscode` (default) — `vscode://file/...`
+ * - `vscode-insiders` — `vscode-insiders://file/...`
+ * - `cursor` — `cursor://file/...`
+ * - `windsurf` — `windsurf://file/...`
+ * - `zed` — `zed://file/...` (forward-compatible; Zed app must
+ *   register the scheme — currently only opens via plain text
+ *   inside the Zed terminal itself)
+ * - `none` — disable OSC 8 emission, plain text only
+ *
+ * Override priority: `AACT_FILE_OPENER` env → `output.fileOpener`
+ * in `aact.config.ts` → `"vscode"` default. Env var takes
+ * precedence so users can override per shell without editing
+ * project config.
+ *
+ * **Library safety:** `terminal-link.isSupported` is `false` when
+ * stdout isn't a TTY (piped to `jq`, redirected to file, CI), so
+ * the wrapper degrades to plain text — no escape sequences leak
+ * into machine-readable output.
  */
+
+/**
+ * URI-based file opener — mirrors OpenAI Codex's `file_opener`
+ * config so users only need to set the scheme once across
+ * their agent-CLI tooling.
+ */
+export type FileOpener =
+  | "vscode"
+  | "vscode-insiders"
+  | "cursor"
+  | "windsurf"
+  | "zed"
+  | "none";
+
+const FILE_OPENERS: ReadonlySet<string> = new Set<FileOpener>([
+  "vscode",
+  "vscode-insiders",
+  "cursor",
+  "windsurf",
+  "zed",
+  "none",
+]);
 
 export interface HyperlinkOptions {
-  /** Explicit override (e.g. from a future `--no-hyperlinks` flag). */
+  /** Skip OSC 8 even if the host terminal supports it. */
   readonly disabled?: boolean;
+  /**
+   * Override the URL scheme used for the OSC 8 wrapper. When
+   * omitted, falls back to `AACT_FILE_OPENER` env then `"vscode"`.
+   * `output.fileOpener` in `aact.config.ts` plumbs through here.
+   */
+  readonly fileOpener?: FileOpener;
 }
 
-/**
- * Build a `file://<abs>:<line>:<col>` URI that VSCode's integrated
- * terminal parses to jump to the exact position; iTerm2, Ghostty, and
- * Windows Terminal open the file in the OS default editor (line:col
- * is ignored harmlessly). The line and column are 1-based.
- */
-const buildFileUri = (loc: SourceLocation): string =>
-  `file://${loc.file}:${loc.start.line}:${loc.start.col}`;
+const resolveFileOpener = (override?: FileOpener): FileOpener => {
+  if (override) return override;
+  const env = process.env.AACT_FILE_OPENER;
+  if (env && FILE_OPENERS.has(env)) return env as FileOpener;
+  return "vscode";
+};
+
+const buildFileUri = (
+  loc: SourceLocation,
+  opener: FileOpener,
+): string | undefined => {
+  if (opener === "none") return undefined;
+  const lineCol = `${loc.start.line}:${loc.start.col}`;
+  const { TERM_PROGRAM, CURSOR_TRACE_ID } = process.env;
+  // VSCode + Cursor integrated terminals: their internal parser
+  // handles the `file://abs:line:col` private convention. We
+  // emit it even when the user explicitly chose a different
+  // `fileOpener` — inside the editor's own terminal there's
+  // nothing to "open in", we're already there.
+  if (TERM_PROGRAM === "vscode" || CURSOR_TRACE_ID) {
+    return `file://${loc.file}:${lineCol}`;
+  }
+  return `${opener}://file/${loc.file}:${lineCol}`;
+};
 
 /**
- * Wrap `text` in an OSC8 clickable hyperlink pointing at `loc`. Falls
- * back to plain `text` when:
+ * Wrap `text` in an OSC 8 clickable hyperlink. Returns plain `text`
+ * when:
  *   - `loc` is undefined (rule didn't anchor the violation);
- *   - `opts.disabled` is true (explicit user override);
- *   - the host terminal doesn't support OSC8 (CI, piped output,
- *     older terminals — detected by `terminal-link`).
+ *   - `opts.disabled` is true;
+ *   - `opts.fileOpener === "none"`;
+ *   - `TERM_PROGRAM=zed` (Zed's built-in path autodetect drives
+ *     Cmd-click; OSC 8 with any external URL scheme would bypass
+ *     "open in this Zed window");
+ *   - the host terminal doesn't support OSC 8 (CI, piped output,
+ *     older terminals — detected by `terminal-link.isSupported`).
  *
- * Library safety: never emits escape sequences when stdout isn't a
- * TTY, so a CLI consumer piping to `jq` or writing to a file sees
- * clean text.
+ * Plain text is always `<file>:<line>:<col>` so that terminals
+ * with smart-selection autodetection still pick it up even when
+ * we skip OSC 8.
  */
 export const linkSourceLocation = (
   text: string,
@@ -50,15 +147,12 @@ export const linkSourceLocation = (
 ): string => {
   if (!loc) return text;
   if (opts?.disabled) return text;
+  if (process.env.TERM_PROGRAM === "zed") return text;
   if (!terminalLink.isSupported) return text;
-  return terminalLink(text, buildFileUri(loc), { fallback: () => text });
+  const opener = resolveFileOpener(opts?.fileOpener);
+  const uri = buildFileUri(loc, opener);
+  if (!uri) return text;
+  return terminalLink(text, uri, { fallback: () => text });
 };
 
-/**
- * Re-export of the pure-data location formatter from `model/lib.ts`.
- * Kept here so callers that only need the CLI hyperlink helpers can
- * import both from one module; library consumers should prefer
- * `import { formatLocation } from "aact"` (it lives in the library
- * layer where it belongs).
- */
 export { formatLocation } from "../../model";

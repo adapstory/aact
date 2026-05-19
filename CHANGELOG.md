@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- **Source-location hyperlinks now navigate to line/column in every
+  modern terminal.** Beta.14 emitted OSC 8 with a
+  `file://abs:line:col` URL that only VSCode integrated terminal's
+  private parser handled — under Ghostty, iTerm2, WezTerm, Kitty,
+  Cursor's external terminal, and similar hosts the OS handler
+  treated `:23:1` as part of the filename and the click silently
+  did nothing. The hyperlink emitter now picks a URL scheme
+  per-terminal, mirroring OpenAI Codex's `file_opener` vocabulary:
+  - `TERM_PROGRAM=vscode` or `CURSOR_TRACE_ID` set →
+    `file://abs:line:col` (VSCode/Cursor internal parser jumps)
+  - `TERM_PROGRAM=zed` → plain text (Zed's built-in path
+    autodetect drives the click; external URL would bypass Zed's
+    "open in this window" flow)
+  - everything else → `<scheme>://file/abs:line:col` where
+    `<scheme>` defaults to `vscode` and is overridable via the
+    `AACT_FILE_OPENER` env var (`vscode` / `vscode-insiders` /
+    `cursor` / `windsurf` / `zed` / `none`).
+
+  The visible display text remains plain `<file>:<line>:<col>`
+  so terminals with Smart Selection / built-in path autodetection
+  still pick it up when OSC 8 isn't supported (CI, piped output).
+
 ## v3.0.0-beta.14 — 2026-05-19
 
 Agent-facing surface. `aact check --json` now ships the rule
