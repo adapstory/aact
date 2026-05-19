@@ -234,7 +234,7 @@ export default tseslint.config(
       "n/no-extraneous-import": "off",
 
       // sonarjs relaxations
-      "sonarjs/cognitive-complexity": "warn",
+      "sonarjs/cognitive-complexity": ["warn", 20],
       "sonarjs/no-misleading-array-reverse": "warn",
       "sonarjs/no-commented-code": "off",
       "sonarjs/slow-regex": "warn",
@@ -243,6 +243,32 @@ export default tseslint.config(
 
       // eslint-comments: require justification for disable comments.
       "@eslint-community/eslint-comments/no-unused-disable": "error",
+    },
+  },
+  // Parser / loader layer — chevrotain CST visitors, pre-lex passes,
+  // grammar dispatchers naturally accrue branching on every grammar
+  // case the C4 dialects expose. Industry norm for this kind of code
+  // is 30-40 (SonarQube parsers are 50+). Raising the threshold here
+  // — instead of fragmenting functions into helpers that obscure the
+  // grammar shape — keeps the parser code readable while still
+  // catching surprise complexity in our own application layer.
+  // chevrotain's `this.visit(node)` is typed `any`, so visitor
+  // returns also get an explicit pass on `no-unsafe-return`.
+  {
+    files: ["src/formats/*/parser/**/*.ts", "src/formats/*/load.ts"],
+    rules: {
+      "sonarjs/cognitive-complexity": ["warn", 40],
+      "@typescript-eslint/no-unsafe-return": "off",
+    },
+  },
+  // Algorithmic core — graph traversal (cycle detection, instability
+  // metrics, boundary classification). These functions have to weave
+  // multiple invariants in one pass; splitting them at the 20 mark
+  // tends to hide the algorithm rather than reveal it.
+  {
+    files: ["src/model/validate.ts", "src/analyze.ts"],
+    rules: {
+      "sonarjs/cognitive-complexity": ["warn", 25],
     },
   },
   // @vitest/eslint-plugin — cherry-pick high-value rules. Skip
