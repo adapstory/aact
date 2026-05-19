@@ -46,7 +46,7 @@ export const renderAnalyzeText: Renderer<AnalyzeData> = (envelope, sink) => {
 
 export const analyze = cliCommandWithConfig({
   name: "analyze",
-  meta: { description: "Analyze architecture metrics" },
+  meta: { name: "analyze", description: "Analyze architecture metrics" },
   args: { ...configArg, ...jsonArg },
   renderText: renderAnalyzeText,
   execute: (_ctx, config) => executeAnalyze(config),

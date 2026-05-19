@@ -194,6 +194,7 @@ export const renderInitText: Renderer<InitData> = (envelope, sink) => {
 export const init = cliCommand({
   name: "init",
   meta: {
+    name: "init",
     description: "Create aact.config.ts and a starter architecture file",
   },
   args: { ...jsonArg },

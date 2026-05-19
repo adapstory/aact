@@ -520,6 +520,7 @@ const installArgs = {
 const install = cliCommand({
   name: "skill install",
   meta: {
+    name: "install",
     description: "Install the community aact-architect skill for AI agents",
   },
   args: installArgs,
@@ -529,6 +530,7 @@ const install = cliCommand({
 
 export const skill = defineCommand({
   meta: {
+    name: "skill",
     description: "Install agent skills for aact workflows",
   },
   args: installArgs,

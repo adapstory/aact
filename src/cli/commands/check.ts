@@ -529,7 +529,7 @@ export const renderCheckText: Renderer<CheckData> = (envelope, sink) => {
 
 export const check = cliCommandWithConfig({
   name: "check",
-  meta: { description: "Check architecture rules" },
+  meta: { name: "check", description: "Check architecture rules" },
   args: {
     ...configArg,
     ...jsonArg,

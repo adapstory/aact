@@ -226,7 +226,7 @@ export const renderGenerateText: Renderer<GenerateData> = (envelope, sink) => {
 
 export const generate = cliCommandWithConfig({
   name: "generate",
-  meta: { description: "Generate architecture artifacts" },
+  meta: { name: "generate", description: "Generate architecture artifacts" },
   args: {
     ...configArg,
     ...jsonArg,

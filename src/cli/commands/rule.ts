@@ -140,13 +140,19 @@ export const renderRuleListText: Renderer<RuleListData> = (envelope, sink) => {
 
 const listAction = cliCommand({
   name: "rule list",
-  meta: { description: "List all effective rules (built-in + custom)" },
+  meta: {
+    name: "list",
+    description: "List all effective rules (built-in + custom)",
+  },
   args: { ...configArg, ...jsonArg },
   renderText: renderRuleListText,
   execute: (ctx) => executeRuleList(ctx.args as RuleListArgs),
 });
 
 export const rule = defineCommand({
-  meta: { description: "Inspect and manage architecture rules" },
+  meta: {
+    name: "rule",
+    description: "Inspect and manage architecture rules",
+  },
   subCommands: { list: listAction },
 });
