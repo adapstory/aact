@@ -300,6 +300,27 @@ for the rest ("multiple diagrams found; using the first").
   parser sees `MyContainer(...)` and treats it as an unknown call.
   Users should call C4-PUML macros directly.
 - Mermaid C4 — separate format, separate phase.
+- Sequence-flavour diagrams (`C4_Sequence.puml`, `participant`,
+  `actor`, `activate`, `deactivate`). Out of static + dynamic scope;
+  files containing them surface parse errors rather than crash.
+- PlantUML preprocessor variable references in arg values (e.g.
+  `$index-1`, `increment()`, user-defined functions). The
+  `samples/C4_Dynamic ... - old format.puml` fixture relies on these
+  for step ordering; the modern equivalent uses `$index=Index()` and
+  works fine.
+
+### 8.1 PUML preprocessor arithmetic in arg values — stripped
+
+The C4-PUML stdlib lets `$index=Index()-1` evaluate at render time as
+`Index() - 1`. Our grammar does not model arithmetic, so a pre-lex
+pass strips the `[op N]` tail after any function-call's closing `)`
+(byte-length preserved). The strip is safe: `Index()` already
+collapses to `Relation.order = undefined` in `toModel`, so the
+architectural meaning ("auto-numbering offset, no fixed order") is
+preserved verbatim. Pattern: `\)\s*[+\-*/]\s*\d+` → `)            `.
+
+This closes the `samples/C4_Dynamic ... - message bus.puml` fixture
+which uses `$index=Index()-1`, `LastIndex()-2`, and `SetIndex(5)-2`.
 
 ## 9. Authority precedence
 

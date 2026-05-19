@@ -1,0 +1,520 @@
+/**
+ * C4-PlantUML AST → `Model` lowerer.
+ *
+ * Walks the typed `FileNode` produced by `visitor.ts` and emits a
+ * fully-populated `Model` (containers, boundaries, root boundary
+ * names) plus a list of `ModelIssue`s. Anchors every Model node to a
+ * `SourceLocation` carried from the AST `range` field, so downstream
+ * diagnostics, terminal OSC8 links, and AST-based fixes resolve to
+ * the user's original `.puml` bytes.
+ *
+ * Responsibilities (mapped from grammar.md §1.x):
+ *
+ *   - Element macros → `Container`. Disambiguates Context family
+ *     (`Person`/`System`/…) from Container/Component family by
+ *     positional layout — Context macros lack a `$techn` slot;
+ *     `$type` on Context carries technology instead.
+ *   - Boundary macros → `Boundary`, with `kind` decoded from the
+ *     macro name (or `$type` for generic `Boundary`). Children are
+ *     collected from the nested statement list.
+ *   - Relation macros → `Relation` entries pushed onto the source
+ *     container's `relations[]`. Handles:
+ *       * `Rel_Back*` swap (semantically `Rel(to, from)`)
+ *       * `BiRel*` expansion to TWO Relation entries (one per
+ *         direction)
+ *       * `RelIndex*` first positional → `Relation.order`
+ *       * `$index=` named arg on plain `Rel` → `Relation.order`
+ *       * `$tags` / `$link` / `$sprite` named args
+ *   - Layout macros → ignored (no Model effect; AST captures them
+ *     only for round-trip via `LoadResult.raw` once we expose that).
+ *   - Multiple diagrams → only the first reaches us (preParse stripped
+ *     the rest and emitted an info-issue).
+ *
+ * Out of scope here (handled elsewhere or deliberately not modelled):
+ *   - `LAYOUT_*`/`HIDE_*`/`SHOW_*` and other opaque macros —
+ *     pre-stripped before lex.
+ *   - `Deployment_Node`/`Node` blocks — pre-stripped with info-issue.
+ *   - `!include`/`!define`/…  preprocessor — pre-stripped before lex.
+ *   - PlantUML native syntax — pre-stripped before lex.
+ */
+
+import type {
+  Boundary,
+  BoundaryKind,
+  Container,
+  ContainerKind,
+  Relation,
+  SourceLocation,
+} from "../../../model";
+import { buildModel } from "../../../model";
+import { parseBoundaryMacro, parseC4MacroKind } from "../../_shared/c4Mapping";
+import { parseCsvTags } from "../../_shared/tags";
+import type { LoadResult } from "../../types";
+import type {
+  ArgumentValue,
+  BoundaryMacro,
+  DiagramStatement,
+  ElementMacro,
+  FileNode,
+  NamedArg,
+  RelationMacro,
+} from "./ast";
+
+// ── Argument-extraction helpers ─────────────────────────────────────
+
+/**
+ * String view of an argument value. StringLiteral → unescaped value;
+ * bare identifier → identifier text; FunctionCallValue → undefined
+ * (toModel handles function calls case-by-case where they carry
+ * Model semantics, e.g. `Index()`).
+ */
+const argString = (value: ArgumentValue | undefined): string | undefined => {
+  if (!value) return undefined;
+  if (value.kind === "string") return value.value;
+  if (value.kind === "bareToken") return value.value;
+  return undefined;
+};
+
+/** Find a named arg by name; returns its value or undefined. */
+const namedValue = (
+  args: readonly NamedArg[],
+  name: string,
+): ArgumentValue | undefined => args.find((a) => a.name === name)?.value;
+
+/** First defined string among the candidates. */
+const coalesceString = (
+  ...candidates: (ArgumentValue | string | undefined)[]
+): string | undefined => {
+  for (const c of candidates) {
+    if (c === undefined) continue;
+    if (typeof c === "string") return c;
+    const s = argString(c);
+    if (s !== undefined) return s;
+  }
+  return undefined;
+};
+
+/**
+ * `$index=` value coercion. Accepts `$index=3` (bare), `$index="3"`
+ * (quoted), or `$index=Index()` (sentinel call meaning "use diagram-
+ * level auto-increment"). Returns `undefined` for non-numeric or
+ * `Index()` — `Index()` is a presentation-only auto-numbering hint
+ * and carries no architectural meaning we can persist in the Model.
+ *
+ * Reference: `C4_Dynamic.puml:39-72` re-declares `Rel` to add
+ * `$index=""`; `Index()` is a helper that returns an incrementing
+ * counter at PUML render time.
+ */
+const coerceOrder = (value: ArgumentValue | undefined): number | undefined => {
+  if (!value) return undefined;
+  if (value.kind === "functionCallValue") return undefined; // `Index()`
+  const s = argString(value);
+  if (s === undefined) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+};
+
+// ── Element family layout ──────────────────────────────────────────
+
+const CONTEXT_FAMILY: ReadonlySet<string> = new Set([
+  "Person",
+  "Person_Ext",
+  "System",
+  "SystemDb",
+  "SystemQueue",
+  "System_Ext",
+  "SystemDb_Ext",
+  "SystemQueue_Ext",
+]);
+
+interface ElementSlots {
+  /** technology lives here on this family. */
+  readonly techIndex: number;
+  readonly descrIndex: number;
+  readonly spriteIndex: number;
+  readonly tagsIndex: number;
+  readonly linkIndex: number;
+  /** Which named-arg key carries technology — `techn` (Container/
+   *  Component family) or `type` (Context family). */
+  readonly techNamedKey: "techn" | "type";
+}
+
+/**
+ * Positional layout per element family. Indices match the stdlib
+ * macro signatures verbatim:
+ *
+ *   Context     : (alias, label, descr, sprite, tags, link, type, baseShape)
+ *                                  2       3      4     5     6
+ *   Container   : (alias, label, techn, descr, sprite, tags, link, baseShape)
+ *                                  2     3       4      5     6
+ */
+const slotsFor = (macroName: string): ElementSlots => {
+  if (CONTEXT_FAMILY.has(macroName)) {
+    return {
+      techIndex: 6,
+      descrIndex: 2,
+      spriteIndex: 3,
+      tagsIndex: 4,
+      linkIndex: 5,
+      techNamedKey: "type",
+    };
+  }
+  return {
+    techIndex: 2,
+    descrIndex: 3,
+    spriteIndex: 4,
+    tagsIndex: 5,
+    linkIndex: 6,
+    techNamedKey: "techn",
+  };
+};
+
+// ── Builders ────────────────────────────────────────────────────────
+
+const buildContainer = (
+  macro: ElementMacro,
+): { container: Container; kind: ContainerKind } | undefined => {
+  const kindInfo = parseC4MacroKind(macro.macroName);
+  if (!kindInfo) return undefined;
+  const slots = slotsFor(macro.macroName);
+
+  const alias = argString(macro.positionals[0]);
+  const label = argString(macro.positionals[1]) ?? "";
+  if (!alias) return undefined; // malformed — visitor's `recovered` would catch this
+
+  const technology = coalesceString(
+    namedValue(macro.namedArgs, slots.techNamedKey),
+    macro.positionals[slots.techIndex],
+  );
+  const description =
+    coalesceString(
+      namedValue(macro.namedArgs, "descr"),
+      macro.positionals[slots.descrIndex],
+    ) ?? "";
+  const sprite = coalesceString(
+    namedValue(macro.namedArgs, "sprite"),
+    macro.positionals[slots.spriteIndex],
+  );
+  const tagsRaw = coalesceString(
+    namedValue(macro.namedArgs, "tags"),
+    macro.positionals[slots.tagsIndex],
+  );
+  const link = coalesceString(
+    namedValue(macro.namedArgs, "link"),
+    macro.positionals[slots.linkIndex],
+  );
+
+  const container: Container = {
+    name: alias,
+    label,
+    kind: kindInfo.kind,
+    external: kindInfo.external,
+    description,
+    technology,
+    tags: parseCsvTags(tagsRaw),
+    sprite,
+    relations: [],
+    link,
+    sourceLocation: macro.range,
+  };
+  return { container, kind: kindInfo.kind };
+};
+
+interface BoundaryBuildResult {
+  readonly boundary: Boundary;
+  readonly containerNames: readonly string[];
+  readonly childBoundaryNames: readonly string[];
+}
+
+const buildBoundary = (
+  macro: BoundaryMacro,
+  childContainerNames: readonly string[],
+  childBoundaryNames: readonly string[],
+): BoundaryBuildResult | undefined => {
+  const alias = argString(macro.positionals[0]);
+  const label = argString(macro.positionals[1]) ?? "";
+  if (!alias) return undefined;
+
+  // Generic `Boundary` has an extra `$type` slot at index 2 before
+  // tags/link/descr; named boundaries push everything one slot left.
+  const isGeneric = macro.macroName === "Boundary";
+  const typeIdx = isGeneric ? 2 : -1;
+  const tagsIdx = isGeneric ? 3 : 2;
+  const linkIdx = isGeneric ? 4 : 3;
+  const descrIdx = isGeneric ? 5 : 4;
+
+  // Decode boundary kind. For generic `Boundary` the `$type` arg
+  // controls it: "Enterprise"/"System"/"Container"/anything-else.
+  let kind: BoundaryKind = parseBoundaryMacro(macro.macroName);
+  if (isGeneric) {
+    const typeStr =
+      coalesceString(
+        namedValue(macro.namedArgs, "type"),
+        typeIdx >= 0 ? macro.positionals[typeIdx] : undefined,
+      ) ?? "";
+    switch (typeStr) {
+      case "Enterprise": {
+        kind = "Enterprise";
+        break;
+      }
+      case "Container": {
+        kind = "Container";
+        break;
+      }
+      case "Component": {
+        kind = "Component";
+        break;
+      }
+      default: {
+        kind = "System";
+      }
+    }
+  }
+
+  const tagsRaw = coalesceString(
+    namedValue(macro.namedArgs, "tags"),
+    macro.positionals[tagsIdx],
+  );
+  const link = coalesceString(
+    namedValue(macro.namedArgs, "link"),
+    macro.positionals[linkIdx],
+  );
+  const description = coalesceString(
+    namedValue(macro.namedArgs, "descr"),
+    macro.positionals[descrIdx],
+  );
+
+  const boundary: Boundary = {
+    name: alias,
+    label,
+    kind,
+    description,
+    tags: parseCsvTags(tagsRaw),
+    containerNames: childContainerNames,
+    boundaryNames: childBoundaryNames,
+    link,
+    sourceLocation: macro.range,
+  };
+  return {
+    boundary,
+    containerNames: childContainerNames,
+    childBoundaryNames,
+  };
+};
+
+interface RelationEmit {
+  readonly from: string;
+  readonly relation: Relation;
+}
+
+/**
+ * Lower a relation macro to one or two `RelationEmit`s (BiRel doubles
+ * up). Returns the empty array when `from`/`to` are missing — the
+ * preParse + visitor pipeline should reject those upstream, but we
+ * never produce `dangling` entries from here.
+ */
+const buildRelations = (macro: RelationMacro): RelationEmit[] => {
+  const from0 = argString(macro.positionals[0]);
+  const to0 = argString(macro.positionals[1]);
+  if (!from0 || !to0) return [];
+
+  // Rel_Back* swaps semantically: `Rel_Back(a, b, "x")` means "b → a".
+  const from = macro.back ? to0 : from0;
+  const to = macro.back ? from0 : to0;
+
+  const label = argString(macro.positionals[2]) ?? "";
+  // After alias/alias/label, the Rel signature shape is identical to
+  // Container's `(techn, descr, sprite, tags, link)`.
+  const technology = coalesceString(
+    namedValue(macro.namedArgs, "techn"),
+    macro.positionals[3],
+  );
+  const tagsRaw = coalesceString(
+    namedValue(macro.namedArgs, "tags"),
+    macro.positionals[6],
+    // Legacy fallback: pre-chevrotain loader read the descr slot as
+    // tags-CSV when no dedicated tags slot was set. PUML files in the
+    // wild still rely on the four-arg form `Rel(a, b, "L", "T",
+    // "tag1,tag2")`, so we honour it. The real tags slot wins when
+    // both are present.
+    macro.positionals[4],
+  );
+  const sprite = coalesceString(
+    namedValue(macro.namedArgs, "sprite"),
+    macro.positionals[5],
+  );
+  const link = coalesceString(
+    namedValue(macro.namedArgs, "link"),
+    macro.positionals[7],
+  );
+
+  // RelIndex* — `$e_index` (mandatory first positional, lifted into
+  // `indexPositional` by visitor). `Rel*` accepts named `$index=N`.
+  const order = macro.indexPositional
+    ? coerceOrder(macro.indexPositional)
+    : coerceOrder(namedValue(macro.namedArgs, "index"));
+
+  const base: Relation = {
+    to,
+    description: label || undefined,
+    technology,
+    tags: parseCsvTags(tagsRaw),
+    sprite,
+    link,
+    order,
+    sourceLocation: macro.range,
+  };
+
+  if (macro.bidirectional) {
+    // Two directed relations — one each way. Same metadata on both;
+    // generators that round-trip BiRel collapse them back.
+    const back: Relation = {
+      ...base,
+      to: from,
+      sourceLocation: macro.range,
+    };
+    return [
+      { from, relation: base },
+      { from: to, relation: back },
+    ];
+  }
+  return [{ from, relation: base }];
+};
+
+// ── Tree walk ───────────────────────────────────────────────────────
+
+interface WalkAcc {
+  readonly containers: Map<string, Container>;
+  readonly boundaries: Boundary[];
+  readonly rootBoundaryNames: string[];
+  readonly pendingRelations: RelationEmit[];
+}
+
+/**
+ * Walk a statement list. `parentBoundary` is the enclosing boundary,
+ * or undefined at diagram top-level. Returns the names of immediate
+ * children (containers + boundaries) for the caller to slot into the
+ * enclosing boundary's name lists.
+ */
+const walkStatements = (
+  statements: readonly DiagramStatement[],
+  acc: WalkAcc,
+  parentBoundary: BoundaryMacro | undefined,
+): { containerNames: string[]; boundaryNames: string[] } => {
+  const containerNames: string[] = [];
+  const boundaryNames: string[] = [];
+
+  for (const stmt of statements) {
+    switch (stmt.kind) {
+      case "elementMacro": {
+        const built = buildContainer(stmt);
+        if (built) {
+          // Collision detection happens in buildModel — we accept
+          // overwrite semantics here and let the build layer report
+          // duplicate-container-name issues.
+          acc.containers.set(built.container.name, built.container);
+          containerNames.push(built.container.name);
+        }
+        break;
+      }
+      case "boundaryMacro": {
+        // Recurse first to collect children, then build the boundary
+        // with their names.
+        const childResult = walkStatements(stmt.children, acc, stmt);
+        const built = buildBoundary(
+          stmt,
+          childResult.containerNames,
+          childResult.boundaryNames,
+        );
+        if (built) {
+          acc.boundaries.push(built.boundary);
+          boundaryNames.push(built.boundary.name);
+          if (!parentBoundary) {
+            acc.rootBoundaryNames.push(built.boundary.name);
+          }
+        }
+        break;
+      }
+      case "relationMacro": {
+        acc.pendingRelations.push(...buildRelations(stmt));
+        break;
+      }
+      case "layoutMacro":
+      case "opaqueMacroCall":
+      case "infoIssueMacroCall":
+      case "include":
+      case "preprocessorTokenIgnore": {
+        // No Model effect.
+        break;
+      }
+    }
+  }
+
+  return { containerNames, boundaryNames };
+};
+
+// ── Public entry ────────────────────────────────────────────────────
+
+export interface PumlToModelResult extends LoadResult {
+  /** Workspace metadata is always undefined for PUML — the format
+   *  has no workspace concept; included for API symmetry. */
+  readonly workspaceLocation?: SourceLocation;
+}
+
+/**
+ * Lower a `FileNode` AST to a `Model`. PUML has no workspace concept,
+ * so `Model.workspace` is left undefined. We process only the first
+ * diagram (preParse stripped the rest already).
+ */
+export const toModel = (file: FileNode): PumlToModelResult => {
+  const acc: WalkAcc = {
+    containers: new Map(),
+    boundaries: [],
+    rootBoundaryNames: [],
+    pendingRelations: [],
+  };
+  const diagram = file.diagrams[0];
+  if (diagram) {
+    walkStatements(diagram.statements, acc);
+  }
+
+  // Apply pending relations to their source containers. A relation
+  // whose source isn't a known container is left dangling —
+  // `validateModel` (called from `buildModel`) surfaces it as a
+  // dangling-relation issue with full source context.
+  for (const emit of acc.pendingRelations) {
+    const source = acc.containers.get(emit.from);
+    if (!source) {
+      // Manufacture a placeholder container so the dangling reference
+      // is visible to the validator. This mirrors what the legacy
+      // loader did via Map collision; we use a fresh Container with
+      // the alias as the name so downstream rules can still inspect
+      // it. The validator catches both endpoint mismatches.
+      acc.containers.set(emit.from, {
+        name: emit.from,
+        label: emit.from,
+        kind: "Container",
+        external: false,
+        description: "",
+        tags: [],
+        relations: [emit.relation],
+      });
+      continue;
+    }
+    acc.containers.set(emit.from, {
+      ...source,
+      relations: [...source.relations, emit.relation],
+    });
+  }
+
+  const built = buildModel({
+    containers: [...acc.containers.values()],
+    boundaries: acc.boundaries,
+    rootBoundaryNames: acc.rootBoundaryNames,
+  });
+
+  return {
+    model: built.model,
+    issues: built.issues,
+  };
+};
