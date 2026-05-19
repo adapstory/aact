@@ -36,9 +36,9 @@ in a single `--fix` pass without spurious `_repo` duplicates.
   boundary that broke the principle (acl, acyclic, crud,
   dbPerService, cohesion) — the remaining 3 fall back to the
   container's location through a shared helper.
-- **Name-pattern role detection** (Safin feedback). New options on 4
-  rules — picomatch globs with brace expansion (`*_{repo,repository,
-storage,dao,store}`, `*{Repository,Storage,DAO}`):
+- **Name-pattern role detection.** New options on 4 rules — picomatch
+  globs with brace expansion (`*_{repo,repository,storage,dao,store}`,
+  `*{Repository,Storage,DAO}`):
   - `acl.namePatterns`
   - `apiGateway.aclNamePatterns`
   - `crud.repoNamePatterns`
@@ -48,8 +48,7 @@ storage,dao,store}`, `*{Repository,Storage,DAO}`):
   explicit tag when its name matches a pattern. `crud --fix` rewires
   through the existing name-matched repo and promotes its tag in one
   pass — no duplicate `_repo` container created for legacy archives.
-  Closes Safin's reported friction on importing an aact-naive
-  codebase.
+  Closes a reported friction on importing an aact-naive codebase.
 
 - `Violation.sourceLocation?: SourceLocation` on the rule API —
   custom rules can set it to anchor diagnostics on a specific
