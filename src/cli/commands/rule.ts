@@ -3,6 +3,7 @@ import { colors } from "consola/utils";
 
 import type { AactConfig } from "../../config";
 import { ruleRegistry } from "../../rules/registry";
+import type { RuleDefinition } from "../../rules/types";
 import { loadAndValidateConfig } from "../loadConfig";
 import type { Renderer } from "../output";
 import { ToolError } from "../output";
@@ -32,6 +33,30 @@ export interface RuleListData {
   readonly summary: RuleListSummary;
 }
 
+/**
+ * `envelope.data` shape for `aact rule explain <name>`. Carries the
+ * rule's deep context — rationale, examples, ADR pointer — so
+ * agents reading the JSON envelope have everything they need to
+ * understand and act on a violation without a second round-trip.
+ */
+export interface RuleExplainData {
+  readonly name: string;
+  readonly description: string;
+  readonly source: "built-in" | "custom";
+  readonly enabled: boolean;
+  readonly hasFix: boolean;
+  readonly rationale?: string;
+  readonly examples?: readonly RuleExampleInfo[];
+  readonly adrPath?: string;
+  readonly helpUri?: string;
+}
+
+export interface RuleExampleInfo {
+  readonly label: "good" | "bad";
+  readonly source: string;
+  readonly note?: string;
+}
+
 // -----------------------------------------------------------------------------
 // Pure executor
 // -----------------------------------------------------------------------------
@@ -39,6 +64,13 @@ export interface RuleListData {
 export interface RuleListArgs {
   readonly config?: string;
 }
+
+export interface RuleExplainArgs {
+  readonly config?: string;
+  readonly _: readonly string[];
+}
+
+const AACT_INFO_URI = "https://github.com/Byndyusoft/aact";
 
 const isEnabled = (rules: AactConfig["rules"], name: string): boolean =>
   rules?.[name] !== false;
@@ -97,6 +129,61 @@ export const executeRuleList = async (
   };
 };
 
+const findRule = (
+  name: string,
+  config: AactConfig | null,
+): { rule: RuleDefinition; source: "built-in" | "custom" } | undefined => {
+  const builtIn = ruleRegistry.find((r) => r.name === name);
+  if (builtIn) return { rule: builtIn, source: "built-in" };
+  const custom = (config?.customRules ?? []).find((r) => r.name === name);
+  if (custom) return { rule: custom, source: "custom" };
+  return undefined;
+};
+
+export const executeRuleExplain = async (
+  args: RuleExplainArgs,
+): Promise<ExecuteResult<RuleExplainData>> => {
+  const ruleName = args._[0];
+  if (!ruleName) {
+    throw new ToolError(
+      "config.invalidSchema",
+      "Missing required argument: rule name. Usage: aact rule explain <rule-name>",
+    );
+  }
+  const config = await loadConfigOptional(args.config);
+  const found = findRule(ruleName, config);
+  if (!found) {
+    const known = [
+      ...ruleRegistry.map((r) => r.name),
+      ...(config?.customRules ?? []).map((r) => r.name),
+    ].join(", ");
+    throw new ToolError(
+      "config.unknownRule",
+      `Unknown rule "${ruleName}". Known rules: ${known}`,
+      { rule: ruleName },
+    );
+  }
+  const { rule, source } = found;
+  return {
+    data: {
+      name: rule.name,
+      description: rule.description,
+      source,
+      enabled: isEnabled(config?.rules, rule.name),
+      hasFix: typeof rule.fix === "function",
+      ...(rule.rationale ? { rationale: rule.rationale } : {}),
+      ...(rule.examples && rule.examples.length > 0
+        ? { examples: rule.examples.map((e) => ({ ...e })) }
+        : {}),
+      ...(rule.adrPath ? { adrPath: rule.adrPath } : {}),
+      ...(source === "built-in"
+        ? { helpUri: `${AACT_INFO_URI}#${rule.name}` }
+        : {}),
+    },
+    exitCode: 0,
+  };
+};
+
 // -----------------------------------------------------------------------------
 // Text rendering — mirrors current grouped table output
 // -----------------------------------------------------------------------------
@@ -118,6 +205,76 @@ const renderGroup = (
     sink.write(`  ${status}  ${name}  ${colors.dim(rule.description)}${fix}\n`);
   }
   sink.write("\n");
+};
+
+const wrapPrefixed = (
+  text: string,
+  prefix: string,
+  width: number,
+): string[] => {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = prefix;
+  for (const word of words) {
+    if (current.length + word.length + 1 > width && current !== prefix) {
+      lines.push(current);
+      current = prefix + word;
+    } else {
+      current = current === prefix ? current + word : `${current} ${word}`;
+    }
+  }
+  if (current.trim().length > 0) lines.push(current);
+  return lines;
+};
+
+export const renderRuleExplainText: Renderer<RuleExplainData> = (
+  envelope,
+  sink,
+) => {
+  const { data } = envelope;
+  sink.write(colors.bold(`${data.name}\n`));
+  sink.write(colors.dim(`  ${data.description}\n\n`));
+
+  const meta: string[] = [
+    `source: ${data.source}`,
+    `enabled: ${data.enabled ? "yes" : "no"}`,
+    `auto-fix: ${data.hasFix ? "yes" : "no"}`,
+  ];
+  sink.write(colors.dim(`  ${meta.join("  ·  ")}\n\n`));
+
+  if (data.rationale) {
+    sink.write(colors.bold("Rationale\n"));
+    for (const line of wrapPrefixed(data.rationale, "  ", 78)) {
+      sink.write(`${line}\n`);
+    }
+    sink.write("\n");
+  }
+
+  if (data.examples && data.examples.length > 0) {
+    sink.write(colors.bold("Examples\n"));
+    for (const ex of data.examples) {
+      const marker = ex.label === "good" ? colors.green("✓") : colors.red("✗");
+      sink.write(`  ${marker} ${colors.bold(ex.label)}\n`);
+      for (const line of ex.source.split("\n")) {
+        sink.write(colors.dim(`      ${line}\n`));
+      }
+      if (ex.note) {
+        for (const line of wrapPrefixed(ex.note, "      ", 78)) {
+          sink.write(colors.dim(`${line}\n`));
+        }
+      }
+      sink.write("\n");
+    }
+  }
+
+  if (data.adrPath) {
+    sink.write(colors.bold("ADR\n"));
+    sink.write(`  ${data.adrPath}\n\n`);
+  }
+
+  if (data.helpUri) {
+    sink.write(colors.dim(`  See also: ${data.helpUri}\n`));
+  }
 };
 
 export const renderRuleListText: Renderer<RuleListData> = (envelope, sink) => {
@@ -150,10 +307,33 @@ const listAction = cliCommand({
   execute: (ctx) => executeRuleList(ctx.args as RuleListArgs),
 });
 
+const explainAction = cliCommand({
+  name: "rule explain",
+  meta: {
+    name: "explain",
+    description: "Show rationale, examples and ADR link for a specific rule",
+  },
+  args: {
+    ...configArg,
+    ...jsonArg,
+    name: {
+      type: "positional",
+      description: "Rule name (e.g. crud, dbPerService)",
+      required: true,
+    },
+  },
+  renderText: renderRuleExplainText,
+  execute: (ctx) =>
+    executeRuleExplain({
+      config: (ctx.args as { config?: string }).config,
+      _: [(ctx.args as { name: string }).name],
+    }),
+});
+
 export const rule = defineCommand({
   meta: {
     name: "rule",
     description: "Inspect and manage architecture rules",
   },
-  subCommands: { list: listAction },
+  subCommands: { list: listAction, explain: explainAction },
 });

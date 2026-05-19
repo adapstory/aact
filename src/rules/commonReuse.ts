@@ -73,6 +73,33 @@ export const commonReuseRule: RuleDefinition<CommonReuseOptions> = {
   name: "commonReuse",
   description:
     "Consumers using part of a boundary's public surface should use all of it",
+  rationale:
+    "Robert Martin's Common Reuse Principle: 'classes that are reused together belong in the same package.' Applied at the C4 boundary level, this means a context's public API is either consumed as a coherent whole or not at all — picking-and-choosing parts forces the boundary to maintain unstable shapes for every consumer's slice. If most consumers only need a fraction, that fraction wants to move to its own boundary; if everyone uses everything, the current boundary is correctly sized.",
+  examples: [
+    {
+      label: "bad",
+      source: `System_Boundary(billing, "Billing") {
+  Container(invoice, "Invoice")
+  Container(tax, "Tax")
+  Container(refund, "Refund")
+}
+Container(orders, "Orders")
+Rel(orders, invoice, "")`,
+      note: "`orders` uses 1 of 3 billing containers — partial coupling. Either `invoice` belongs elsewhere, or `orders` should pull more from `billing`.",
+    },
+    {
+      label: "good",
+      source: `System_Boundary(billing, "Billing") {
+  Container(invoice, "Invoice")
+  Container(tax, "Tax")
+}
+Container(orders, "Orders")
+Rel(orders, invoice, "")
+Rel(orders, tax, "")`,
+      note: "Full coverage of billing's public surface.",
+    },
+  ],
+  adrPath: "ADRs/Common Reuse Principle.md",
 
   check(model) {
     const boundaryOf = buildBoundaryLookup(model);

@@ -52,6 +52,26 @@ export const aclRule: RuleDefinition<AclOptions> = {
   name: "acl",
   description:
     "Containers calling external systems must be tagged as ACL (Anti-corruption Layer)",
+  rationale:
+    "An external system has its own model — vocabulary, error codes, serialisation, evolution cadence — that you don't control. When a domain service talks to it directly, that external model leaks: a schema change upstream forces ripple edits across every consumer. An Anti-corruption Layer is a translation boundary: one adapter container per external system, owning protocol/parsing concerns, exposing a domain-friendly API inward. The rest of the architecture stays oblivious of the foreign shape.",
+  examples: [
+    {
+      label: "bad",
+      source: `Container(orders, "Orders Service")
+System_Ext(payment_provider, "External Payment API")
+Rel(orders, payment_provider, "POST", "HTTPS")`,
+      note: "Domain service `orders` talks directly to an external system — no adapter, schema couples.",
+    },
+    {
+      label: "good",
+      source: `Container(orders, "Orders Service")
+Container(payment_acl, "Payment ACL", $tags="acl")
+System_Ext(payment_provider, "External Payment API")
+Rel(orders, payment_acl, "charges customer")
+Rel(payment_acl, payment_provider, "POST", "HTTPS")`,
+    },
+  ],
+  adrPath: "ADRs/Anti-corruption Layer.md",
 
   check(model, options) {
     const violations: Violation[] = [];

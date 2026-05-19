@@ -62,6 +62,30 @@ export const cohesionRule: RuleDefinition<CohesionOptions> = {
   name: "cohesion",
   description:
     "Each boundary should be more cohesive than coupled; parent boundaries less cohesive than inner ones",
+  rationale:
+    "A boundary that has more cross-edges than internal edges is a fiction over a chatty graph — the grouping isn't a real cluster, just a wrapper around services that mostly talk outward. Cascade-decoupling (Safin) generalises this: each level should keep internal cohesion at least as high as its external coupling, and a parent boundary should be loosely coupled compared to its children. When the rule fires, the right response is usually to redraw the boundary along the actual call patterns, not to add edges.",
+  examples: [
+    {
+      label: "bad",
+      source: `System_Boundary(checkout, "Checkout") {
+  Container(orders, "Orders")
+  Container(billing, "Billing")
+}
+Container(notifications, "Notifications")
+Rel(orders, notifications, "")
+Rel(billing, notifications, "")`,
+      note: "Two of `checkout`'s containers each call outward; zero internal edges → coupling > cohesion.",
+    },
+    {
+      label: "good",
+      source: `System_Boundary(checkout, "Checkout") {
+  Container(orders, "Orders")
+  Container(billing, "Billing")
+}
+Rel(orders, billing, "settles via")`,
+      note: "Internal edge present; cohesion=1 ≥ coupling=0.",
+    },
+  ],
 
   check(model) {
     const violations: Violation[] = [];

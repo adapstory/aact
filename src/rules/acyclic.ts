@@ -26,6 +26,28 @@ export const acyclicRule: RuleDefinition<AcyclicOptions> = {
   name: "acyclic",
   description:
     "Dependency graph between containers must be acyclic (no cycles)",
+  rationale:
+    "Cycles in the dependency graph are the load-bearing signal of a distributed monolith. Every node in a cycle now has to release together, can't be reasoned about in isolation, and reverses the direction of any layering attempt (Stable Dependencies, Hexagonal, Onion — all assume a DAG). Robert Martin's Acyclic Dependencies Principle: 'the dependency graph of packages or components must have no cycles.' Two services that need to know about each other should either be one container, or communicate asynchronously through an event store that breaks the cycle at compile time.",
+  examples: [
+    {
+      label: "bad",
+      source: `Container(a, "Service A")
+Container(b, "Service B")
+Rel(a, b, "calls")
+Rel(b, a, "calls back")`,
+      note: "`a` and `b` form a 2-cycle — distributed-monolith smell.",
+    },
+    {
+      label: "good",
+      source: `Container(a, "Service A")
+Container(b, "Service B")
+ContainerQueue(events, "Domain Events")
+Rel(a, b, "calls")
+Rel(b, events, "publishes", $tags="async")
+Rel(a, events, "subscribes", $tags="async")`,
+      note: "Reverse direction goes through an async event channel — DAG preserved.",
+    },
+  ],
 
   check(model) {
     const violations: Violation[] = [];

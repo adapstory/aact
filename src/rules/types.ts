@@ -118,10 +118,45 @@ export type CheckFn<O = unknown> = (
 
 export type FixFn<O = unknown> = (ctx: FixContext<O>) => readonly FixResult[];
 
+/**
+ * Short illustrative snippet — `good` shows the pattern the rule
+ * accepts, `bad` shows what it fires on. Format-agnostic (PUML
+ * works for both PUML and DSL audiences); `note` explains the
+ * pattern in one sentence when the snippet alone isn't obvious.
+ * Surfaced via `aact rule explain <name>`.
+ */
+export interface RuleExample {
+  readonly label: "good" | "bad";
+  readonly source: string;
+  readonly note?: string;
+}
+
 export interface RuleDefinition<O = unknown> {
   readonly name: string;
-  /** Human-readable description — для CLI `rules list`, docs, CHANGELOG. */
+  /** Human-readable one-liner — for CLI `rule list`, JSON envelopes,
+   *  CHANGELOG entries. Kept short so it fits in a table row. */
   readonly description: string;
+  /**
+   * Why this rule exists — the architectural principle it
+   * enforces, expressed in 1-3 paragraphs. Surfaced by
+   * `aact rule explain`; agents use it as context when proposing
+   * fixes. Plain prose, no markdown frills — the renderer adds
+   * its own framing.
+   */
+  readonly rationale?: string;
+  /**
+   * Pairs of `good` / `bad` example snippets. Helps both human
+   * readers and AI agents see the pattern in <10 lines without
+   * opening the ADR document.
+   */
+  readonly examples?: readonly RuleExample[];
+  /**
+   * Path (relative to repo root) to a longer architectural
+   * decision record. Resolved by `aact rule explain` to a
+   * Cmd-clickable hyperlink. Optional — not every rule has a
+   * formal ADR yet.
+   */
+  readonly adrPath?: string;
   // Method syntax (не arrow property) — bivariant под strictFunctionTypes,
   // чтобы typed RuleDefinition<O> упаковывался в RuleDefinition[] arrays
   // (customRules, registry) без манипуляций.

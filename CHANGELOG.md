@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`aact rule explain <name>` command + `rationale` / `examples` /
+  `adrPath` on `RuleDefinition`.** `aact rule list` shows the
+  one-line description of each rule; `explain` shows the full
+  context — the architectural principle the rule enforces (in
+  prose), a `good` / `bad` pair of source snippets, and a
+  Cmd-clickable pointer to the ADR document when available.
+  Threads through every output mode:
+  - **Text**: framed sections — `Rationale`, `Examples` (✓/✗
+    markers), `ADR`, `See also`.
+  - **`--json`**: `RuleExplainData` envelope with optional
+    `rationale`, `examples[]`, `adrPath`, `helpUri`.
+  - Works on `customRules` too — your `defineRule({ ..., rationale,
+examples })` content surfaces unchanged.
+
+  All 8 built-ins are now populated. Agents reading
+  `violations[].rule` can fetch the rule's full context with a
+  single follow-up `aact rule explain --json` and reason about a
+  fix with the architectural intent in hand, not just the
+  one-liner.
+
 - **`Violation.relatedLocations`** — rules can now attach secondary
   source anchors to a violation alongside the primary
   `sourceLocation`. The primary anchor is _where_ the violation

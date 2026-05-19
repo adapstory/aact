@@ -85,6 +85,8 @@ export type {
 } from "./cli/commands/init";
 export type { ModelData } from "./cli/commands/model";
 export type {
+  RuleExampleInfo,
+  RuleExplainData,
   RuleInfo,
   RuleListData,
   RuleListSummary,

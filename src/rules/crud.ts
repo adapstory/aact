@@ -255,6 +255,26 @@ export const crudRule: RuleDefinition<CrudOptions> = {
   name: "crud",
   description:
     "Direct database access only through repo/relay containers; repos must access databases only",
+  rationale:
+    "Mixing business logic with raw SQL or storage calls couples a domain service to its persistence schema and makes both harder to evolve. Funnelling data access through a dedicated repo/relay container standardises the API surface (one CRUD endpoint per data store), lets the DB owner optimise indexes and query patterns for a known shape, and lines up with the Single Responsibility and Common Closure principles — services hold logic, repos hold persistence.",
+  examples: [
+    {
+      label: "bad",
+      source: `Container(orders, "Orders", "domain logic")
+ContainerDb(orders_db, "Orders DB", "PostgreSQL")
+Rel(orders, orders_db, "SQL")`,
+      note: "`orders` has no repo tag and reaches the DB directly.",
+    },
+    {
+      label: "good",
+      source: `Container(orders, "Orders", "domain logic")
+Container(orders_repo, "Orders Repo", $tags="repo")
+ContainerDb(orders_db, "Orders DB", "PostgreSQL")
+Rel(orders, orders_repo, "fetches/saves")
+Rel(orders_repo, orders_db, "SQL")`,
+    },
+  ],
+  adrPath: "ADRs/Database per CRUD-service.md",
 
   check(model, options) {
     const violations: Violation[] = [];

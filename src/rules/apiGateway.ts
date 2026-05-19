@@ -43,6 +43,24 @@ export const apiGatewayRule: RuleDefinition<ApiGatewayOptions> = {
   name: "apiGateway",
   description:
     "ACL containers calling external systems must route through an API Gateway",
+  rationale:
+    "Outbound traffic to external systems crosses a trust + observability boundary every call. Routing it through a dedicated API Gateway centralises retry / circuit-breaker / rate-limit policy, gives one place to instrument latency and error metrics, and reduces the blast radius of credential rotation. Without a gateway, every ACL container reimplements the same retry/auth/timeout logic — drift between containers is inevitable.",
+  examples: [
+    {
+      label: "bad",
+      source: `Container(payment_acl, "Payment ACL", $tags="acl")
+System_Ext(payment_api, "Payment API")
+Rel(payment_acl, payment_api, "POST", "HTTPS")`,
+      note: "Direct HTTPS — no gateway, every ACL handles retries / auth itself.",
+    },
+    {
+      label: "good",
+      source: `Container(payment_acl, "Payment ACL", $tags="acl")
+System_Ext(payment_api, "Payment API")
+Rel(payment_acl, payment_api, "POST", "HTTPS via API Gateway")`,
+      note: "Technology field mentions `gateway` — rule recognises the routing path.",
+    },
+  ],
 
   check(model, options) {
     const gatewayPattern = options?.gatewayPattern ?? /gateway/i;
