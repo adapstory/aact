@@ -6,6 +6,77 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+Agent-facing surface. `aact check --json` now ships the rule
+catalogue inline (no separate `aact rule list` call needed), the
+new `aact model` command exposes the normalized graph for agents
+that reason about architecture without re-parsing PUML / DSL
+themselves, and the library API barrel grows to cover the envelope
+contract so consumers parsing `aact <command> --json` have
+first-class types for every shape they read. AGENTS.md +
+copilot-instructions symlink + English README mirror put the agent
+quickstart and the machine-readable output contract on top of every
+AI-onboarding surface (Claude Code, Copilot Coding Agent,
+Cursor, Codex).
+
+### Added
+
+- **`CheckData.rules`** — every `aact check --json` envelope now
+  includes a `rules: CheckRuleMetadata[]` catalogue listing every
+  effective rule (built-in + custom) with `name`, `description`,
+  `source` (`"built-in"` or `"custom"`), `enabled` flag, `hasFix`,
+  and a `helpUri` anchor for built-ins. Agents reasoning about a
+  `violations[].rule` no longer need a second `aact rule list`
+  round-trip to look up what that rule does.
+
+- **`aact model` command.** Inspects the normalized model used by
+  the rule engine. `--json` emits a `ModelData` envelope
+  (`{ model, issues }`) with the full graph for agent consumption;
+  `--sarif` surfaces loader-level problems (dangling refs,
+  duplicate ids, unknown kinds) as SARIF results under the
+  `model.*` namespace so they can be reviewed in GitHub Code
+  Scanning alongside rule violations. Text mode prints a workspace
+  - element-count + boundary-tree summary for humans.
+
+- **Library API barrel.** `src/index.ts` re-exports the full
+  CLI-envelope contract (`CliEnvelope`, `Diagnostic`,
+  `DiagnosticKind`, `ExitCode`, `OutputMode`, `EnvelopeMeta`,
+  `Renderer`, `Reporter`, `CommandResult`) and the per-command
+  data shapes (`CheckData`, `CheckRuleMetadata`, `CheckViolation`,
+  `CheckSummary`, `CheckFixesApplied`, `CheckMode`, `ModelData`,
+  `RuleListData`, `RuleInfo`, `RuleListSummary`, `GenerateData`,
+  `GeneratedFileInfo`, `GenerateOutputSink`, `InitData`,
+  `InitCreated`, `InitSkipped`, `InitFileKind`, `SkillData`,
+  `SkillPlanResult`, `SkillAction`, `InstallPlan`), plus the
+  complete SARIF v2.1.0 surface (`SarifLog`, `SarifResult`,
+  `SarifAdapter`, …). Library users writing custom reporters or
+  agents parsing `--json` output now have first-class types for
+  every shape `aact` emits.
+
+- **`AGENTS.md`** — top-level guide for AI coding agents:
+  installing the `aact-architect` skill across Claude / Cline /
+  shared agent-skill paths, the `--json` envelope contract for
+  every command, the `--sarif` path into GitHub Code Scanning,
+  and the stable `0 / 1 / 2` exit-code semantics agents must
+  branch on. `CLAUDE.md` is a symlink to `AGENTS.md` so Claude
+  Code picks up the same file until native AGENTS.md support
+  lands upstream; `.github/copilot-instructions.md` is the same
+  symlink for GitHub Copilot Coding Agent.
+
+- **English README (`README.en.md`)** mirrors the Russian
+  `README.md` with a flag-emoji language switcher at the top of
+  both files. Russian-only resources (YouTube / Habr / Telegram)
+  remain in the English version with a `(Russian)` tag.
+
+- **"AI agents" quickstart section** in both READMEs surfaces
+  the agent-skill installer and the JSON / SARIF output paths
+  that were previously only documented inside `AGENTS.md`.
+
+### Changed
+
+- **`CheckRuleMetadata.source` is `"built-in" | "custom"`**, aligned
+  with the existing `RuleInfo.source` enum that `aact rule list`
+  has shipped. Two-spelling drift caught before publishing.
+
 ## v3.0.0-beta.13 — 2026-05-19
 
 GH Code Scanning polish. The SARIF output that landed in beta.12
