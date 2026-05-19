@@ -6,35 +6,59 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-Clickable violations. The `SourceLocation` foundation from beta.7 now
-powers OSC8 terminal hyperlinks in text mode and `file=`/`line=`/
-`col=` attributes on GitHub Actions error annotations. JSON envelope
-carries the structured location through to agents.
+## v3.0.0-beta.8 — 2026-05-19
+
+Lint-style output with clickable violations and name-pattern role
+detection. The `SourceLocation` foundation from beta.7 now powers
+OSC8 terminal hyperlinks and eslint-style `path:line:col error rule
+message` output. Rules pick up implicit roles from container naming
+conventions, so legacy archives and agent-generated diagrams converge
+in a single `--fix` pass without spurious `_repo` duplicates.
 
 ### Added
 
-- `CheckViolation.sourceLocation?: SourceLocation` on the JSON
+- `aact check` text output rewritten in eslint style:
+  `arch.dsl:13:1  error  crud  orders: directly accesses orders_db`.
+  Auto-aligned columns; the location column is an OSC8 hyperlink in
+  TTYs that support it (iTerm2, Ghostty, VSCode terminal, Windows
+  Terminal, modern tmux). CI logs, piped output, and older
+  terminals automatically fall back to plain text.
+- `CheckViolation.sourceLocation?: SourceLocation` in the JSON
   envelope — `aact check --json` consumers (Claude Code / Codex
-  CLI / dashboards) get the violation's anchor in source. Falls
-  back to the container's location when the rule doesn't anchor
-  more precisely.
-- OSC8 hyperlinks on container names in `aact check` text output.
-  Clickable in iTerm2, Ghostty, VSCode terminal, Windows Terminal,
-  modern tmux. Detection via `terminal-link.isSupported` — CI
-  logs, piped output, and older terminals automatically fall back
-  to plain text (no opt-out flag needed; standard `NO_COLOR` /
-  `CI` envs honoured).
+  CLI / dashboards) get the violation's source anchor. Falls back
+  to the container's location when the rule doesn't anchor more
+  precisely.
 - `file=<path>,line=<L>,col=<C>` attributes on GitHub Actions
   error annotations — violations surface as inline PR comments
   anchored to the offending byte instead of generic workflow-log
   entries.
+- 5 built-in rules now anchor violations on the precise relation /
+  boundary that broke the principle (acl, acyclic, crud,
+  dbPerService, cohesion) — the remaining 3 fall back to the
+  container's location through a shared helper.
+- **Name-pattern role detection** (Safin feedback). New options on 4
+  rules — picomatch globs with brace expansion (`*_{repo,repository,
+storage,dao,store}`, `*{Repository,Storage,DAO}`):
+  - `acl.namePatterns`
+  - `apiGateway.aclNamePatterns`
+  - `crud.repoNamePatterns`
+  - `dbPerService.ownerNamePatterns`
+
+  Rules treat a container as repo / acl / owner even without an
+  explicit tag when its name matches a pattern. `crud --fix` rewires
+  through the existing name-matched repo and promotes its tag in one
+  pass — no duplicate `_repo` container created for legacy archives.
+  Closes Safin's reported friction on importing an aact-naive
+  codebase.
+
+- `Violation.sourceLocation?: SourceLocation` on the rule API —
+  custom rules can set it to anchor diagnostics on a specific
+  relation / boundary / property. Legacy rules (just `container` +
+  `message`) get fallback anchoring through the container
+  automatically.
 - `formatLocation(loc): string` exported from the library — pure-
   data `<file>:<line>:<col>` formatter for callers rendering text
   outside the terminal (Slack, PR descriptions, dashboards).
-- `Violation.sourceLocation?: SourceLocation` on the rule API —
-  rules that flag a specific relation / boundary / property may
-  set it explicitly; legacy rules (just `container` + `message`)
-  get fallback anchoring through the container automatically.
 
 ### Dependencies
 
@@ -43,6 +67,10 @@ carries the structured location through to agents.
   Windows Terminal, tmux, and CI environments. ~5 KB total with
   transitive deps (`ansi-escapes` + `supports-hyperlinks` +
   `has-flag`).
+- Added `picomatch@^4.0.0` (5M+ projects: Jest, Vitest, Astro,
+  fast-glob, chokidar). Zero deps, blazing-fast glob matcher with
+  brace-expansion support. Already a transitive dep via vitest, so
+  promotion to direct is near-zero cost.
 
 ## v3.0.0-beta.7 — 2026-05-19
 
