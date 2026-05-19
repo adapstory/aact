@@ -1,9 +1,9 @@
 import consola from "consola";
 
-import type { Container, Model } from "../model";
-import { allContainers, targetOf } from "../model";
+import type { Element, Model } from "../model";
+import { allElements, targetOf } from "../model";
 import {
-  buildContainerBoundaryMap,
+  buildElementBoundaryMap,
   resolveRedirectTarget,
 } from "./lib/boundaryUtils";
 import {
@@ -35,13 +35,13 @@ const DEFAULT_REPO_TAGS: readonly string[] = ["repo", "relay"];
  *  check (to decide whether direct-db access from `c` is allowed) and
  *  fix (to spot an existing repo by name when offering to rewire). */
 const isRepo = (
-  container: Container,
+  element: Element,
   options: CrudOptions | undefined,
 ): boolean => {
   const tags = options?.repoTags ?? DEFAULT_REPO_TAGS;
-  if (tags.some((t) => container.tags.includes(t))) return true;
+  if (tags.some((t) => element.tags.includes(t))) return true;
   return matchesAnyName(
-    container.name,
+    element.name,
     options?.repoNamePatterns ?? DEFAULT_REPO_NAME_PATTERNS,
   );
 };
@@ -80,7 +80,7 @@ const deriveRepoLabel = (dbName: string): string => {
 type FixSyntax = Parameters<NonNullable<RuleDefinition<CrudOptions>["fix"]>>[2];
 
 const fixNonRepoAccessesDb = (
-  accessor: Container,
+  accessor: Element,
   model: Model,
   syntax: FixSyntax,
   options: CrudOptions | undefined,
@@ -90,7 +90,7 @@ const fixNonRepoAccessesDb = (
   const dbRels = accessor.relations.filter(
     (r) => targetOf(model, r)?.kind === "ContainerDb",
   );
-  const containerBoundaryMap = buildContainerBoundaryMap(model);
+  const elementBoundaryMap = buildElementBoundaryMap(model);
 
   const edits: SourceEdit[] = dbRels.flatMap((rel) => {
     const db = targetOf(model, rel);
@@ -101,7 +101,7 @@ const fixNonRepoAccessesDb = (
     // without explicit `repo` tags). Per Safin's feedback: prefer
     // re-using an existing container over creating a new one.
     // Stryker disable next-line ConditionalExpression
-    const existingRepo = allContainers(model).find(
+    const existingRepo = allElements(model).find(
       (c) =>
         c !== accessor &&
         c.relations.some((r) => r.to === db.name) &&
@@ -115,7 +115,7 @@ const fixNonRepoAccessesDb = (
         existingRepo,
         ownerTags,
         model,
-        containerBoundaryMap,
+        elementBoundaryMap,
         "crud",
       );
       if (!redirectTarget) return [];
@@ -156,8 +156,8 @@ const fixNonRepoAccessesDb = (
       ];
     }
 
-    const accessorBoundary = containerBoundaryMap.get(accessor.name);
-    const dbBoundary = containerBoundaryMap.get(db.name);
+    const accessorBoundary = elementBoundaryMap.get(accessor.name);
+    const dbBoundary = elementBoundaryMap.get(db.name);
     if (
       accessorBoundary !== undefined &&
       dbBoundary !== undefined &&
@@ -170,7 +170,7 @@ const fixNonRepoAccessesDb = (
     }
 
     const repoName = deriveRepoName(db.name, convention);
-    if (repoName in model.containers) {
+    if (repoName in model.elements) {
       consola.warn(
         `fix crud: cannot create repo for "${db.name}" — "${repoName}" already exists`,
       );
@@ -210,7 +210,7 @@ const fixNonRepoAccessesDb = (
 };
 
 const fixRepoWithNonDbDeps = (
-  repo: Container,
+  repo: Element,
   model: Model,
   syntax: FixSyntax,
 ): FixResult | undefined => {
@@ -242,18 +242,18 @@ export const crudRule: RuleDefinition<CrudOptions> = {
   check(model, options) {
     const violations: Violation[] = [];
 
-    for (const container of allContainers(model)) {
-      const dbRelations = container.relations.filter(
+    for (const element of allElements(model)) {
+      const dbRelations = element.relations.filter(
         (r) => targetOf(model, r)?.kind === "ContainerDb",
       );
-      const isRepoContainer = isRepo(container, options);
+      const isRepoContainer = isRepo(element, options);
 
       if (!isRepoContainer && dbRelations.length > 0) {
         // Anchor on the first direct-db edge — lint-style click jumps
         // to the `Rel(...)` that broke the rule.
         const firstEdge = dbRelations[0];
         violations.push({
-          container: container.name,
+          element: element.name,
           message: `directly accesses database ${dbRelations.map((r) => r.to).join(", ")} — add a repo or relay`,
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
@@ -261,14 +261,14 @@ export const crudRule: RuleDefinition<CrudOptions> = {
         });
       }
 
-      const nonDbRels = container.relations.filter(
+      const nonDbRels = element.relations.filter(
         (r) => targetOf(model, r)?.kind !== "ContainerDb",
       );
       if (isRepoContainer && nonDbRels.length > 0) {
         const nonDbTargets = nonDbRels.map((r) => r.to).join(", ");
         const firstEdge = nonDbRels[0];
         violations.push({
-          container: container.name,
+          element: element.name,
           message: `repo has non-database dependencies: ${nonDbTargets} — repos should only access databases`,
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
@@ -285,12 +285,12 @@ export const crudRule: RuleDefinition<CrudOptions> = {
     const results: FixResult[] = [];
 
     for (const violation of violations) {
-      const container = model.containers[violation.container];
-      if (!container) continue;
+      const element = model.elements[violation.element];
+      if (!element) continue;
 
-      const fix = isRepo(container, options)
-        ? fixRepoWithNonDbDeps(container, model, syntax)
-        : fixNonRepoAccessesDb(container, model, syntax, options, convention);
+      const fix = isRepo(element, options)
+        ? fixRepoWithNonDbDeps(element, model, syntax)
+        : fixNonRepoAccessesDb(element, model, syntax, options, convention);
       if (fix) results.push(fix);
     }
 

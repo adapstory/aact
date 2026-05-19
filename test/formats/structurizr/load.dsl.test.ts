@@ -20,23 +20,23 @@ describe("structurizrFormat.load — .dsl dispatch", () => {
     // Three internal systems (orders/inventory/fulfillment) each
     // gain a Boundary because they contain nested containers;
     // payment and notifications are leaf systems → Containers.
-    // Model.containers keyed by DSL identifier (assignedIdentifier).
+    // Model.elements keyed by DSL identifier (assignedIdentifier).
     expect(Object.keys(result.model.boundaries).sort()).toEqual([
       "fulfillment",
       "inventory",
       "orders",
     ]);
-    expect(result.model.containers["payment"]?.kind).toBe("System");
-    expect(result.model.containers["notifications"]?.kind).toBe("System");
+    expect(result.model.elements["payment"]?.kind).toBe("System");
+    expect(result.model.elements["notifications"]?.kind).toBe("System");
 
     // Container kinds resolved by name (CRUD → repo tag, DB → kind
     // ContainerDb when technology heuristic kicks in)
-    expect(result.model.containers["orders_api"]?.kind).toBe("Container");
-    expect(result.model.containers["orders_db"]?.technology).toBe("PostgreSQL");
+    expect(result.model.elements["orders_api"]?.kind).toBe("Container");
+    expect(result.model.elements["orders_db"]?.technology).toBe("PostgreSQL");
 
     // Explicit relationships preserved with description, technology,
     // and default `Relationship` tag. relation.to references DSL ids.
-    const ordersApi = result.model.containers["orders_api"];
+    const ordersApi = result.model.elements["orders_api"];
     expect(ordersApi?.relations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ to: "orders_crud", description: "HTTP" }),

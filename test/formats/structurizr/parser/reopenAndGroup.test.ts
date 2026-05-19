@@ -15,7 +15,7 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toEqual(
+    expect(model.elements["api"]).toEqual(
       expect.objectContaining({
         description: "Updated description",
         tags: ["Element", "Container", "core"],
@@ -35,7 +35,7 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.relations).toEqual([
+    expect(model.elements["api"]?.relations).toEqual([
       expect.objectContaining({ to: "db", description: "writes" }),
     ]);
   });
@@ -74,7 +74,7 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.tags).toEqual([
+    expect(model.elements["api"]?.tags).toEqual([
       "Element",
       "Container",
       "external",
@@ -94,10 +94,10 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
-  it("reopen on a Boundary attaches new nested elements to its containerNames", () => {
+  it("reopen on a Boundary attaches new nested elements to its elementNames", () => {
     const src = `workspace {
       model {
         bank = softwareSystem "Bank" {
@@ -111,10 +111,10 @@ describe("Structurizr parser — re-open form", () => {
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
     // The new container exists in the Model.
-    expect(model.containers["db"]?.label).toBe("Database");
-    // The Boundary's containerNames now includes both the original
+    expect(model.elements["db"]?.label).toBe("Database");
+    // The Boundary's elementNames now includes both the original
     // child and the reopen-introduced one.
-    expect(model.boundaries["bank"]?.containerNames).toEqual(
+    expect(model.boundaries["bank"]?.elementNames).toEqual(
       expect.arrayContaining(["api", "db"]),
     );
   });
@@ -132,6 +132,6 @@ describe("Structurizr parser — re-open form", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.description).toBe("API inside bank");
+    expect(model.elements["api"]?.description).toBe("API inside bank");
   });
 });

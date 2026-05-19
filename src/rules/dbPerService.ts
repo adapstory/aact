@@ -1,9 +1,9 @@
 import consola from "consola";
 
-import type { Container, SourceLocation } from "../model";
-import { allContainers, targetOf } from "../model";
+import type { Element, SourceLocation } from "../model";
+import { allElements, targetOf } from "../model";
 import {
-  buildContainerBoundaryMap,
+  buildElementBoundaryMap,
   resolveRedirectTarget,
 } from "./lib/boundaryUtils";
 import {
@@ -29,22 +29,22 @@ const DEFAULT_OWNER_TAGS: readonly string[] = ["repo", "relay"];
 
 /** Owner identity: explicit tag OR name-convention match. */
 const isOwner = (
-  container: Container,
+  element: Element,
   options: DbPerServiceOptions | undefined,
 ): boolean => {
   const tags = options?.ownerTags ?? DEFAULT_OWNER_TAGS;
-  if (tags.some((t) => container.tags.includes(t))) return true;
+  if (tags.some((t) => element.tags.includes(t))) return true;
   return matchesAnyName(
-    container.name,
+    element.name,
     options?.ownerNamePatterns ?? DEFAULT_REPO_NAME_PATTERNS,
   );
 };
 
 const resolveOwner = (
   dbName: string,
-  accessors: readonly Container[],
+  accessors: readonly Element[],
   options: DbPerServiceOptions | undefined,
-): Container => {
+): Element => {
   const tagged = accessors.filter((c) => isOwner(c, options));
 
   if (tagged.length === 0) {
@@ -83,15 +83,15 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
     }
     const dbAccessMap = new Map<string, DbAccess>();
 
-    for (const container of allContainers(model)) {
-      for (const rel of container.relations) {
+    for (const element of allElements(model)) {
+      for (const rel of element.relations) {
         if (targetOf(model, rel)?.kind === "ContainerDb") {
           const existing = dbAccessMap.get(rel.to);
           if (existing) {
-            existing.accessors.push(container.name);
+            existing.accessors.push(element.name);
           } else {
             dbAccessMap.set(rel.to, {
-              accessors: [container.name],
+              accessors: [element.name],
               firstEdgeLocation: rel.sourceLocation,
             });
           }
@@ -102,7 +102,7 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
     for (const [db, { accessors, firstEdgeLocation }] of dbAccessMap) {
       if (accessors.length > 1) {
         violations.push({
-          container: db,
+          element: db,
           message: `shared between ${accessors.join(", ")} — each database should have a single owner`,
           ...(firstEdgeLocation ? { sourceLocation: firstEdgeLocation } : {}),
         });
@@ -114,18 +114,18 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
 
   fix(model, violations, syntax, options) {
     const ownerTags = options?.ownerTags ?? DEFAULT_OWNER_TAGS;
-    const containerBoundaryMap = buildContainerBoundaryMap(model);
+    const elementBoundaryMap = buildElementBoundaryMap(model);
     const results: FixResult[] = [];
 
     for (const violation of violations) {
       // Stryker disable all
-      const db = allContainers(model).find(
-        (c) => c.name === violation.container && c.kind === "ContainerDb",
+      const db = allElements(model).find(
+        (c) => c.name === violation.element && c.kind === "ContainerDb",
       );
       // Stryker restore all
       if (!db) continue;
 
-      const accessors = allContainers(model).filter((c) =>
+      const accessors = allElements(model).filter((c) =>
         c.relations.some((r) => r.to === db.name),
       );
       // Stryker disable next-line all
@@ -145,7 +145,7 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
             owner,
             ownerTags,
             model,
-            containerBoundaryMap,
+            elementBoundaryMap,
             "dbPerService",
           );
           if (!redirectTarget) return [];

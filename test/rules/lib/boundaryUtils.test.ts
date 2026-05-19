@@ -1,41 +1,41 @@
 import consola from "consola";
 
-import { getContainer } from "../../../src/model";
+import { getElement } from "../../../src/model";
 import {
-  buildContainerBoundaryMap,
+  buildElementBoundaryMap,
   findPublicApiCandidate,
   resolveRedirectTarget,
 } from "../../../src/rules/lib/boundaryUtils";
 import type {
   BoundarySpec,
-  ContainerSpec,
+  ElementSpec,
   RelationSpec,
 } from "../../helpers/makeModel";
 import { makeModel } from "../../helpers/makeModel";
 
 interface Scenario {
-  readonly containers: readonly ContainerSpec[];
+  readonly elements: readonly ElementSpec[];
   readonly boundaries: readonly BoundarySpec[];
 }
 
-const build = ({ containers, boundaries }: Scenario) => {
-  const model = makeModel({ containers, boundaries });
-  return { model, map: buildContainerBoundaryMap(model) };
+const build = ({ elements, boundaries }: Scenario) => {
+  const model = makeModel({ elements, boundaries });
+  return { model, map: buildElementBoundaryMap(model) };
 };
 
-const dbSpec = (name: string): ContainerSpec => ({ name, kind: "ContainerDb" });
+const dbSpec = (name: string): ElementSpec => ({ name, kind: "ContainerDb" });
 
 const svcSpec = (
   name: string,
   relations: readonly RelationSpec[] = [],
   tags: readonly string[] = [],
-): ContainerSpec => ({ name, relations, tags });
+): ElementSpec => ({ name, relations, tags });
 
-describe("buildContainerBoundaryMap", () => {
+describe("buildElementBoundaryMap", () => {
   it("maps each container to its boundary", () => {
     const { model, map } = build({
-      containers: [svcSpec("svc"), dbSpec("db")],
-      boundaries: [{ name: "bc", containerNames: ["svc", "db"] }],
+      elements: [svcSpec("svc"), dbSpec("db")],
+      boundaries: [{ name: "bc", elementNames: ["svc", "db"] }],
     });
     const bc = model.boundaries.bc;
 
@@ -45,17 +45,15 @@ describe("buildContainerBoundaryMap", () => {
 
   it("returns empty map for model with no boundaries", () => {
     const model = makeModel({});
-    expect(buildContainerBoundaryMap(model).size).toBe(0);
+    expect(buildElementBoundaryMap(model).size).toBe(0);
   });
 });
 
 describe("findPublicApiCandidate", () => {
   it("returns undefined when no candidates", () => {
     const { model, map } = build({
-      containers: [dbSpec("orders_db"), svcSpec("orders_repo", [], ["repo"])],
-      boundaries: [
-        { name: "bc", containerNames: ["orders_db", "orders_repo"] },
-      ],
+      elements: [dbSpec("orders_db"), svcSpec("orders_repo", [], ["repo"])],
+      boundaries: [{ name: "bc", elementNames: ["orders_db", "orders_repo"] }],
     });
 
     expect(
@@ -65,8 +63,8 @@ describe("findPublicApiCandidate", () => {
 
   it("returns the single candidate", () => {
     const { model, map } = build({
-      containers: [svcSpec("orders_api"), dbSpec("orders_db")],
-      boundaries: [{ name: "bc", containerNames: ["orders_api", "orders_db"] }],
+      elements: [svcSpec("orders_api"), dbSpec("orders_db")],
+      boundaries: [{ name: "bc", elementNames: ["orders_api", "orders_db"] }],
     });
 
     expect(
@@ -76,7 +74,7 @@ describe("findPublicApiCandidate", () => {
 
   it("picks candidate with highest in-degree from outside boundary", () => {
     const { model, map } = build({
-      containers: [
+      elements: [
         svcSpec("orders_api"),
         svcSpec("orders_gateway"),
         dbSpec("orders_db"),
@@ -87,15 +85,15 @@ describe("findPublicApiCandidate", () => {
       boundaries: [
         {
           name: "orders",
-          containerNames: ["orders_api", "orders_gateway", "orders_db"],
+          elementNames: ["orders_api", "orders_gateway", "orders_db"],
         },
-        { name: "ext", containerNames: ["ext_a", "ext_b", "ext_c"] },
+        { name: "ext", elementNames: ["ext_a", "ext_b", "ext_c"] },
       ],
     });
 
     expect(
       findPublicApiCandidate(model.boundaries.orders, ["repo"], model, map),
-    ).toBe(getContainer(model, "orders_gateway"));
+    ).toBe(getElement(model, "orders_gateway"));
   });
 
   it("excludes in-boundary relations from in-degree count (covers L40)", () => {
@@ -103,7 +101,7 @@ describe("findPublicApiCandidate", () => {
     // to `false`. Without skipping same-boundary sources, internal traffic
     // inflates in-degree and the wrong public API gets picked.
     const { model, map } = build({
-      containers: [
+      elements: [
         svcSpec("a_api"),
         svcSpec("b_api"),
         dbSpec("orders_db"),
@@ -114,15 +112,15 @@ describe("findPublicApiCandidate", () => {
       boundaries: [
         {
           name: "orders",
-          containerNames: ["a_api", "b_api", "orders_db", "i1", "i2"],
+          elementNames: ["a_api", "b_api", "orders_db", "i1", "i2"],
         },
-        { name: "ext", containerNames: ["ext_caller"] },
+        { name: "ext", elementNames: ["ext_caller"] },
       ],
     });
 
     expect(
       findPublicApiCandidate(model.boundaries.orders, ["repo"], model, map),
-    ).toBe(getContainer(model, "a_api"));
+    ).toBe(getElement(model, "a_api"));
   });
 
   it("picks highest-in-degree candidate via the sort comparator", () => {
@@ -130,7 +128,7 @@ describe("findPublicApiCandidate", () => {
     // which corrupts the comparator. Pin: a candidate with strictly more
     // external incoming edges wins.
     const { model, map } = build({
-      containers: [
+      elements: [
         svcSpec("winner_api"),
         svcSpec("loser_api"),
         dbSpec("orders_db"),
@@ -142,22 +140,22 @@ describe("findPublicApiCandidate", () => {
       boundaries: [
         {
           name: "orders",
-          containerNames: ["winner_api", "loser_api", "orders_db"],
+          elementNames: ["winner_api", "loser_api", "orders_db"],
         },
-        { name: "ext", containerNames: ["ext1", "ext2", "ext3", "ext4"] },
+        { name: "ext", elementNames: ["ext1", "ext2", "ext3", "ext4"] },
       ],
     });
 
     expect(
       findPublicApiCandidate(model.boundaries.orders, ["repo"], model, map),
-    ).toBe(getContainer(model, "winner_api"));
+    ).toBe(getElement(model, "winner_api"));
   });
 });
 
 describe("resolveRedirectTarget", () => {
   it("returns owner for same-boundary access", () => {
     const { model, map } = build({
-      containers: [
+      elements: [
         dbSpec("orders_db"),
         svcSpec("orders_repo", [{ to: "orders_db" }], ["repo"]),
         svcSpec("orders_api", [{ to: "orders_db" }]),
@@ -165,13 +163,13 @@ describe("resolveRedirectTarget", () => {
       boundaries: [
         {
           name: "bc",
-          containerNames: ["orders_db", "orders_repo", "orders_api"],
+          elementNames: ["orders_db", "orders_repo", "orders_api"],
         },
       ],
     });
-    const api = getContainer(model, "orders_api")!;
-    const db = getContainer(model, "orders_db")!;
-    const repo = getContainer(model, "orders_repo")!;
+    const api = getElement(model, "orders_api")!;
+    const db = getElement(model, "orders_db")!;
+    const repo = getElement(model, "orders_repo")!;
 
     expect(
       resolveRedirectTarget(api, db, repo, ["repo"], model, map, "test"),
@@ -180,7 +178,7 @@ describe("resolveRedirectTarget", () => {
 
   it("returns public API for cross-boundary access", () => {
     const { model, map } = build({
-      containers: [
+      elements: [
         dbSpec("orders_db"),
         svcSpec("orders_repo", [{ to: "orders_db" }], ["repo"]),
         svcSpec("orders_api"),
@@ -189,15 +187,15 @@ describe("resolveRedirectTarget", () => {
       boundaries: [
         {
           name: "orders",
-          containerNames: ["orders_db", "orders_repo", "orders_api"],
+          elementNames: ["orders_db", "orders_repo", "orders_api"],
         },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     });
-    const accessor = getContainer(model, "fulfillment_api")!;
-    const db = getContainer(model, "orders_db")!;
-    const repo = getContainer(model, "orders_repo")!;
-    const publicApi = getContainer(model, "orders_api")!;
+    const accessor = getElement(model, "fulfillment_api")!;
+    const db = getElement(model, "orders_db")!;
+    const repo = getElement(model, "orders_repo")!;
+    const publicApi = getElement(model, "orders_api")!;
 
     expect(
       resolveRedirectTarget(accessor, db, repo, ["repo"], model, map, "test"),
@@ -206,19 +204,19 @@ describe("resolveRedirectTarget", () => {
 
   it("warns by name+rule when cross-boundary has no public API", () => {
     const { model, map } = build({
-      containers: [
+      elements: [
         dbSpec("orders_db"),
         svcSpec("orders_repo", [{ to: "orders_db" }], ["repo"]),
         svcSpec("fulfillment_api", [{ to: "orders_db" }]),
       ],
       boundaries: [
-        { name: "orders", containerNames: ["orders_db", "orders_repo"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_db", "orders_repo"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     });
-    const accessor = getContainer(model, "fulfillment_api")!;
-    const db = getContainer(model, "orders_db")!;
-    const repo = getContainer(model, "orders_repo")!;
+    const accessor = getElement(model, "fulfillment_api")!;
+    const db = getElement(model, "orders_db")!;
+    const repo = getElement(model, "orders_repo")!;
     const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
 
     resolveRedirectTarget(
@@ -242,19 +240,19 @@ describe("resolveRedirectTarget", () => {
 
   it("warns when only candidate IS the owner — distinct from no-API case", () => {
     const { model, map } = build({
-      containers: [
+      elements: [
         dbSpec("orders_db"),
         svcSpec("orders_only_svc", [{ to: "orders_db" }]),
         svcSpec("fulfillment_api", [{ to: "orders_db" }]),
       ],
       boundaries: [
-        { name: "orders", containerNames: ["orders_db", "orders_only_svc"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_db", "orders_only_svc"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     });
-    const accessor = getContainer(model, "fulfillment_api")!;
-    const db = getContainer(model, "orders_db")!;
-    const owner = getContainer(model, "orders_only_svc")!;
+    const accessor = getElement(model, "fulfillment_api")!;
+    const db = getElement(model, "orders_db")!;
+    const owner = getElement(model, "orders_only_svc")!;
     const warn = vi.spyOn(consola, "warn").mockImplementation(() => {});
 
     resolveRedirectTarget(accessor, db, owner, ["repo"], model, map, "crud");
@@ -275,9 +273,9 @@ describe("resolveRedirectTarget", () => {
     // candidates — guarding the function from regressions where the
     // comparator returns NaN.
     const { model, map } = build({
-      containers: [svcSpec("a_api"), svcSpec("b_api"), dbSpec("orders_db")],
+      elements: [svcSpec("a_api"), svcSpec("b_api"), dbSpec("orders_db")],
       boundaries: [
-        { name: "bc", containerNames: ["a_api", "b_api", "orders_db"] },
+        { name: "bc", elementNames: ["a_api", "b_api", "orders_db"] },
       ],
     });
 
@@ -287,27 +285,26 @@ describe("resolveRedirectTarget", () => {
       model,
       map,
     );
-    expect([
-      getContainer(model, "a_api"),
-      getContainer(model, "b_api"),
-    ]).toContain(result);
+    expect([getElement(model, "a_api"), getElement(model, "b_api")]).toContain(
+      result,
+    );
   });
 
   it("returns undefined when cross-boundary has no public API", () => {
     const { model, map } = build({
-      containers: [
+      elements: [
         dbSpec("orders_db"),
         svcSpec("orders_repo", [{ to: "orders_db" }], ["repo"]),
         svcSpec("fulfillment_api", [{ to: "orders_db" }]),
       ],
       boundaries: [
-        { name: "orders", containerNames: ["orders_db", "orders_repo"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_db", "orders_repo"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     });
-    const accessor = getContainer(model, "fulfillment_api")!;
-    const db = getContainer(model, "orders_db")!;
-    const repo = getContainer(model, "orders_repo")!;
+    const accessor = getElement(model, "fulfillment_api")!;
+    const db = getElement(model, "orders_db")!;
+    const repo = getElement(model, "orders_repo")!;
 
     expect(
       resolveRedirectTarget(accessor, db, repo, ["repo"], model, map, "test"),
@@ -316,19 +313,19 @@ describe("resolveRedirectTarget", () => {
 
   it("returns undefined when public API candidate is the owner itself", () => {
     const { model, map } = build({
-      containers: [
+      elements: [
         dbSpec("orders_db"),
         svcSpec("orders_relay", [{ to: "orders_db" }], ["relay"]),
         svcSpec("fulfillment_api", [{ to: "orders_db" }]),
       ],
       boundaries: [
-        { name: "orders", containerNames: ["orders_db", "orders_relay"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_db", "orders_relay"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     });
-    const accessor = getContainer(model, "fulfillment_api")!;
-    const db = getContainer(model, "orders_db")!;
-    const repo = getContainer(model, "orders_relay")!;
+    const accessor = getElement(model, "fulfillment_api")!;
+    const db = getElement(model, "orders_db")!;
+    const repo = getElement(model, "orders_relay")!;
 
     expect(
       resolveRedirectTarget(
@@ -350,19 +347,19 @@ describe("resolveRedirectTarget", () => {
     // and resolveRedirectTarget must catch the `publicApi === owner` branch
     // and bail with a warning instead of redirecting to itself.
     const { model, map } = build({
-      containers: [
+      elements: [
         dbSpec("orders_db"),
         svcSpec("orders_only_svc", [{ to: "orders_db" }]),
         svcSpec("fulfillment_api", [{ to: "orders_db" }]),
       ],
       boundaries: [
-        { name: "orders", containerNames: ["orders_db", "orders_only_svc"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_db", "orders_only_svc"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     });
-    const accessor = getContainer(model, "fulfillment_api")!;
-    const db = getContainer(model, "orders_db")!;
-    const owner = getContainer(model, "orders_only_svc")!;
+    const accessor = getElement(model, "fulfillment_api")!;
+    const db = getElement(model, "orders_db")!;
+    const owner = getElement(model, "orders_only_svc")!;
 
     expect(
       resolveRedirectTarget(accessor, db, owner, ["repo"], model, map, "test"),

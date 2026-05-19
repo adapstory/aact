@@ -1,9 +1,5 @@
-import type {Boundary, Container, Model, Relation} from "./model";
-import {
-  allContainers,
-  getBoundary,
-  getContainer
-} from "./model";
+import type { Boundary, Element, Model, Relation } from "./model";
+import { allElements, getBoundary, getElement } from "./model";
 
 export interface CouplingRelation {
   from: string;
@@ -37,7 +33,7 @@ export interface AnalyzedArchitecture {
 }
 
 interface RelationWithSource {
-  from: Container;
+  from: Element;
   relation: Relation;
 }
 
@@ -48,15 +44,15 @@ export interface AnalyzeOptions {
 const DEFAULT_API_TECHNOLOGIES = ["http", "grpc", "tcp"];
 
 const allRelations = (model: Model): RelationWithSource[] =>
-  allContainers(model).flatMap((container) =>
-    container.relations.map((relation) => ({ from: container, relation })),
+  allElements(model).flatMap((element) =>
+    element.relations.map((relation) => ({ from: element, relation })),
   );
 
 const classifyRelation = (
   names: Set<string>,
   childNames: Set<string> | undefined,
   parentBoundary: Boundary | undefined,
-  from: Container,
+  from: Element,
   relation: Relation,
   result: BoundaryAnalysis,
   parentResult: BoundaryAnalysis | undefined,
@@ -92,7 +88,7 @@ interface BoundaryLookups {
 const buildBoundaryLookups = (model: Model): Map<string, BoundaryLookups> => {
   const boundaries = Object.values(model.boundaries);
   const nameSets = new Map(
-    boundaries.map((b) => [b.name, new Set(b.containerNames)]),
+    boundaries.map((b) => [b.name, new Set(b.elementNames)]),
   );
 
   const parentMap = new Map<string, Boundary>();
@@ -112,7 +108,7 @@ const buildBoundaryLookups = (model: Model): Map<string, BoundaryLookups> => {
       for (const siblingName of parentBoundary.boundaryNames) {
         const sibling = getBoundary(model, siblingName);
         if (sibling) {
-          for (const cName of sibling.containerNames) childNames.add(cName);
+          for (const cName of sibling.elementNames) childNames.add(cName);
         }
       }
     }
@@ -131,7 +127,7 @@ const isSyncApiCall = (
   apiTechnologies: readonly string[],
 ): boolean => {
   if (it.relation.tags.includes("async")) return false;
-  const target = getContainer(model, it.relation.to);
+  const target = getElement(model, it.relation.to);
   if (target?.external === true && target.kind === "System") return true;
   return apiTechnologies.some((t) =>
     (it.relation.technology ?? "").toLowerCase().includes(t),
@@ -186,7 +182,7 @@ const analyzeModel = (
   }
 
   return {
-    elementsCount: allContainers(model).length,
+    elementsCount: allElements(model).length,
     syncApiCalls: syncApiCalls.length,
     asyncApiCalls: asyncApiCalls.length,
     databases: analyzeDatabases(model),
@@ -196,14 +192,14 @@ const analyzeModel = (
 
 const analyzeDatabases = (model: Model): DatabasesInfo => {
   const dbNames = new Set(
-    allContainers(model)
+    allElements(model)
       .filter((it) => it.kind === "ContainerDb")
       .map((it) => it.name),
   );
 
   let consumes = 0;
-  for (const container of allContainers(model)) {
-    for (const r of container.relations) {
+  for (const element of allElements(model)) {
+    for (const r of element.relations) {
       if (dbNames.has(r.to)) consumes++;
     }
   }

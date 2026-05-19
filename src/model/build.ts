@@ -1,4 +1,4 @@
-import type { Boundary, Container, Model, WorkspaceMetadata } from "./types";
+import type { Boundary, Element, Model, WorkspaceMetadata } from "./types";
 import type { ModelIssue } from "./validate";
 import { validateModel } from "./validate";
 
@@ -10,7 +10,7 @@ import { validateModel } from "./validate";
  *     silent overwrite (что Record делает по умолчанию).
  *  2. Final validateModel pass — dangling refs, boundary cycles, unknown
  *     kinds. Issues аккумулируются с pre-build duplicates.
- *  3. Immutable Model — Object.freeze на containers/boundaries/root names.
+ *  3. Immutable Model — Object.freeze на elements/boundaries/root names.
  *  4. Stable insertion order — sorted by name для deterministic output
  *     (JSON snapshot тестов, diff-friendly serialization).
  *
@@ -18,7 +18,7 @@ import { validateModel } from "./validate";
  * buildModel гарантия проверок одинакова с loader'ами.
  */
 export interface ModelBuildInput {
-  readonly containers: readonly Container[];
+  readonly elements: readonly Element[];
   readonly boundaries: readonly Boundary[];
   readonly rootBoundaryNames: readonly string[];
   /** Workspace-level metadata (name, description, extends target).
@@ -36,18 +36,18 @@ export interface ModelBuildResult {
 export const buildModel = (input: ModelBuildInput): ModelBuildResult => {
   const issues: ModelIssue[] = [...(input.preIssues ?? [])];
 
-  const containerMap: Record<string, Container> = Object.create(null) as Record<
+  const elementMap: Record<string, Element> = Object.create(null) as Record<
     string,
-    Container
+    Element
   >;
-  for (const c of [...input.containers].toSorted((a, b) =>
+  for (const e of [...input.elements].toSorted((a, b) =>
     a.name.localeCompare(b.name),
   )) {
-    if (c.name in containerMap) {
-      issues.push({ kind: "duplicate-container-name", name: c.name });
+    if (e.name in elementMap) {
+      issues.push({ kind: "duplicate-element-name", name: e.name });
       continue;
     }
-    containerMap[c.name] = c;
+    elementMap[e.name] = e;
   }
 
   const boundaryMap: Record<string, Boundary> = Object.create(null) as Record<
@@ -65,7 +65,7 @@ export const buildModel = (input: ModelBuildInput): ModelBuildResult => {
   }
 
   const model: Model = Object.freeze({
-    containers: Object.freeze(containerMap),
+    elements: Object.freeze(elementMap),
     boundaries: Object.freeze(boundaryMap),
     rootBoundaryNames: Object.freeze([...input.rootBoundaryNames]),
     ...(input.workspace ? { workspace: Object.freeze(input.workspace) } : {}),

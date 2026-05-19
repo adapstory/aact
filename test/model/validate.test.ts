@@ -1,13 +1,9 @@
-import {
-  buildModel,
-  isDuplicateContainer,
-  validateModel,
-} from "../../src/model";
+import { buildModel, isDuplicateElement, validateModel } from "../../src/model";
 
 describe("validateModel", () => {
   it("returns no issues for valid model", () => {
     const { model } = buildModel({
-      containers: [
+      elements: [
         {
           name: "a",
           label: "a",
@@ -35,7 +31,7 @@ describe("validateModel", () => {
 
   it("flags unknown kind on a container", () => {
     const { model, issues } = buildModel({
-      containers: [
+      elements: [
         {
           name: "x",
           label: "x",
@@ -52,14 +48,14 @@ describe("validateModel", () => {
     const allIssues = [...issues, ...validateModel(model)];
     expect(allIssues).toContainEqual({
       kind: "unknown-kind",
-      container: "x",
+      element: "x",
       raw: "Mystery",
     });
   });
 
   it("flags self-relation", () => {
     const { model } = buildModel({
-      containers: [
+      elements: [
         {
           name: "loop",
           label: "loop",
@@ -75,13 +71,13 @@ describe("validateModel", () => {
     });
     expect(validateModel(model)).toContainEqual({
       kind: "self-relation",
-      container: "loop",
+      element: "loop",
     });
   });
 
   it("flags dangling-relation", () => {
     const { model } = buildModel({
-      containers: [
+      elements: [
         {
           name: "a",
           label: "a",
@@ -104,36 +100,36 @@ describe("validateModel", () => {
 
   it("flags container-in-boundary-not-in-model", () => {
     const { model } = buildModel({
-      containers: [],
+      elements: [],
       boundaries: [
         {
           name: "b1",
           label: "b1",
           kind: "System",
           tags: [],
-          containerNames: ["ghost"],
+          elementNames: ["ghost"],
           boundaryNames: [],
         },
       ],
       rootBoundaryNames: ["b1"],
     });
     expect(validateModel(model)).toContainEqual({
-      kind: "container-in-boundary-not-in-model",
-      container: "ghost",
+      kind: "element-in-boundary-not-in-model",
+      element: "ghost",
       boundary: "b1",
     });
   });
 
   it("flags boundary-not-in-model for unknown child boundary", () => {
     const { model } = buildModel({
-      containers: [],
+      elements: [],
       boundaries: [
         {
           name: "parent",
           label: "parent",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: ["ghost_child"],
         },
       ],
@@ -148,14 +144,14 @@ describe("validateModel", () => {
 
   it("detects boundary cycle and emits dedup'd boundary-cycle issue", () => {
     const { model } = buildModel({
-      containers: [],
+      elements: [],
       boundaries: [
         {
           name: "a",
           label: "a",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: ["b"],
         },
         {
@@ -163,7 +159,7 @@ describe("validateModel", () => {
           label: "b",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: ["a"],
         },
       ],
@@ -175,18 +171,18 @@ describe("validateModel", () => {
     expect(cycles).toHaveLength(1);
   });
 
-  it("isDuplicateContainer returns true for existing name", () => {
+  it("isDuplicateElement returns true for existing name", () => {
     const containers = {
       a: {} as never,
       b: {} as never,
     };
-    expect(isDuplicateContainer(containers, "a")).toBe(true);
-    expect(isDuplicateContainer(containers, "c")).toBe(false);
+    expect(isDuplicateElement(containers, "a")).toBe(true);
+    expect(isDuplicateElement(containers, "c")).toBe(false);
   });
 
   it("buildModel emits duplicate-container-name issue", () => {
     const { issues } = buildModel({
-      containers: [
+      elements: [
         {
           name: "dup",
           label: "dup",
@@ -210,21 +206,21 @@ describe("validateModel", () => {
       rootBoundaryNames: [],
     });
     expect(issues).toContainEqual({
-      kind: "duplicate-container-name",
+      kind: "duplicate-element-name",
       name: "dup",
     });
   });
 
   it("buildModel emits duplicate-boundary-name issue", () => {
     const { issues } = buildModel({
-      containers: [],
+      elements: [],
       boundaries: [
         {
           name: "dup",
           label: "a",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: [],
         },
         {
@@ -232,7 +228,7 @@ describe("validateModel", () => {
           label: "b",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: [],
         },
       ],
@@ -258,7 +254,7 @@ describe("validateModel", () => {
     // Stryker может мутировать "Person" / "ContainerDb" / etc. на пустые
     // строки и валидный input будет давать unknown-kind issues.
     const { model } = buildModel({
-      containers: [
+      elements: [
         {
           name: "x",
           label: "x",
@@ -282,14 +278,14 @@ describe("validateModel", () => {
     // calls, path equality check). A closed cycle path должна содержать
     // все три узла (длинна ≥3, все имена присутствуют).
     const { model } = buildModel({
-      containers: [],
+      elements: [],
       boundaries: [
         {
           name: "a",
           label: "a",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: ["b"],
         },
         {
@@ -297,7 +293,7 @@ describe("validateModel", () => {
           label: "b",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: ["c"],
         },
         {
@@ -305,7 +301,7 @@ describe("validateModel", () => {
           label: "c",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: ["a"],
         },
       ],
@@ -326,14 +322,14 @@ describe("validateModel", () => {
   it("self-loop boundary detected as cycle", () => {
     // Boundary a → a. Stryker mutates cycle entry condition (c === GRAY).
     const { model } = buildModel({
-      containers: [],
+      elements: [],
       boundaries: [
         {
           name: "a",
           label: "a",
           kind: "System",
           tags: [],
-          containerNames: [],
+          elementNames: [],
           boundaryNames: ["a"],
         },
       ],
@@ -347,14 +343,14 @@ describe("validateModel", () => {
 
   it("forwards preIssues from loader through buildModel result", () => {
     const { issues } = buildModel({
-      containers: [],
+      elements: [],
       boundaries: [],
       rootBoundaryNames: [],
-      preIssues: [{ kind: "unknown-kind", container: "x", raw: "Mystery" }],
+      preIssues: [{ kind: "unknown-kind", element: "x", raw: "Mystery" }],
     });
     expect(issues).toContainEqual({
       kind: "unknown-kind",
-      container: "x",
+      element: "x",
       raw: "Mystery",
     });
   });

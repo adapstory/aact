@@ -30,7 +30,7 @@ describe("Rules demo on C4L2.puml", () => {
     const violations = apiGatewayRule.check(model);
     expect(violations).toBeDefined();
     for (const v of violations) {
-      console.log(`${v.container}: ${v.message}`);
+      console.log(`${v.element}: ${v.message}`);
     }
   });
 
@@ -38,7 +38,7 @@ describe("Rules demo on C4L2.puml", () => {
     const violations = stableDependenciesRule.check(model);
     expect(violations).toBeDefined();
     for (const v of violations) {
-      console.log(`${v.container}: ${v.message}`);
+      console.log(`${v.element}: ${v.message}`);
     }
   });
 
@@ -49,7 +49,7 @@ describe("Rules demo on C4L2.puml", () => {
   it("Cohesion — boundaries have more cohesion than coupling", () => {
     const violations = cohesionRule.check(model);
     for (const v of violations) {
-      console.log(`${v.container}: ${v.message}`);
+      console.log(`${v.element}: ${v.message}`);
     }
     expect(violations).toBeDefined();
   });

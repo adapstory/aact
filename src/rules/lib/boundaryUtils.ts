@@ -1,21 +1,18 @@
 import consola from "consola";
 
-import type {Boundary, Container, Model} from "../../model";
-import {
-  allContainers,
-  getContainer
-} from "../../model";
+import type { Boundary, Element, Model } from "../../model";
+import { allElements, getElement } from "../../model";
 
 /**
  * Maps container name → boundary that contains it. Используется fix-функциями
  * для определения cross-boundary access patterns.
  */
-export const buildContainerBoundaryMap = (
+export const buildElementBoundaryMap = (
   model: Model,
 ): Map<string, Boundary> => {
   const map = new Map<string, Boundary>();
   for (const boundary of Object.values(model.boundaries)) {
-    for (const containerName of boundary.containerNames) {
+    for (const containerName of boundary.elementNames) {
       map.set(containerName, boundary);
     }
   }
@@ -31,11 +28,11 @@ export const findPublicApiCandidate = (
   targetBoundary: Boundary,
   ownerTags: readonly string[],
   model: Model,
-  containerBoundaryMap: Map<string, Boundary>,
-): Container | undefined => {
-  const candidates = targetBoundary.containerNames
-    .map((name) => getContainer(model, name))
-    .filter((c): c is Container => c !== undefined)
+  elementBoundaryMap: Map<string, Boundary>,
+): Element | undefined => {
+  const candidates = targetBoundary.elementNames
+    .map((name) => getElement(model, name))
+    .filter((c): c is Element => c !== undefined)
     .filter(
       (c) =>
         c.kind !== "ContainerDb" && !ownerTags.some((t) => c.tags.includes(t)),
@@ -50,9 +47,9 @@ export const findPublicApiCandidate = (
   // Stryker disable next-line ArrayDeclaration
   const inDegree = new Map<string, number>(candidates.map((c) => [c.name, 0]));
 
-  for (const container of allContainers(model)) {
-    if (containerBoundaryMap.get(container.name) === targetBoundary) continue;
-    for (const rel of container.relations) {
+  for (const element of allElements(model)) {
+    if (elementBoundaryMap.get(element.name) === targetBoundary) continue;
+    for (const rel of element.relations) {
       if (candidateNames.has(rel.to)) {
         inDegree.set(rel.to, (inDegree.get(rel.to) ?? 0) + 1);
       }
@@ -70,16 +67,16 @@ export const findPublicApiCandidate = (
  * no valid target — consola.warn для manual review.
  */
 export const resolveRedirectTarget = (
-  accessor: Container,
-  db: Container,
-  owner: Container,
+  accessor: Element,
+  db: Element,
+  owner: Element,
   ownerTags: readonly string[],
   model: Model,
-  containerBoundaryMap: Map<string, Boundary>,
+  elementBoundaryMap: Map<string, Boundary>,
   ruleName: string,
-): Container | undefined => {
-  const accessorBoundary = containerBoundaryMap.get(accessor.name);
-  const dbBoundary = containerBoundaryMap.get(db.name);
+): Element | undefined => {
+  const accessorBoundary = elementBoundaryMap.get(accessor.name);
+  const dbBoundary = elementBoundaryMap.get(db.name);
 
   const isCrossBoundary =
     accessorBoundary !== undefined &&
@@ -92,7 +89,7 @@ export const resolveRedirectTarget = (
     dbBoundary,
     ownerTags,
     model,
-    containerBoundaryMap,
+    elementBoundaryMap,
   );
 
   if (!publicApi) {

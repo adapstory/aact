@@ -3,7 +3,7 @@ import { kubernetesFormat } from "../../src/formats/kubernetes";
 import { plantumlFormat } from "../../src/formats/plantuml";
 import { load } from "../../src/formats/structurizr/load";
 import type { Model } from "../../src/model";
-import { allContainers } from "../../src/model";
+import { allElements } from "../../src/model";
 import {
   aclRule,
   acyclicRule,
@@ -21,9 +21,9 @@ describe("Microservices (Structurizr)", () => {
   });
 
   it("loads containers, boundaries, and relations", () => {
-    expect(allContainers(model).length).toBeGreaterThan(0);
+    expect(allElements(model).length).toBeGreaterThan(0);
     expect(Object.values(model.boundaries).length).toBeGreaterThan(0);
-    const withRelations = allContainers(model).filter(
+    const withRelations = allElements(model).filter(
       (c) => c.relations.length > 0,
     );
     expect(withRelations.length).toBeGreaterThan(0);
@@ -32,7 +32,7 @@ describe("Microservices (Structurizr)", () => {
   it("ACL — only acl-tagged containers depend on externals", () => {
     const violations = aclRule.check(model);
     for (const v of violations) {
-      console.log(`${v.container}: ${v.message}`);
+      console.log(`${v.element}: ${v.message}`);
     }
     expect(violations).toBeDefined();
   });
@@ -52,7 +52,7 @@ describe("Microservices (Structurizr)", () => {
   it("Cohesion — boundaries have more cohesion than coupling", () => {
     const violations = cohesionRule.check(model);
     for (const v of violations) {
-      console.log(`${v.container}: ${v.message}`);
+      console.log(`${v.element}: ${v.message}`);
     }
     expect(violations).toBeDefined();
   });

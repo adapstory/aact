@@ -10,10 +10,10 @@ import { ToolError } from "./output";
 
 const issueKindMap: Record<ModelIssue["kind"], DiagnosticKind> = {
   "dangling-relation": "model.danglingRelation",
-  "container-in-boundary-not-in-model": "model.containerInBoundaryNotInModel",
+  "element-in-boundary-not-in-model": "model.elementInBoundaryNotInModel",
   "boundary-not-in-model": "model.boundaryNotInModel",
   "boundary-cycle": "model.boundaryCycle",
-  "duplicate-container-name": "model.duplicateContainerName",
+  "duplicate-element-name": "model.duplicateElementName",
   "duplicate-boundary-name": "model.duplicateBoundaryName",
   "duplicate-identifier": "model.duplicateIdentifier",
   "self-relation": "model.selfRelation",
@@ -25,8 +25,8 @@ const issueContext = (issue: ModelIssue): Record<string, string> => {
     case "dangling-relation": {
       return { from: issue.from, to: issue.to };
     }
-    case "container-in-boundary-not-in-model": {
-      return { container: issue.container, boundary: issue.boundary };
+    case "element-in-boundary-not-in-model": {
+      return { element: issue.element, boundary: issue.boundary };
     }
     case "boundary-not-in-model": {
       return { parent: issue.parent, child: issue.child };
@@ -34,7 +34,7 @@ const issueContext = (issue: ModelIssue): Record<string, string> => {
     case "boundary-cycle": {
       return { path: issue.path.join(" → ") };
     }
-    case "duplicate-container-name":
+    case "duplicate-element-name":
     case "duplicate-boundary-name": {
       return { name: issue.name };
     }
@@ -42,10 +42,10 @@ const issueContext = (issue: ModelIssue): Record<string, string> => {
       return { identifier: issue.identifier };
     }
     case "self-relation": {
-      return { container: issue.container };
+      return { element: issue.element };
     }
     case "unknown-kind": {
-      return { container: issue.container, raw: issue.raw };
+      return { element: issue.element, raw: issue.raw };
     }
   }
 };
@@ -55,8 +55,8 @@ const issueMessage = (issue: ModelIssue): string => {
     case "dangling-relation": {
       return `Relation "${issue.from} → ${issue.to}" references unknown target`;
     }
-    case "container-in-boundary-not-in-model": {
-      return `Boundary "${issue.boundary}" references container "${issue.container}" not in model`;
+    case "element-in-boundary-not-in-model": {
+      return `Boundary "${issue.boundary}" references element "${issue.element}" not in model`;
     }
     case "boundary-not-in-model": {
       return `Boundary "${issue.parent}" references child boundary "${issue.child}" not in model`;
@@ -64,8 +64,8 @@ const issueMessage = (issue: ModelIssue): string => {
     case "boundary-cycle": {
       return `Boundary cycle detected: ${issue.path.join(" → ")}`;
     }
-    case "duplicate-container-name": {
-      return `Duplicate container name "${issue.name}"`;
+    case "duplicate-element-name": {
+      return `Duplicate element name "${issue.name}"`;
     }
     case "duplicate-boundary-name": {
       return `Duplicate boundary name "${issue.name}"`;
@@ -74,10 +74,10 @@ const issueMessage = (issue: ModelIssue): string => {
       return `Duplicate DSL identifier "${issue.identifier}" registered for two distinct elements`;
     }
     case "self-relation": {
-      return `Container "${issue.container}" has a relation to itself`;
+      return `Element "${issue.element}" has a relation to itself`;
     }
     case "unknown-kind": {
-      return `Container "${issue.container}" has unknown kind "${issue.raw}"`;
+      return `Element "${issue.element}" has unknown kind "${issue.raw}"`;
     }
   }
 };

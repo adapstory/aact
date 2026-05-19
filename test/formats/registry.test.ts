@@ -122,7 +122,7 @@ describe("Format API — generate capability shape", () => {
         throw new Error(`${name} declared generate but canGenerate=false`);
 
       const emptyModel = {
-        containers: Object.freeze({}),
+        elements: Object.freeze({}),
         boundaries: Object.freeze({}),
         rootBoundaryNames: Object.freeze([] as readonly string[]),
       };
@@ -171,7 +171,7 @@ describe("Format API — narrowing via type guards", () => {
     const fmt: Format = await loadFormat("kubernetes");
     if (canGenerate(fmt)) {
       const output = fmt.generate({
-        containers: Object.freeze({}),
+        elements: Object.freeze({}),
         boundaries: Object.freeze({}),
         rootBoundaryNames: Object.freeze([] as readonly string[]),
       });

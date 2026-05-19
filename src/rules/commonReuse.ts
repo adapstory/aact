@@ -1,5 +1,5 @@
-import type {Boundary, Model} from "../model";
-import { allContainers   } from "../model";
+import type { Boundary, Model } from "../model";
+import { allElements } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
 /**
@@ -11,7 +11,7 @@ import type { RuleDefinition, Violation } from "./types";
 const buildBoundaryLookup = (model: Model): Map<string, Boundary> => {
   const map = new Map<string, Boundary>();
   for (const boundary of Object.values(model.boundaries)) {
-    for (const containerName of boundary.containerNames) {
+    for (const containerName of boundary.elementNames) {
       map.set(containerName, boundary);
     }
   }
@@ -28,7 +28,7 @@ const collectPublicAndUsage = (
   const publicOf = new Map<Boundary, Set<string>>();
   const used = new Map<string, Set<string>>();
 
-  for (const source of allContainers(model)) {
+  for (const source of allElements(model)) {
     const srcBoundary = boundaryOf.get(source.name);
     if (!srcBoundary) continue;
 
@@ -78,7 +78,7 @@ export const commonReuseRule: RuleDefinition = {
 
         const missing = [...pubNames].filter((n) => !usedNames.has(n));
         violations.push({
-          container: consumer.name,
+          element: consumer.name,
           message: `uses ${[...usedNames].join(", ")} of "${provider.name}" but not ${missing.join(", ")} — all public services of a context should be used together`,
         });
       }

@@ -16,11 +16,11 @@ const lower = (src: string) => {
 };
 
 describe("PUML toModel — element macros → Container", () => {
-  it("Container(alias, label, techn, descr) populates Model.containers", () => {
+  it("Container(alias, label, techn, descr) populates Model.elements", () => {
     const src = `@startuml\nContainer(api, "API", "Node.js", "REST gateway")\n@enduml\n`;
     const { model, issues } = lower(src);
     expect(issues).toEqual([]);
-    const c = model.containers["api"];
+    const c = model.elements["api"];
     expect(c).toBeDefined();
     expect(c).toMatchObject({
       name: "api",
@@ -37,7 +37,7 @@ describe("PUML toModel — element macros → Container", () => {
   it("Container_Ext sets external=true on base kind", () => {
     const src = `@startuml\nContainer_Ext(ext, "External")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["ext"]).toMatchObject({
+    expect(model.elements["ext"]).toMatchObject({
       kind: "Container",
       external: true,
     });
@@ -46,14 +46,14 @@ describe("PUML toModel — element macros → Container", () => {
   it("ContainerDb maps to ContainerDb kind", () => {
     const src = `@startuml\nContainerDb(db, "Database")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["db"].kind).toBe("ContainerDb");
+    expect(model.elements["db"].kind).toBe("ContainerDb");
   });
 
   it("Context family uses $type for technology (not $techn)", () => {
     // grammar.md: Person/System/etc. have no $techn slot; $type carries it.
     const src = `@startuml\nPerson(alice, "Alice", "A user", $type="developer")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["alice"]).toMatchObject({
+    expect(model.elements["alice"]).toMatchObject({
       kind: "Person",
       technology: "developer",
       description: "A user",
@@ -63,21 +63,21 @@ describe("PUML toModel — element macros → Container", () => {
   it("Container family uses $techn for technology", () => {
     const src = `@startuml\nContainer(api, "API", $techn="Java 17")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["api"].technology).toBe("Java 17");
+    expect(model.elements["api"].technology).toBe("Java 17");
   });
 
   it("$tags parses CSV-style and plus-style", () => {
     const src = `@startuml\nContainer(api, "API", $tags="async,api")\nContainer(svc, "Svc", $tags="alpha+beta")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["api"].tags).toEqual(["async", "api"]);
-    expect(model.containers["svc"].tags).toEqual(["alpha", "beta"]);
+    expect(model.elements["api"].tags).toEqual(["async", "api"]);
+    expect(model.elements["svc"].tags).toEqual(["alpha", "beta"]);
   });
 
   it("$link and $sprite populate Container.link / Container.sprite", () => {
     const src = `@startuml\nContainer(api, "API", $link="https://x", $sprite="logo")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["api"].link).toBe("https://x");
-    expect(model.containers["api"].sprite).toBe("logo");
+    expect(model.elements["api"].link).toBe("https://x");
+    expect(model.elements["api"].sprite).toBe("logo");
   });
 });
 
@@ -85,8 +85,8 @@ describe("PUML toModel — relation macros → Container.relations", () => {
   it("Rel(a, b, label, techn) pushes Relation onto source's relations[]", () => {
     const src = `@startuml\nContainer(a, "A")\nContainer(b, "B")\nRel(a, b, "calls", "HTTPS")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["a"].relations).toHaveLength(1);
-    expect(model.containers["a"].relations[0]).toMatchObject({
+    expect(model.elements["a"].relations).toHaveLength(1);
+    expect(model.elements["a"].relations[0]).toMatchObject({
       to: "b",
       description: "calls",
       technology: "HTTPS",
@@ -96,66 +96,66 @@ describe("PUML toModel — relation macros → Container.relations", () => {
   it("Rel_Back(a, b) emits a Relation FROM b TO a (semantic swap)", () => {
     const src = `@startuml\nContainer(a, "A")\nContainer(b, "B")\nRel_Back(a, b, "answers to")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["a"].relations).toHaveLength(0);
-    expect(model.containers["b"].relations).toHaveLength(1);
-    expect(model.containers["b"].relations[0].to).toBe("a");
+    expect(model.elements["a"].relations).toHaveLength(0);
+    expect(model.elements["b"].relations).toHaveLength(1);
+    expect(model.elements["b"].relations[0].to).toBe("a");
   });
 
   it("BiRel(a, b) emits TWO Relations (one each direction)", () => {
     const src = `@startuml\nContainer(a, "A")\nContainer(b, "B")\nBiRel(a, b, "syncs")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["a"].relations.map((r) => r.to)).toEqual(["b"]);
-    expect(model.containers["b"].relations.map((r) => r.to)).toEqual(["a"]);
+    expect(model.elements["a"].relations.map((r) => r.to)).toEqual(["b"]);
+    expect(model.elements["b"].relations.map((r) => r.to)).toEqual(["a"]);
   });
 
   it("RelIndex first positional becomes Relation.order", () => {
     const src = `@startuml\nContainer(a, "A")\nContainer(b, "B")\nRelIndex("3", a, b, "calls")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["a"].relations[0].order).toBe(3);
+    expect(model.elements["a"].relations[0].order).toBe(3);
   });
 
   it("$index=N on plain Rel populates Relation.order", () => {
     const src = `@startuml\nContainer(a, "A")\nContainer(b, "B")\nRel(a, b, "calls", $index=2)\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["a"].relations[0].order).toBe(2);
+    expect(model.elements["a"].relations[0].order).toBe(2);
   });
 
   it("$index=Index() (sentinel call) leaves order undefined", () => {
     const src = `@startuml\nContainer(a, "A")\nContainer(b, "B")\nRel(a, b, "calls", $index=Index())\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["a"].relations[0].order).toBeUndefined();
+    expect(model.elements["a"].relations[0].order).toBeUndefined();
   });
 
   it("dangling relation source manufactures placeholder container (validator catches it)", () => {
     const src = `@startuml\nContainer(b, "B")\nRel(missing, b, "calls")\n@enduml\n`;
     const { model } = lower(src);
-    expect(model.containers["missing"]).toBeDefined();
-    expect(model.containers["missing"].relations[0].to).toBe("b");
+    expect(model.elements["missing"]).toBeDefined();
+    expect(model.elements["missing"].relations[0].to).toBe("b");
   });
 
   it("dangling-source placeholder borrows sourceLocation from first-use Rel call", () => {
     const src = `@startuml\nContainer(b, "B")\nRel(missing, b, "calls")\n@enduml\n`;
     const expected = src.indexOf("Rel(");
     const { model } = lower(src);
-    const m = model.containers["missing"];
+    const m = model.elements["missing"];
     expect(m.sourceLocation?.start.offset).toBe(expected);
     expect(m.sourceLocation?.file).toBe(FILE);
   });
 });
 
 describe("PUML toModel — boundaries", () => {
-  it("System_Boundary with nested Container produces Boundary + containerNames", () => {
+  it("System_Boundary with nested Container produces Boundary + elementNames", () => {
     const src = `@startuml\nSystem_Boundary(b, "Bank") {\n  Container(api, "API")\n}\n@enduml\n`;
     const { model } = lower(src);
     expect(model.boundaries["b"]).toMatchObject({
       name: "b",
       label: "Bank",
       kind: "System",
-      containerNames: ["api"],
+      elementNames: ["api"],
       boundaryNames: [],
     });
     expect(model.rootBoundaryNames).toEqual(["b"]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("Container_Boundary maps to BoundaryKind.Container", () => {
@@ -181,7 +181,7 @@ describe("PUML toModel — boundaries", () => {
     const { model } = lower(src);
     expect(model.rootBoundaryNames).toEqual(["outer"]);
     expect(model.boundaries["outer"].boundaryNames).toEqual(["inner"]);
-    expect(model.boundaries["inner"].containerNames).toEqual(["api"]);
+    expect(model.boundaries["inner"].elementNames).toEqual(["api"]);
   });
 });
 
@@ -190,7 +190,7 @@ describe("PUML toModel — SourceLocation fidelity", () => {
     const src = `@startuml\nContainer(api, "API")\n@enduml\n`;
     const expected = src.indexOf("Container");
     const { model } = lower(src);
-    expect(model.containers["api"].sourceLocation?.start.offset).toBe(expected);
+    expect(model.elements["api"].sourceLocation?.start.offset).toBe(expected);
   });
 
   it("Boundary.sourceLocation spans `{` ... `}` block", () => {
@@ -206,9 +206,9 @@ describe("PUML toModel — SourceLocation fidelity", () => {
     const src = `@startuml\nContainer(a, "A")\nContainer(b, "B")\nRel(a, b, "calls")\n@enduml\n`;
     const expected = src.indexOf("Rel(");
     const { model } = lower(src);
-    expect(
-      model.containers["a"].relations[0].sourceLocation?.start.offset,
-    ).toBe(expected);
+    expect(model.elements["a"].relations[0].sourceLocation?.start.offset).toBe(
+      expected,
+    );
   });
 });
 
@@ -233,14 +233,14 @@ Rel(banking_system, mainframe, "Uses")
 `;
     const { model, issues } = lower(src);
     expect(issues).toEqual([]);
-    expect(Object.keys(model.containers).sort()).toEqual([
+    expect(Object.keys(model.elements).sort()).toEqual([
       "banking_system",
       "customer",
       "mail_system",
       "mainframe",
     ]);
     // Rel_Back(customer, mail_system) → mail_system → customer
-    expect(model.containers["mail_system"].relations[0].to).toBe("customer");
-    expect(model.containers["mail_system"].external).toBe(true);
+    expect(model.elements["mail_system"].relations[0].to).toBe("customer");
+    expect(model.elements["mail_system"].external).toBe(true);
   });
 });

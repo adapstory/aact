@@ -4,7 +4,7 @@ import { makeModel } from "../helpers/makeModel";
 describe("apiGatewayRule.check", () => {
   it("returns no violations when ACL routes through gateway", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "acl",
           tags: ["acl"],
@@ -18,7 +18,7 @@ describe("apiGatewayRule.check", () => {
 
   it("violates when ACL bypasses gateway", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "acl",
           tags: ["acl"],
@@ -34,7 +34,7 @@ describe("apiGatewayRule.check", () => {
 
   it("non-ACL containers are not checked", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "svc", relations: [{ to: "ext", technology: "raw" }] },
         { name: "ext", kind: "System", external: true },
       ],
@@ -44,7 +44,7 @@ describe("apiGatewayRule.check", () => {
 
   it("non-external targets are not checked", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "acl",
           tags: ["acl"],
@@ -58,7 +58,7 @@ describe("apiGatewayRule.check", () => {
 
   it("respects custom gatewayPattern", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "acl",
           tags: ["acl"],

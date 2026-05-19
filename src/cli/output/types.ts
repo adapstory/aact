@@ -16,9 +16,9 @@ export type DiagnosticKind =
   // Model validation issues (from validateModel / buildModel)
   | "model.danglingRelation"
   | "model.boundaryNotInModel"
-  | "model.containerInBoundaryNotInModel"
+  | "model.elementInBoundaryNotInModel"
   | "model.boundaryCycle"
-  | "model.duplicateContainerName"
+  | "model.duplicateElementName"
   | "model.duplicateBoundaryName"
   | "model.duplicateIdentifier"
   | "model.selfRelation"

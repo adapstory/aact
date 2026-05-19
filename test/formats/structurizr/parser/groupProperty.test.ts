@@ -15,9 +15,9 @@ describe("Structurizr parser — group → properties.group", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.properties?.group).toBe("Payments");
-    expect(model.containers["db"]?.properties?.group).toBe("Payments");
-    expect(model.containers["external"]?.properties?.group).toBeUndefined();
+    expect(model.elements["api"]?.properties?.group).toBe("Payments");
+    expect(model.elements["db"]?.properties?.group).toBe("Payments");
+    expect(model.elements["external"]?.properties?.group).toBeUndefined();
   });
 
   it("group does not itself appear in the Model as a Container or Boundary", () => {
@@ -29,7 +29,7 @@ describe("Structurizr parser — group → properties.group", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["Payments"]).toBeUndefined();
+    expect(model.elements["Payments"]).toBeUndefined();
     expect(model.boundaries["Payments"]).toBeUndefined();
   });
 
@@ -52,8 +52,8 @@ describe("Structurizr parser — group → properties.group", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.properties?.group).toBe("Outer/Inner");
-    expect(model.containers["db"]?.properties?.group).toBe("Outer");
+    expect(model.elements["api"]?.properties?.group).toBe("Outer/Inner");
+    expect(model.elements["db"]?.properties?.group).toBe("Outer");
   });
 
   it("without separator, nested elements get the innermost group name only", () => {
@@ -68,7 +68,7 @@ describe("Structurizr parser — group → properties.group", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.properties?.group).toBe("Inner");
+    expect(model.elements["api"]?.properties?.group).toBe("Inner");
   });
 
   it('`<element> { group "Layer" }` body-form sets properties.group', () => {
@@ -86,7 +86,7 @@ describe("Structurizr parser — group → properties.group", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["ctrl"]?.properties?.group).toBe("Web Layer");
+    expect(model.elements["ctrl"]?.properties?.group).toBe("Web Layer");
   });
 
   it("preserves other properties alongside group", () => {
@@ -103,7 +103,7 @@ describe("Structurizr parser — group → properties.group", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.properties).toEqual({
+    expect(model.elements["api"]?.properties).toEqual({
       owner: "platform-team",
       group: "Payments",
     });

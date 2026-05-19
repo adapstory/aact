@@ -5,22 +5,22 @@ const parse = (src: string) => parseSource(src, "test.dsl");
 describe("Structurizr parser — reference default tags", () => {
   it("person carries [Element, Person]", () => {
     const { model } = parse(`workspace { model { user = person "User" } }`);
-    expect(model.containers["user"]?.tags).toEqual(["Element", "Person"]);
+    expect(model.elements["user"]?.tags).toEqual(["Element", "Person"]);
   });
 
   it("softwareSystem (leaf) carries [Element, Software System]", () => {
     const { model } = parse(`workspace { model { s = softwareSystem "S" } }`);
-    expect(model.containers["s"]?.tags).toEqual(["Element", "Software System"]);
+    expect(model.elements["s"]?.tags).toEqual(["Element", "Software System"]);
   });
 
   it("container carries [Element, Container]", () => {
     const { model } = parse(`workspace { model { c = container "C" } }`);
-    expect(model.containers["c"]?.tags).toEqual(["Element", "Container"]);
+    expect(model.elements["c"]?.tags).toEqual(["Element", "Container"]);
   });
 
   it("component carries [Element, Component]", () => {
     const { model } = parse(`workspace { model { c = component "C" } }`);
-    expect(model.containers["c"]?.tags).toEqual(["Element", "Component"]);
+    expect(model.elements["c"]?.tags).toEqual(["Element", "Component"]);
   });
 
   it("explicit tags append after defaults", () => {
@@ -30,7 +30,7 @@ describe("Structurizr parser — reference default tags", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["u"]?.tags).toEqual([
+    expect(model.elements["u"]?.tags).toEqual([
       "Element",
       "Person",
       "vip",
@@ -76,7 +76,7 @@ describe("Structurizr parser — reference default tags", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["a"]?.relations[0]?.tags).toEqual(["Relationship"]);
+    expect(model.elements["a"]?.relations[0]?.tags).toEqual(["Relationship"]);
   });
 
   it("Relation header tags append after default", () => {
@@ -88,7 +88,7 @@ describe("Structurizr parser — reference default tags", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["a"]?.relations[0]?.tags).toEqual([
+    expect(model.elements["a"]?.relations[0]?.tags).toEqual([
       "Relationship",
       "internal",
       "critical",

@@ -6,6 +6,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed (breaking — v3 API)
+
+- C4 vocabulary alignment: `Container` is no longer the umbrella term for
+  every architectural node in the model. The model now uses `Element` as
+  the level-agnostic abstraction (Person / System / Container /
+  Component all live in `model.elements`), matching the C4 spec's own
+  vocabulary. The `kind: "Container"` literal value is unchanged — it
+  remains a valid C4 level-2 kind.
+- Public type / helper / field renames:
+  - `Container` → `Element`
+  - `ContainerKind` → `ElementKind`
+  - `Model.containers` → `Model.elements`
+  - `allContainers()` → `allElements()`
+  - `getContainer()` → `getElement()`
+  - `Boundary.containerNames` → `Boundary.elementNames`
+  - `Violation.container` → `Violation.element`
+  - `CheckViolation.container` → `CheckViolation.element` (JSON envelope
+    field `data.violations[].container` → `.element`)
+  - `ModelBuildInput.containers` → `ModelBuildInput.elements`
+  - `ModelIssue` field `container` → `element` on `self-relation`,
+    `unknown-kind`, `element-in-boundary-not-in-model` variants
+  - `ModelIssue.kind` values: `container-in-boundary-not-in-model` →
+    `element-in-boundary-not-in-model`, `duplicate-container-name` →
+    `duplicate-element-name`
+  - `DiagnosticKind` values: `model.containerInBoundaryNotInModel` →
+    `model.elementInBoundaryNotInModel`, `model.duplicateContainerName`
+    → `model.duplicateElementName`
+- Migration for custom rules: rename the `container` key in returned
+  violations to `element`. Type errors surface every call site at compile
+  time; no runtime fallback / alias is shipped.
+
 ## v3.0.0-beta.8 — 2026-05-19
 
 Lint-style output with clickable violations and name-pattern role

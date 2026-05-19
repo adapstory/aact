@@ -1,6 +1,6 @@
 import type {
   Boundary,
-  Container,
+  Element,
   Relation,
   SourceLocation,
   SourcePosition,
@@ -85,7 +85,7 @@ describe("SourceLocation is optional on every Model node", () => {
   // change we explicitly want to keep off the table.
 
   it("Container.sourceLocation stays optional", () => {
-    const c: Container = {
+    const c: Element = {
       name: "x",
       label: "X",
       kind: "Container",
@@ -103,7 +103,7 @@ describe("SourceLocation is optional on every Model node", () => {
       label: "X",
       kind: "System",
       tags: [],
-      containerNames: [],
+      elementNames: [],
       boundaryNames: [],
     };
     expect(b.sourceLocation).toBeUndefined();

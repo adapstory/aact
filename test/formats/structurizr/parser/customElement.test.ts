@@ -11,8 +11,8 @@ describe("Structurizr parser — CustomElement (`element` keyword)", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["box"]).toBeDefined();
-    expect(model.containers["box"]?.kind).toBe("Container");
+    expect(model.elements["box"]).toBeDefined();
+    expect(model.elements["box"]?.kind).toBe("Container");
   });
 
   it("carries only the `Element` tag (no kind-specific tag)", () => {
@@ -26,7 +26,7 @@ describe("Structurizr parser — CustomElement (`element` keyword)", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["box"]?.tags).toEqual(["Element"]);
+    expect(model.elements["box"]?.tags).toEqual(["Element"]);
   });
 
   it("accepts positional metadata, description, and tags", () => {
@@ -37,7 +37,7 @@ describe("Structurizr parser — CustomElement (`element` keyword)", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["box"]).toEqual(
+    expect(model.elements["box"]).toEqual(
       expect.objectContaining({
         description: "A box outside C4",
         tags: ["Element", "external", "visual"],

@@ -1,5 +1,5 @@
-import type { Boundary, Container, Model } from "../../model";
-import { getBoundary, getContainer } from "../../model";
+import type { Boundary, Element, Model } from "../../model";
+import { getBoundary, getElement } from "../../model";
 import { boundaryMacroName, c4MacroName } from "../_shared/c4Mapping";
 import type { FormatOutput } from "../types";
 
@@ -19,28 +19,27 @@ export interface PlantumlGenerateOptions {
  * named args ($tags=, $sprite=, $link=) для optional metadata — meta
  * сохраняется через loader без потерь.
  */
-const isContextKind = (kind: Container["kind"]): boolean =>
+const isContextKind = (kind: Element["kind"]): boolean =>
   kind === "Person" || kind === "System";
 
-const renderContainer = (container: Container): string => {
-  const macro = c4MacroName(container.kind, container.external);
-  const parts: string[] = [container.name, `"${container.label}"`];
+const renderElement = (element: Element): string => {
+  const macro = c4MacroName(element.kind, element.external);
+  const parts: string[] = [element.name, `"${element.label}"`];
 
-  if (isContextKind(container.kind)) {
+  if (isContextKind(element.kind)) {
     // Person/System: alias, label, descr (no techn)
-    if (container.description) parts.push(`"${container.description}"`);
+    if (element.description) parts.push(`"${element.description}"`);
   } else {
     // Container/Component family: alias, label, techn, descr
-    if (container.technology) parts.push(`"${container.technology}"`);
-    else if (container.description) parts.push('""'); // pad techn slot
-    if (container.description) parts.push(`"${container.description}"`);
+    if (element.technology) parts.push(`"${element.technology}"`);
+    else if (element.description) parts.push('""'); // pad techn slot
+    if (element.description) parts.push(`"${element.description}"`);
   }
 
   const named: string[] = [];
-  if (container.sprite) named.push(`$sprite="${container.sprite}"`);
-  if (container.tags.length > 0)
-    named.push(`$tags="${container.tags.join("+")}"`);
-  if (container.link) named.push(`$link="${container.link}"`);
+  if (element.sprite) named.push(`$sprite="${element.sprite}"`);
+  if (element.tags.length > 0) named.push(`$tags="${element.tags.join("+")}"`);
+  if (element.link) named.push(`$link="${element.link}"`);
 
   return `${macro}(${[...parts, ...named].join(", ")})`;
 };
@@ -56,10 +55,10 @@ const renderBoundary = (
     .map((name) => getBoundary(model, name))
     .filter((b): b is Boundary => b !== undefined)
     .map((b) => renderBoundary(model, b, inner));
-  const childContainers = boundary.containerNames
-    .map((name) => getContainer(model, name))
-    .filter((c): c is Container => c !== undefined)
-    .map((c) => `${inner}${renderContainer(c)}`);
+  const childContainers = boundary.elementNames
+    .map((name) => getElement(model, name))
+    .filter((c): c is Element => c !== undefined)
+    .map((c) => `${inner}${renderElement(c)}`);
 
   // Boundary signature: Boundary(alias, label, ?type, ?tags, ?link)
   const parts: string[] = [boundary.name, `"${boundary.label}"`];
@@ -82,7 +81,7 @@ const renderBoundary = (
  */
 const renderRelation = (
   from: string,
-  relation: Container["relations"][number],
+  relation: Element["relations"][number],
 ): string => {
   const label = relation.description ?? "";
   const parts: string[] = [from, relation.to, `"${label}"`];
@@ -100,7 +99,7 @@ const renderRelation = (
 const collectBoundedContainerNames = (model: Model): Set<string> => {
   const names = new Set<string>();
   const visit = (boundary: Boundary): void => {
-    for (const n of boundary.containerNames) names.add(n);
+    for (const n of boundary.elementNames) names.add(n);
     for (const child of boundary.boundaryNames) {
       const b = getBoundary(model, child);
       if (b) visit(b);
@@ -115,7 +114,7 @@ const collectBoundedContainerNames = (model: Model): Set<string> => {
 
 const renderBody = (
   model: Model,
-  standaloneContainers: readonly Container[],
+  standaloneContainers: readonly Element[],
   boundaryLabel: string | undefined,
 ): readonly string[] => {
   const rootBoundaries = model.rootBoundaryNames
@@ -126,13 +125,13 @@ const renderBody = (
     return [
       `Boundary(project, "${boundaryLabel}") {`,
       ...rootBoundaries.map((b) => renderBoundary(model, b, "  ")),
-      ...standaloneContainers.map((c) => `  ${renderContainer(c)}`),
+      ...standaloneContainers.map((c) => `  ${renderElement(c)}`),
       `}`,
     ];
   }
   return [
     ...rootBoundaries.map((b) => renderBoundary(model, b, "")),
-    ...standaloneContainers.map((c) => renderContainer(c)),
+    ...standaloneContainers.map((c) => renderElement(c)),
   ];
 };
 
@@ -141,12 +140,12 @@ export const generate = (
   options?: PlantumlGenerateOptions,
 ): FormatOutput => {
   const boundedNames = collectBoundedContainerNames(model);
-  const standalone = Object.values(model.containers).filter(
+  const standalone = Object.values(model.elements).filter(
     (c) => !boundedNames.has(c.name),
   );
 
-  const relations = Object.values(model.containers).flatMap((container) =>
-    container.relations.map((rel) => renderRelation(container.name, rel)),
+  const relations = Object.values(model.elements).flatMap((element) =>
+    element.relations.map((rel) => renderRelation(element.name, rel)),
   );
 
   const content = [

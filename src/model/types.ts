@@ -8,12 +8,19 @@
  * kube-score territory), ArchiMate, UML, BPMN.
  *
  * Performance: Record<string, T> вместо Map<string, T> — на масштабе aact
- * (30-300 containers) V8 inline cache даёт ~1ns lookup, Map ~50ns. Плюс
+ * (30-300 elements) V8 inline cache даёт ~1ns lookup, Map ~50ns. Плюс
  * JSON.stringify работает нативно, console.log показывает tree.
+ *
+ * Naming: `Element` is aact's universal aggregator for any C4 abstraction
+ * (Person / Software System / Container / Component). The literal value
+ * `kind: "Container"` still refers to the C4 level-2 concept (deployable
+ * runtime unit). Using `Element` as the wrapper type avoids the
+ * collision that aact's earlier `Container` interface had with the C4
+ * `Container` level.
  */
 
-/** C4 element types. Полный stdlib набор. */
-export type ContainerKind =
+/** C4 element kinds. Полный stdlib набор. */
+export type ElementKind =
   | "Person"
   | "System"
   | "Container"
@@ -54,7 +61,7 @@ export interface SourcePosition {
  * character of the parsed construct (half-open interval, matching
  * chevrotain and LSP conventions).
  *
- * The chevrotain parser populates this on every Container / Boundary /
+ * The chevrotain parser populates this on every Element / Boundary /
  * Relation node it emits. Regex-based loaders may omit it entirely —
  * the field is optional on each Model node. When present, the range
  * must be complete (no partial fills); the new shape exists precisely
@@ -68,12 +75,12 @@ export interface SourceLocation {
 }
 
 /**
- * Связь между двумя контейнерами. `to` — имя целевого контейнера (name-ref),
- * не объектная ссылка — это рвёт Container↔Relation цикл, делает Model
- * сериализуемой и упрощает test fixtures (`to: "containerB"` вместо ref'а).
+ * Связь между двумя elements. `to` — имя целевого element (name-ref),
+ * не объектная ссылка — это рвёт Element↔Relation цикл, делает Model
+ * сериализуемой и упрощает test fixtures (`to: "elementB"` вместо ref'а).
  */
 export interface Relation {
-  /** Имя целевого контейнера. Lookup через `model.containers[rel.to]` или helper `targetOf(model, rel)`. */
+  /** Имя целевого element. Lookup через `model.elements[rel.to]` или helper `targetOf(model, rel)`. */
   readonly to: string;
   /** Описание/label. PlantUML `Rel(from, to, label, ...)`, Structurizr `rel.description`. */
   readonly description?: string;
@@ -94,18 +101,25 @@ export interface Relation {
 }
 
 /**
- * C4 element: Person, System, Container или Component. `kind` — typed union,
- * не stringly. `external` — orthogonal flag (не отдельный `System_Ext` kind),
- * покрывает все 8 `_Ext` вариантов PlantUML/Mermaid одним полем.
+ * A C4 element: Person, Software System, Container, or Component. `kind` —
+ * typed union, не stringly. `external` — orthogonal flag (не отдельный
+ * `System_Ext` kind), покрывает все 8 `_Ext` вариантов PlantUML/Mermaid
+ * одним полем.
+ *
+ * The interface name `Element` is aact's universal aggregator for any C4
+ * abstraction. `kind: "Container"` still refers to the C4 level-2 concept
+ * (deployable runtime unit) — keeping these vocabularies separate at the
+ * interface and literal levels avoids the collision aact's earlier
+ * `Container` interface had with C4's `Container` level.
  */
-export interface Container {
-  /** Уникальное имя — ключ в `model.containers`. PlantUML alias / Structurizr `structurizr.dsl.identifier`. */
+export interface Element {
+  /** Уникальное имя — ключ в `model.elements`. PlantUML alias / Structurizr `structurizr.dsl.identifier`. */
   readonly name: string;
   /** Human-readable label. PlantUML `Container(alias, label, ...)`. */
   readonly label: string;
   /** Типизированный C4 kind. Compile-error на typo. */
-  readonly kind: ContainerKind;
-  /** Внешний контейнер (System_Ext, Container_Ext etc.). Orthogonal к kind. */
+  readonly kind: ElementKind;
+  /** Внешний element (System_Ext, Container_Ext etc.). Orthogonal к kind. */
   readonly external: boolean;
   readonly description: string;
   /** C4 technology — Structurizr `cont.technology`, PlantUML `Container(alias, label, ?techn, ...)`. */
@@ -114,7 +128,7 @@ export interface Container {
   readonly tags: readonly string[];
   /** PlantUML/Mermaid `?sprite` — отдельно от tags (раньше попадал в tags). */
   readonly sprite?: string;
-  /** Исходящие relations. Целевые контейнеры — name-refs (`relation.to`). */
+  /** Исходящие relations. Целевые elements — name-refs (`relation.to`). */
   readonly relations: readonly Relation[];
   /** $link для clickable diagrams. */
   readonly link?: string;
@@ -124,7 +138,7 @@ export interface Container {
 }
 
 /**
- * Структурная граница. `containerNames` и `boundaryNames` — name-refs, не
+ * Структурная граница. `elementNames` и `boundaryNames` — name-refs, не
  * object-refs (как в `Relation.to`) — делает Model сериализуемой и упрощает
  * test fixtures.
  */
@@ -135,8 +149,8 @@ export interface Boundary {
   /** PlantUML Boundary `?descr`, Structurizr softwareSystem.description. */
   readonly description?: string;
   readonly tags: readonly string[];
-  /** Имена контейнеров внутри этой границы. Lookup через `model.containers[name]`. */
-  readonly containerNames: readonly string[];
+  /** Имена elements внутри этой границы. Lookup через `model.elements[name]`. */
+  readonly elementNames: readonly string[];
   /** Имена вложенных boundaries. Lookup через `model.boundaries[name]`. */
   readonly boundaryNames: readonly string[];
   readonly link?: string;
@@ -150,7 +164,7 @@ export interface Boundary {
  * JSON-сериализации. Все поля readonly — после loader-фазы модель immutable.
  */
 export interface Model {
-  readonly containers: Readonly<Record<string, Container>>;
+  readonly elements: Readonly<Record<string, Element>>;
   readonly boundaries: Readonly<Record<string, Boundary>>;
   /** Корневые boundaries — top-level в рендере. Все остальные boundary вложены через `boundaryNames`. */
   readonly rootBoundaryNames: readonly string[];

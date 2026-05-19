@@ -1,11 +1,11 @@
 import YAML from "yaml";
 
 import { generate } from "../../../src/formats/kubernetes/generate";
-import type { ContainerSpec } from "../../helpers/makeModel";
+import type { ElementSpec } from "../../helpers/makeModel";
 import { makeModel } from "../../helpers/makeModel";
 
-const build = (containers: ContainerSpec[]) =>
-  generate(makeModel({ containers }));
+const build = (containers: ElementSpec[]) =>
+  generate(makeModel({ elements: containers }));
 
 describe("kubernetes generate", () => {
   it("returns empty files for empty model", () => {
@@ -174,7 +174,7 @@ describe("kubernetes generate", () => {
 
   it("uses custom defaultPort", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "orders", relations: [{ to: "payments" }] },
         { name: "payments" },
       ],
@@ -232,7 +232,7 @@ describe("kubernetes generate", () => {
 
   it("uses custom dbConnectionTemplate", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "orders", relations: [{ to: "orders_db" }] },
         { name: "orders_db", kind: "ContainerDb" },
       ],

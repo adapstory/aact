@@ -185,9 +185,13 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
         });
         await reporter.emit({ envelope } as CommandResult<TData>);
         exitWith(envelope.exitCode);
+        // exitWith is typed `never`, but tests mock process.exit to a no-op
+        // — explicit return makes the post-condition (config !== null below)
+        // hold in both contexts.
+        return;
       }
 
-      const loadedConfig = config as AactConfig;
+      const loadedConfig = config;
 
       try {
         const exec = await opts.execute(ctx, loadedConfig);

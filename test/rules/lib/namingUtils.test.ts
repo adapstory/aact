@@ -6,7 +6,7 @@ import {
 import { makeModel } from "../../helpers/makeModel";
 
 const modelOf = (names: string[]) =>
-  makeModel({ containers: names.map((name) => ({ name })) });
+  makeModel({ elements: names.map((name) => ({ name })) });
 
 describe("detectNamingConvention", () => {
   it("returns snake for empty model", () => {

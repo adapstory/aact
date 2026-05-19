@@ -1,5 +1,5 @@
-import type {Model} from "../../model";
-import { allContainers  } from "../../model";
+import type { Model } from "../../model";
+import { allElements } from "../../model";
 
 export type NamingConvention = "snake" | "camel" | "kebab";
 
@@ -9,7 +9,7 @@ export type NamingConvention = "snake" | "camel" | "kebab";
  * существующие. Empty model → "snake" fallback.
  */
 export const detectNamingConvention = (model: Model): NamingConvention => {
-  const names = allContainers(model).map((c) => c.name);
+  const names = allElements(model).map((c) => c.name);
   // Stryker disable next-line ConditionalExpression
   if (names.length === 0) return "snake";
 

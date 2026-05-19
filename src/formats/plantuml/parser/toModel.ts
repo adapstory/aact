@@ -41,8 +41,8 @@
 import type {
   Boundary,
   BoundaryKind,
-  Container,
-  ContainerKind,
+  Element,
+  ElementKind,
   Relation,
   SourceLocation,
 } from "../../../model";
@@ -171,9 +171,9 @@ const slotsFor = (macroName: string): ElementSlots => {
 
 // ── Builders ────────────────────────────────────────────────────────
 
-const buildContainer = (
+const buildElement = (
   macro: ElementMacro,
-): { container: Container; kind: ContainerKind } | undefined => {
+): { element: Element; kind: ElementKind } | undefined => {
   const kindInfo = parseC4MacroKind(macro.macroName);
   if (!kindInfo) return undefined;
   const slots = slotsFor(macro.macroName);
@@ -204,7 +204,7 @@ const buildContainer = (
     macro.positionals[slots.linkIndex],
   );
 
-  const container: Container = {
+  const element: Element = {
     name: alias,
     label,
     kind: kindInfo.kind,
@@ -217,12 +217,12 @@ const buildContainer = (
     link,
     sourceLocation: macro.range,
   };
-  return { container, kind: kindInfo.kind };
+  return { element, kind: kindInfo.kind };
 };
 
 interface BoundaryBuildResult {
   readonly boundary: Boundary;
-  readonly containerNames: readonly string[];
+  readonly elementNames: readonly string[];
   readonly childBoundaryNames: readonly string[];
 }
 
@@ -290,14 +290,14 @@ const buildBoundary = (
     kind,
     description,
     tags: parseCsvTags(tagsRaw),
-    containerNames: childContainerNames,
+    elementNames: childContainerNames,
     boundaryNames: childBoundaryNames,
     link,
     sourceLocation: macro.range,
   };
   return {
     boundary,
-    containerNames: childContainerNames,
+    elementNames: childContainerNames,
     childBoundaryNames,
   };
 };
@@ -384,7 +384,7 @@ const buildRelations = (macro: RelationMacro): RelationEmit[] => {
 // ── Tree walk ───────────────────────────────────────────────────────
 
 interface WalkAcc {
-  readonly containers: Map<string, Container>;
+  readonly elements: Map<string, Element>;
   readonly boundaries: Boundary[];
   readonly rootBoundaryNames: string[];
   readonly pendingRelations: RelationEmit[];
@@ -400,20 +400,20 @@ const walkStatements = (
   statements: readonly DiagramStatement[],
   acc: WalkAcc,
   parentBoundary?: BoundaryMacro,
-): { containerNames: string[]; boundaryNames: string[] } => {
-  const containerNames: string[] = [];
+): { elementNames: string[]; boundaryNames: string[] } => {
+  const elementNames: string[] = [];
   const boundaryNames: string[] = [];
 
   for (const stmt of statements) {
     switch (stmt.kind) {
       case "elementMacro": {
-        const built = buildContainer(stmt);
+        const built = buildElement(stmt);
         if (built) {
           // Collision detection happens in buildModel — we accept
           // overwrite semantics here and let the build layer report
-          // duplicate-container-name issues.
-          acc.containers.set(built.container.name, built.container);
-          containerNames.push(built.container.name);
+          // duplicate-element-name issues.
+          acc.elements.set(built.element.name, built.element);
+          elementNames.push(built.element.name);
         }
         break;
       }
@@ -423,7 +423,7 @@ const walkStatements = (
         const childResult = walkStatements(stmt.children, acc, stmt);
         const built = buildBoundary(
           stmt,
-          childResult.containerNames,
+          childResult.elementNames,
           childResult.boundaryNames,
         );
         if (built) {
@@ -450,7 +450,7 @@ const walkStatements = (
     }
   }
 
-  return { containerNames, boundaryNames };
+  return { elementNames, boundaryNames };
 };
 
 // ── Public entry ────────────────────────────────────────────────────
@@ -468,7 +468,7 @@ export interface PumlToModelResult extends LoadResult {
  */
 export const toModel = (file: FileNode): PumlToModelResult => {
   const acc: WalkAcc = {
-    containers: new Map(),
+    elements: new Map(),
     boundaries: [],
     rootBoundaryNames: [],
     pendingRelations: [],
@@ -483,7 +483,7 @@ export const toModel = (file: FileNode): PumlToModelResult => {
   // `validateModel` (called from `buildModel`) surfaces it as a
   // dangling-relation issue with full source context.
   for (const emit of acc.pendingRelations) {
-    const source = acc.containers.get(emit.from);
+    const source = acc.elements.get(emit.from);
     if (!source) {
       // Manufacture a placeholder container so the dangling reference
       // is visible to the validator. This mirrors what the legacy
@@ -495,7 +495,7 @@ export const toModel = (file: FileNode): PumlToModelResult => {
       // that referenced this alias) so diagnostics like "container
       // 'missing' is referenced but not declared" point at a real
       // position in the source file.
-      acc.containers.set(emit.from, {
+      acc.elements.set(emit.from, {
         name: emit.from,
         label: emit.from,
         kind: "Container",
@@ -507,14 +507,14 @@ export const toModel = (file: FileNode): PumlToModelResult => {
       });
       continue;
     }
-    acc.containers.set(emit.from, {
+    acc.elements.set(emit.from, {
       ...source,
       relations: [...source.relations, emit.relation],
     });
   }
 
   const built = buildModel({
-    containers: [...acc.containers.values()],
+    elements: [...acc.elements.values()],
     boundaries: acc.boundaries,
     rootBoundaryNames: acc.rootBoundaryNames,
   });

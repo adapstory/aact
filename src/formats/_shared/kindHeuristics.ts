@@ -1,4 +1,4 @@
-import type { ContainerKind } from "../../model";
+import type { ElementKind } from "../../model";
 
 /**
  * Эвристика kind по `technology` / `name` для форматов без явного C4 macro
@@ -58,7 +58,7 @@ const matchesAny = (text: string, patterns: readonly string[]): boolean =>
 export const inferKindFromTechnology = (
   technology?: string,
   name?: string,
-): ContainerKind => {
+): ElementKind => {
   const techLower = technology?.toLowerCase() ?? "";
   const nameLower = name?.toLowerCase() ?? "";
 

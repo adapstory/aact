@@ -1,4 +1,8 @@
-import { HumanReporter } from "../../../src/cli/output/humanReporter";
+import {
+  HumanReporter,
+  isErrorEnvelope,
+  renderErrorEnvelope,
+} from "../../../src/cli/output/humanReporter";
 import type { CliEnvelope, Renderer } from "../../../src/cli/output/types";
 
 const makeEnvelope = (overrides: Partial<CliEnvelope> = {}): CliEnvelope => ({
@@ -93,6 +97,29 @@ describe("HumanReporter", () => {
     const errText = captureErr.output();
     expect(errText).toContain("analyze");
     expect(errText).toContain("Failed to load");
+  });
+
+  it("renderErrorEnvelope writes generic failure line when no diagnostics present", () => {
+    const chunks: string[] = [];
+    const sink: NodeJS.WritableStream = {
+      write: (chunk: string) => {
+        chunks.push(chunk);
+        return true;
+      },
+    } as NodeJS.WritableStream;
+
+    renderErrorEnvelope(
+      makeEnvelope({ exitCode: 2, ok: false, diagnostics: [] }),
+      sink,
+    );
+
+    expect(chunks.join("")).toMatch(/analyze failed/);
+  });
+
+  it("isErrorEnvelope returns true only for exitCode 2", () => {
+    expect(isErrorEnvelope(makeEnvelope({ exitCode: 2 }))).toBe(true);
+    expect(isErrorEnvelope(makeEnvelope({ exitCode: 1 }))).toBe(false);
+    expect(isErrorEnvelope(makeEnvelope({ exitCode: 0 }))).toBe(false);
   });
 
   it("writes diagnostics summary to stderr alongside the primary render", () => {

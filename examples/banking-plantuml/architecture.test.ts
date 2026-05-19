@@ -2,7 +2,7 @@ import { kubernetesFormat } from "../../src/formats/kubernetes";
 import { plantumlFormat } from "../../src/formats/plantuml";
 import { load } from "../../src/formats/plantuml/load";
 import type { Model } from "../../src/model";
-import { allContainers, targetOf } from "../../src/model";
+import { allElements, targetOf } from "../../src/model";
 
 describe("Architecture (banking C4L2)", () => {
   let model: Model;
@@ -14,7 +14,7 @@ describe("Architecture (banking C4L2)", () => {
 
   it("only acl can depend on external systems", () => {
     let badRelations = 0;
-    for (const container of allContainers(model)) {
+    for (const container of allElements(model)) {
       const externalRels = container.relations.filter(
         (r) => targetOf(model, r)?.external === true,
       );
@@ -30,7 +30,7 @@ describe("Architecture (banking C4L2)", () => {
 
   it("connect to external systems only by API Gateway or kafka", () => {
     let pass = true;
-    for (const container of allContainers(model)) {
+    for (const container of allElements(model)) {
       for (const rel of container.relations) {
         const target = targetOf(model, rel);
         if (target?.external !== true) continue;

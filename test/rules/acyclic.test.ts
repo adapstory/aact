@@ -4,7 +4,7 @@ import { makeModel } from "../helpers/makeModel";
 describe("acyclicRule.check", () => {
   it("returns no violations for acyclic graph", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "b" }] },
         { name: "b", relations: [{ to: "c" }] },
         { name: "c" },
@@ -15,16 +15,16 @@ describe("acyclicRule.check", () => {
 
   it("detects self-loop", () => {
     const model = makeModel({
-      containers: [{ name: "a", relations: [{ to: "a" }] }],
+      elements: [{ name: "a", relations: [{ to: "a" }] }],
     });
     const v = acyclicRule.check(model);
     expect(v.length).toBeGreaterThan(0);
-    expect(v[0].container).toBe("a");
+    expect(v[0].element).toBe("a");
   });
 
   it("detects 2-cycle", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "b" }] },
         { name: "b", relations: [{ to: "a" }] },
       ],
@@ -34,7 +34,7 @@ describe("acyclicRule.check", () => {
 
   it("detects 3-cycle", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "b" }] },
         { name: "b", relations: [{ to: "c" }] },
         { name: "c", relations: [{ to: "a" }] },
@@ -45,7 +45,7 @@ describe("acyclicRule.check", () => {
 
   it("dangling relation does not crash", () => {
     const model = makeModel({
-      containers: [{ name: "a", relations: [{ to: "nonexistent" }] }],
+      elements: [{ name: "a", relations: [{ to: "nonexistent" }] }],
     });
     expect(acyclicRule.check(model)).toHaveLength(0);
   });

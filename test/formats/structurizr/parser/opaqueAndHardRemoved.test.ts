@@ -17,7 +17,7 @@ describe("Structurizr parser — opaque workspace blocks", () => {
     }`;
     const { model, parseErrors, opaqueBlocks } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["bank"]).toBeDefined();
+    expect(model.elements["bank"]).toBeDefined();
     expect(opaqueBlocks).toEqual([expect.objectContaining({ name: "views" })]);
     expect(opaqueBlocks[0]?.range.file).toBe("test.dsl");
   });
@@ -102,7 +102,7 @@ describe("Structurizr parser — auxiliary directives (!docs / !script / etc)", 
     }`;
     const { parseErrors, model } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("strips inline `!decisions <path> <importer>` (two args)", () => {
@@ -288,10 +288,10 @@ describe("Structurizr parser — hard-removed constructs", () => {
     expect(
       parseErrors.filter((e) => e.message.includes("enterprise")).length,
     ).toBe(1);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
     // Bank declared INSIDE the enterprise block is intentionally dropped
     // (we cannot represent the enterprise grouping in the Model).
-    expect(model.containers["bank"]).toBeUndefined();
+    expect(model.elements["bank"]).toBeUndefined();
   });
 
   it("strips `!ref bank { ... }` body wholesale", () => {
@@ -306,8 +306,8 @@ describe("Structurizr parser — hard-removed constructs", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors.some((e) => e.message.includes("!ref"))).toBe(true);
-    expect(model.containers["bank"]).toBeDefined();
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["bank"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("a hard-removed token on its own does not block declarations that come before it", () => {
@@ -319,6 +319,6 @@ describe("Structurizr parser — hard-removed constructs", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors.some((e) => e.message.includes("!ref"))).toBe(true);
-    expect(model.containers["bank"]).toBeDefined();
+    expect(model.elements["bank"]).toBeDefined();
   });
 });

@@ -9,7 +9,7 @@ import { loadFormat } from "../../src/formats/registry";
 import { structurizrDslSyntax } from "../../src/formats/structurizr/syntax";
 import type { Format } from "../../src/formats/types";
 import type { Model } from "../../src/model";
-import type { ContainerSpec } from "../helpers/makeModel";
+import type { ElementSpec } from "../helpers/makeModel";
 import { makeModel } from "../helpers/makeModel";
 
 vi.mock("node:fs/promises", () => ({
@@ -49,36 +49,36 @@ const plantumlConfig: AactConfig = {
 
 const cleanModel = (): Model =>
   makeModel({
-    containers: [
+    elements: [
       { name: "svc_a", relations: [{ to: "svc_b", technology: "http" }] },
       { name: "svc_b" },
     ],
-    boundaries: [{ name: "project", containerNames: ["svc_a", "svc_b"] }],
+    boundaries: [{ name: "project", elementNames: ["svc_a", "svc_b"] }],
   });
 
-const violatingContainers: ContainerSpec[] = [
+const violatingContainers: ElementSpec[] = [
   { name: "my_service", relations: [{ to: "ext_system" }] },
   { name: "ext_system", kind: "System", external: true },
 ];
 
 const violatingModel = (): Model =>
   makeModel({
-    containers: violatingContainers,
+    elements: violatingContainers,
     boundaries: [
       {
         name: "project",
-        containerNames: ["my_service", "ext_system"],
+        elementNames: ["my_service", "ext_system"],
       },
     ],
   });
 
 const cyclicModel = (): Model =>
   makeModel({
-    containers: [
+    elements: [
       { name: "svc_a", relations: [{ to: "svc_b" }] },
       { name: "svc_b", relations: [{ to: "svc_a" }] },
     ],
-    boundaries: [{ name: "project", containerNames: ["svc_a", "svc_b"] }],
+    boundaries: [{ name: "project", elementNames: ["svc_a", "svc_b"] }],
   });
 
 describe("executeCheck — exit code matrix", () => {
@@ -184,7 +184,7 @@ describe("executeCheck — diagnostics", () => {
   it("emits model.* diagnostics from loader issues", async () => {
     mockLoadModel.mockResolvedValue({
       model: cleanModel(),
-      issues: [{ kind: "self-relation", container: "svc_a" }],
+      issues: [{ kind: "self-relation", element: "svc_a" }],
     });
     const result = await executeCheck(plantumlConfig, {});
     expect(
@@ -272,7 +272,7 @@ describe("renderCheckText", () => {
           violations: [
             {
               rule: "acl",
-              container: "my_service",
+              element: "my_service",
               message: "calls external system",
               severity: "error",
             },
@@ -302,7 +302,7 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                container: "my_service",
+                element: "my_service",
                 message: "msg",
                 severity: "error",
               },
@@ -334,7 +334,7 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                container: "my_service",
+                element: "my_service",
                 message: "msg",
                 severity: "error",
               },
@@ -373,7 +373,7 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                container: "my_service",
+                element: "my_service",
                 message: "calls external",
                 severity: "error",
               },
@@ -406,7 +406,7 @@ describe("renderCheckText", () => {
             violations: [
               {
                 rule: "acl",
-                container: "my_service",
+                element: "my_service",
                 message: "calls external",
                 severity: "error",
                 sourceLocation: {

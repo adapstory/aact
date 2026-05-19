@@ -1,8 +1,9 @@
-import { loadModel } from "../../src/cli/loadModel";
+import { issueToDiagnostic, loadModel } from "../../src/cli/loadModel";
 import { ToolError } from "../../src/cli/output";
 import type { AactConfig } from "../../src/config";
 import { loadFormat } from "../../src/formats/registry";
 import type { Format } from "../../src/formats/types";
+import type { ModelIssue } from "../../src/model";
 import { makeModel } from "../helpers/makeModel";
 
 vi.mock("../../src/formats/registry", () => ({
@@ -106,6 +107,59 @@ describe("loadModel", () => {
       kind: "model.parseError",
       message: expect.stringContaining("Invalid Structurizr workspace"),
     });
+  });
+
+  // Per-variant issueToDiagnostic mapping table — locks the public CLI
+  // contract for every ModelIssue kind. New kinds added to ModelIssue must
+  // add a row here; missing rows surface as TS exhaustiveness errors at
+  // compile time.
+  it.each<{ readonly issue: ModelIssue; readonly kind: string }>([
+    {
+      issue: { kind: "dangling-relation", from: "a", to: "ghost" },
+      kind: "model.danglingRelation",
+    },
+    {
+      issue: {
+        kind: "element-in-boundary-not-in-model",
+        element: "ghost",
+        boundary: "b1",
+      },
+      kind: "model.elementInBoundaryNotInModel",
+    },
+    {
+      issue: { kind: "boundary-not-in-model", parent: "b1", child: "ghost" },
+      kind: "model.boundaryNotInModel",
+    },
+    {
+      issue: { kind: "boundary-cycle", path: ["a", "b", "a"] },
+      kind: "model.boundaryCycle",
+    },
+    {
+      issue: { kind: "duplicate-element-name", name: "svc" },
+      kind: "model.duplicateElementName",
+    },
+    {
+      issue: { kind: "duplicate-boundary-name", name: "boundary" },
+      kind: "model.duplicateBoundaryName",
+    },
+    {
+      issue: { kind: "duplicate-identifier", identifier: "api" },
+      kind: "model.duplicateIdentifier",
+    },
+    {
+      issue: { kind: "self-relation", element: "loop" },
+      kind: "model.selfRelation",
+    },
+    {
+      issue: { kind: "unknown-kind", element: "x", raw: "Mystery" },
+      kind: "model.unknownKind",
+    },
+  ])("maps $issue.kind to $kind diagnostic", ({ issue, kind }) => {
+    const diag = issueToDiagnostic(issue);
+    expect(diag.kind).toBe(kind);
+    expect(diag.severity).toBe("warning");
+    expect(diag.message.length).toBeGreaterThan(0);
+    expect(diag.context).toBeDefined();
   });
 
   it("re-throws unexpected errors instead of wrapping them in ToolError", async () => {

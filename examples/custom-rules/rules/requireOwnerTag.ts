@@ -1,7 +1,7 @@
 // In a real consumer project this would be `from "aact"`. We use the local
 // monorepo path so the example can be tested in-place without `npm install`.
-import type {Model} from "../../../src";
-import { defineRule  } from "../../../src";
+import type { Model } from "../../../src";
+import { defineRule } from "../../../src";
 
 export interface RequireOwnerTagOptions {
   /** Tag prefix that identifies ownership. Default `"owner:"`. */
@@ -32,11 +32,11 @@ export const requireOwnerTagRule = defineRule({
       "ContainerQueue",
     ]);
 
-    return Object.values(model.containers)
+    return Object.values(model.elements)
       .filter((c) => operationalKinds.has(c.kind))
       .filter((c) => !c.tags.some((t) => t.startsWith(prefix)))
       .map((c) => ({
-        container: c.name,
+        element: c.name,
         message: `missing ownership tag (expected "${prefix}<team>")`,
       }));
   },

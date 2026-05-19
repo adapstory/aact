@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 
 import path from "pathe";
 
-import type { Boundary, Container, Relation } from "../../model";
+import type { Boundary, Element, Relation } from "../../model";
 import { buildModel } from "../../model";
 import { inferKindFromTechnology } from "../_shared/kindHeuristics";
 import { parseCsvTags } from "../_shared/tags";
@@ -39,7 +39,7 @@ const toProperties = (
   base: StructurizrProperties | undefined,
   group?: string,
   perspectives?: Record<string, { description: string; value?: string }>,
-): Container["properties"] => {
+): Element["properties"] => {
   const out: Record<string, string> = {};
   if (base) {
     for (const [k, v] of Object.entries(base)) {
@@ -61,7 +61,7 @@ const isExternal = (system: StructurizrSoftwareSystem): boolean =>
   system.location === STRUCTURIZR_LOCATION_EXTERNAL ||
   (system.tags?.includes(STRUCTURIZR_LOCATION_EXTERNAL) ?? false);
 
-const buildPersonContainer = (p: StructurizrPerson): Container => ({
+const buildPersonContainer = (p: StructurizrPerson): Element => ({
   name: dslId(p.id, p.properties),
   label: p.name,
   kind: "Person",
@@ -75,7 +75,7 @@ const buildPersonContainer = (p: StructurizrPerson): Container => ({
 
 const buildExternalSystemContainer = (
   s: StructurizrSoftwareSystem,
-): Container => ({
+): Element => ({
   name: dslId(s.id, s.properties),
   label: s.name,
   kind: "System",
@@ -87,7 +87,7 @@ const buildExternalSystemContainer = (
   properties: toProperties(s.properties, s.group, s.perspectives),
 });
 
-const buildContainer = (c: StructurizrContainer): Container => ({
+const buildContainer = (c: StructurizrContainer): Element => ({
   name: dslId(c.id, c.properties),
   label: c.name,
   kind: inferKindFromTechnology(c.technology, c.name),
@@ -106,7 +106,7 @@ const buildSystemBoundary = (s: StructurizrSoftwareSystem): Boundary => ({
   kind: "System",
   description: s.description,
   tags: parseCsvTags(s.tags),
-  containerNames: (s.containers ?? []).map((c) => dslId(c.id, c.properties)),
+  elementNames: (s.containers ?? []).map((c) => dslId(c.id, c.properties)),
   boundaryNames: [],
   link: s.url,
   properties: toProperties(s.properties, s.group, s.perspectives),
@@ -163,7 +163,7 @@ export const load = async (filePath: string): Promise<LoadResult> => {
   const data = await fs.readFile(filepath, "utf8");
   const workspace = JSON.parse(data) as StructurizrWorkspace;
 
-  const containers: Container[] = [];
+  const containers: Element[] = [];
   const boundaries: Boundary[] = [];
   const rootBoundaryNames: string[] = [];
   const idToName = new Map<string, string>();
@@ -230,7 +230,7 @@ export const load = async (filePath: string): Promise<LoadResult> => {
 
   // Pass 3: relations — push only into Container-mapped sources
   // (Boundary sources i.e. internal SoftwareSystem-level relations silently dropped)
-  const containersByName = new Map<string, Container>(
+  const containersByName = new Map<string, Element>(
     containers.map((c) => [c.name, c]),
   );
   for (const { sourceId, relationships } of elementsWithRelations) {
@@ -249,7 +249,7 @@ export const load = async (filePath: string): Promise<LoadResult> => {
   }
 
   return buildModel({
-    containers: [...containersByName.values()],
+    elements: [...containersByName.values()],
     boundaries,
     rootBoundaryNames,
   });

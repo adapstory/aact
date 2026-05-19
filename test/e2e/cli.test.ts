@@ -284,9 +284,9 @@ const noDeprecatedTag = {
   name: "noDeprecatedTag",
   description: "Containers must not carry deprecated tag",
   check(model) {
-    return Object.values(model.containers)
+    return Object.values(model.elements)
       .filter((c) => c.tags.includes("deprecated"))
-      .map((c) => ({ container: c.name, message: 'has "deprecated" tag' }));
+      .map((c) => ({ element: c.name, message: 'has "deprecated" tag' }));
   },
 };
 

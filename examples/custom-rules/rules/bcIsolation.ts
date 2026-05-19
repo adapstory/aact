@@ -1,7 +1,7 @@
 // In a real consumer project this would be `from "aact"`. We use the local
 // monorepo path so the example can be tested in-place without `npm install`.
-import type {Model} from "../../../src";
-import { defineRule  } from "../../../src";
+import type { Model } from "../../../src";
+import { defineRule } from "../../../src";
 
 export interface BcIsolationOptions {
   /** Prefix marking a bounded-context tag. Default `"bc:"` → `bc:orders`. */
@@ -37,19 +37,19 @@ export const bcIsolationRule = defineRule({
     const brokerTag = options?.brokerTag ?? "broker";
 
     const bcOf = (containerName: string): string | undefined => {
-      const tag = model.containers[containerName]?.tags.find((t) =>
+      const tag = model.elements[containerName]?.tags.find((t) =>
         t.startsWith(bcPrefix),
       );
       return tag ? tag.slice(bcPrefix.length) : undefined;
     };
 
     const violations = [];
-    for (const container of Object.values(model.containers)) {
+    for (const container of Object.values(model.elements)) {
       const sourceBc = bcOf(container.name);
       if (!sourceBc) continue;
 
       for (const rel of container.relations) {
-        const target = model.containers[rel.to];
+        const target = model.elements[rel.to];
         if (!target) continue;
 
         const targetBc = bcOf(target.name);
@@ -60,7 +60,7 @@ export const bcIsolationRule = defineRule({
         if (targetIsApi || targetIsBroker) continue;
 
         violations.push({
-          container: container.name,
+          element: container.name,
           message: `crosses bounded contexts (${sourceBc} → ${targetBc}) via "${rel.to}" — route through *${apiSuffix} or a ${brokerTag}-tagged broker`,
         });
       }

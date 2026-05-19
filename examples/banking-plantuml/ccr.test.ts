@@ -26,7 +26,7 @@ describe("Cascade coupling reduction", () => {
       if (!parent) continue;
 
       const childBoundary = getBoundary(model, b.name)!;
-      const childContainerNames = new Set(childBoundary.containerNames);
+      const childContainerNames = new Set(childBoundary.elementNames);
       const parentResult = report.boundaries.find(
         (p) => p.name === parent.name,
       );

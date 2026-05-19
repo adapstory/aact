@@ -4,16 +4,16 @@ import { makeModel } from "../helpers/makeModel";
 describe("commonReuseRule.check", () => {
   it("violation when consumer uses subset of provider's public surface", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "consumer", relations: [{ to: "p_a" }] },
         { name: "p_a" },
         { name: "p_b" },
         { name: "other", relations: [{ to: "p_b" }] },
       ],
       boundaries: [
-        { name: "provider", containerNames: ["p_a", "p_b"] },
-        { name: "cons_ctx", containerNames: ["consumer"] },
-        { name: "other_ctx", containerNames: ["other"] },
+        { name: "provider", elementNames: ["p_a", "p_b"] },
+        { name: "cons_ctx", elementNames: ["consumer"] },
+        { name: "other_ctx", elementNames: ["other"] },
       ],
     });
     const v = commonReuseRule.check(model);
@@ -22,13 +22,13 @@ describe("commonReuseRule.check", () => {
 
   it("no violation when single-element public surface", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "consumer", relations: [{ to: "p_a" }] },
         { name: "p_a" },
       ],
       boundaries: [
-        { name: "provider", containerNames: ["p_a"] },
-        { name: "cons_ctx", containerNames: ["consumer"] },
+        { name: "provider", elementNames: ["p_a"] },
+        { name: "cons_ctx", elementNames: ["consumer"] },
       ],
     });
     expect(commonReuseRule.check(model)).toHaveLength(0);
@@ -39,7 +39,7 @@ describe("commonReuseRule.check", () => {
     // pulls in. publicOf collects all cross-boundary targets → p_a + p_b.
     // Consumer uses both → no violation.
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "consumer",
           relations: [{ to: "p_a" }, { to: "p_b" }],
@@ -48,8 +48,8 @@ describe("commonReuseRule.check", () => {
         { name: "p_b" },
       ],
       boundaries: [
-        { name: "provider", containerNames: ["p_a", "p_b"] },
-        { name: "cons_ctx", containerNames: ["consumer"] },
+        { name: "provider", elementNames: ["p_a", "p_b"] },
+        { name: "cons_ctx", elementNames: ["consumer"] },
       ],
     });
     expect(commonReuseRule.check(model)).toHaveLength(0);
@@ -59,11 +59,8 @@ describe("commonReuseRule.check", () => {
     // p_a → p_b is intra-provider. Should NOT count as "consumer uses
     // provider" since it isn't crossing boundaries.
     const model = makeModel({
-      containers: [
-        { name: "p_a", relations: [{ to: "p_b" }] },
-        { name: "p_b" },
-      ],
-      boundaries: [{ name: "provider", containerNames: ["p_a", "p_b"] }],
+      elements: [{ name: "p_a", relations: [{ to: "p_b" }] }, { name: "p_b" }],
+      boundaries: [{ name: "provider", elementNames: ["p_a", "p_b"] }],
     });
     expect(commonReuseRule.check(model)).toHaveLength(0);
   });
@@ -71,12 +68,12 @@ describe("commonReuseRule.check", () => {
   it("ignores relations from container outside any boundary (covers !srcBoundary)", () => {
     // "stray" has no boundary. Its relation should NOT contribute to usage.
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "stray", relations: [{ to: "p_a" }] },
         { name: "p_a" },
         { name: "p_b" },
       ],
-      boundaries: [{ name: "provider", containerNames: ["p_a", "p_b"] }],
+      boundaries: [{ name: "provider", elementNames: ["p_a", "p_b"] }],
     });
     // No consumer boundary → no violation possible.
     expect(commonReuseRule.check(model)).toHaveLength(0);
@@ -84,31 +81,31 @@ describe("commonReuseRule.check", () => {
 
   it("ignores relations to container outside any boundary (covers !tgtBoundary)", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "consumer", relations: [{ to: "loose_target" }] },
         { name: "loose_target" },
       ],
-      boundaries: [{ name: "cons_ctx", containerNames: ["consumer"] }],
+      boundaries: [{ name: "cons_ctx", elementNames: ["consumer"] }],
     });
     expect(commonReuseRule.check(model)).toHaveLength(0);
   });
 
   it("violation message lists used and missing public surface names", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "consumer", relations: [{ to: "p_a" }] },
         { name: "p_a" },
         { name: "p_b" },
         { name: "other", relations: [{ to: "p_b" }] },
       ],
       boundaries: [
-        { name: "provider", containerNames: ["p_a", "p_b"] },
-        { name: "cons_ctx", containerNames: ["consumer"] },
-        { name: "other_ctx", containerNames: ["other"] },
+        { name: "provider", elementNames: ["p_a", "p_b"] },
+        { name: "cons_ctx", elementNames: ["consumer"] },
+        { name: "other_ctx", elementNames: ["other"] },
       ],
     });
     const v = commonReuseRule.check(model);
-    const violation = v.find((it) => it.container === "cons_ctx");
+    const violation = v.find((it) => it.element === "cons_ctx");
     expect(violation).toBeDefined();
     expect(violation!.message).toContain("p_a"); // used
     expect(violation!.message).toContain("p_b"); // missing
@@ -120,7 +117,7 @@ describe("commonReuseRule.check", () => {
 
   it("multiple consumers: only those with partial usage violate", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         // full consumer — no violation
         {
           name: "full_c",
@@ -132,14 +129,14 @@ describe("commonReuseRule.check", () => {
         { name: "p_b" },
       ],
       boundaries: [
-        { name: "provider", containerNames: ["p_a", "p_b"] },
-        { name: "full_ctx", containerNames: ["full_c"] },
-        { name: "partial_ctx", containerNames: ["partial_c"] },
+        { name: "provider", elementNames: ["p_a", "p_b"] },
+        { name: "full_ctx", elementNames: ["full_c"] },
+        { name: "partial_ctx", elementNames: ["partial_c"] },
       ],
     });
     const v = commonReuseRule.check(model);
-    expect(v.find((it) => it.container === "partial_ctx")).toBeDefined();
-    expect(v.find((it) => it.container === "full_ctx")).toBeUndefined();
+    expect(v.find((it) => it.element === "partial_ctx")).toBeDefined();
+    expect(v.find((it) => it.element === "full_ctx")).toBeUndefined();
   });
 
   it("rule description mentions public surface usage", () => {
@@ -150,8 +147,8 @@ describe("commonReuseRule.check", () => {
   it("provider with no cross-boundary consumers: no violation, even with size>=2", () => {
     // Multi-element provider but nobody uses it → not in publicOf at all.
     const model = makeModel({
-      containers: [{ name: "p_a" }, { name: "p_b" }],
-      boundaries: [{ name: "provider", containerNames: ["p_a", "p_b"] }],
+      elements: [{ name: "p_a" }, { name: "p_b" }],
+      boundaries: [{ name: "provider", elementNames: ["p_a", "p_b"] }],
     });
     expect(commonReuseRule.check(model)).toHaveLength(0);
   });
@@ -160,7 +157,7 @@ describe("commonReuseRule.check", () => {
     // Consumer uses ALL public elements: usedNames.size === pubNames.size.
     // Predicate `usedNames.size >= pubNames.size` should make us skip.
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "consumer",
           relations: [{ to: "p_a" }, { to: "p_b" }],
@@ -169,8 +166,8 @@ describe("commonReuseRule.check", () => {
         { name: "p_b" },
       ],
       boundaries: [
-        { name: "provider", containerNames: ["p_a", "p_b"] },
-        { name: "cons_ctx", containerNames: ["consumer"] },
+        { name: "provider", elementNames: ["p_a", "p_b"] },
+        { name: "cons_ctx", elementNames: ["consumer"] },
       ],
     });
     expect(commonReuseRule.check(model)).toHaveLength(0);

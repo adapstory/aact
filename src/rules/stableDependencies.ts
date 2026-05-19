@@ -1,5 +1,5 @@
-import type {Container} from "../model";
-import { allContainers  } from "../model";
+import type { Element } from "../model";
+import { allElements } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
 /**
@@ -9,7 +9,7 @@ import type { RuleDefinition, Violation } from "./types";
  */
 
 const computeCoupling = (
-  internal: readonly Container[],
+  internal: readonly Element[],
   internalNames: ReadonlySet<string>,
 ): { ca: Map<string, number>; ce: Map<string, number> } => {
   const ca = new Map<string, number>();
@@ -41,7 +41,7 @@ export const stableDependenciesRule: RuleDefinition = {
 
   check(model) {
     const violations: Violation[] = [];
-    const internal = allContainers(model).filter((c) => !c.external);
+    const internal = allElements(model).filter((c) => !c.external);
     const internalNames = new Set(internal.map((c) => c.name));
     const { ca, ce } = computeCoupling(internal, internalNames);
 
@@ -61,7 +61,7 @@ export const stableDependenciesRule: RuleDefinition = {
         const iTarget = instability(rel.to);
         if (iSource < iTarget) {
           violations.push({
-            container: c.name,
+            element: c.name,
             message: `stable module (I=${iSource.toFixed(2)}) depends on less stable "${rel.to}" (I=${iTarget.toFixed(2)}) — dependencies should point toward stability`,
           });
         }

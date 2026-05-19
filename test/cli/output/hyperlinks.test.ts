@@ -46,4 +46,24 @@ describe("linkSourceLocation", () => {
     expect(linkSourceLocation("api  ", loc, { disabled: true })).toBe("api  ");
     expect(linkSourceLocation("→ b", loc, { disabled: true })).toBe("→ b");
   });
+
+  it("emits OSC8 sequence with file:// URI when terminal supports hyperlinks", async () => {
+    // Re-import with terminal-link mocked to claim support so we exercise
+    // the buildFileUri + terminalLink() branch (otherwise unreachable in
+    // a non-TTY test environment).
+    vi.resetModules();
+    vi.doMock("terminal-link", () => ({
+      default: Object.assign(
+        (text: string, url: string) => `]8;;${url}\\${text}]8;;\\`,
+        { isSupported: true },
+      ),
+    }));
+    const mod = await import("../../../src/cli/output/hyperlinks");
+    const rendered = mod.linkSourceLocation("text", loc);
+    expect(rendered).toContain(ESC); // OSC8 escape present
+    expect(rendered).toContain("file:///abs/path/arch.puml:12:5");
+    expect(rendered).toContain("text");
+    vi.doUnmock("terminal-link");
+    vi.resetModules();
+  });
 });

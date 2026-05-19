@@ -1,7 +1,7 @@
 import consola from "consola";
 
-import type { Container, Model } from "../model";
-import { allContainers, targetOf } from "../model";
+import type { Element, Model } from "../model";
+import { allElements, targetOf } from "../model";
 import {
   DEFAULT_ACL_NAME_PATTERNS,
   matchesAnyName,
@@ -26,14 +26,11 @@ export interface AclOptions {
 /** Pick up explicit tag OR a name-convention match — covers legacy
  *  archives without explicit `acl` tags, agent-generated diagrams
  *  with naming conventions, and tagged-by-the-book modern projects. */
-const isAcl = (
-  container: Container,
-  options: AclOptions | undefined,
-): boolean => {
+const isAcl = (element: Element, options: AclOptions | undefined): boolean => {
   const tag = options?.tag ?? "acl";
-  if (container.tags.includes(tag)) return true;
+  if (element.tags.includes(tag)) return true;
   return matchesAnyName(
-    container.name,
+    element.name,
     options?.namePatterns ?? DEFAULT_ACL_NAME_PATTERNS,
   );
 };
@@ -53,19 +50,19 @@ export const aclRule: RuleDefinition<AclOptions> = {
   check(model, options) {
     const violations: Violation[] = [];
 
-    for (const container of allContainers(model)) {
-      const externalRelations = container.relations.filter(
+    for (const element of allElements(model)) {
+      const externalRelations = element.relations.filter(
         (r) => targetOf(model, r)?.external === true,
       );
 
-      if (!isAcl(container, options) && externalRelations.length > 0) {
+      if (!isAcl(element, options) && externalRelations.length > 0) {
         const names = externalRelations.map((r) => r.to).join(", ");
         const label = externalRelations.length === 1 ? "system" : "systems";
         // Anchor on the first offending edge — lint-style "click on
         // violation, jump to the Rel line that broke the rule".
         const firstEdge = externalRelations[0];
         violations.push({
-          container: container.name,
+          element: element.name,
           message: `calls external ${label} ${names} without an ACL layer`,
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
@@ -83,43 +80,39 @@ export const aclRule: RuleDefinition<AclOptions> = {
     const results = [];
 
     for (const violation of violations) {
-      const container = model.containers[violation.container];
-      if (!container) continue;
+      const element = model.elements[violation.element];
+      if (!element) continue;
 
-      const externalRels = container.relations.filter(
+      const externalRels = element.relations.filter(
         (r) => targetOf(model, r)?.external === true,
       );
       if (externalRels.length === 0) continue;
 
-      const aclName = joinName(container.name, "acl", convention);
-      if (aclName in model.containers) {
+      const aclName = joinName(element.name, "acl", convention);
+      if (aclName in model.elements) {
         consola.warn(
-          `fix acl: skipping ${container.name} — ${aclName} already exists`,
+          `fix acl: skipping ${element.name} — ${aclName} already exists`,
         );
         continue;
       }
 
       results.push({
         rule: "acl",
-        description: `Add ACL layer for ${container.name}`,
+        description: `Add ACL layer for ${element.name}`,
         edits: [
           {
             type: "add" as const,
-            search: syntax.containerPattern(container.name),
-            content: syntax.containerDecl(
-              aclName,
-              `${container.label} ACL`,
-              tag,
-            ),
+            search: syntax.containerPattern(element.name),
+            content: syntax.containerDecl(aclName, `${element.label} ACL`, tag),
           },
           {
             type: "add" as const,
             search: syntax.containerPattern(aclName),
-            content: syntax.relationDecl(container.name, aclName),
+            content: syntax.relationDecl(element.name, aclName),
           },
           ...externalRels.map((rel) => ({
             type: "replace" as const,
-            search: syntax.relationPattern(container.name, rel.to),
+            search: syntax.relationPattern(element.name, rel.to),
             content: syntax.relationDecl(aclName, rel.to, rel.technology),
           })),
         ],

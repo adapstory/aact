@@ -11,7 +11,7 @@ describe("parseSource — full pipeline", () => {
     const result = parseSource(src, FILE);
     expect(result.parseErrors).toEqual([]);
     expect(result.preParseIssues).toEqual([]);
-    expect(result.model.containers["api"]).toBeDefined();
+    expect(result.model.elements["api"]).toBeDefined();
   });
 
   it("strips !include + LAYOUT macros silently (no parse errors)", () => {
@@ -25,7 +25,7 @@ Container(api, "API")
 `;
     const result = parseSource(src, FILE);
     expect(result.parseErrors).toEqual([]);
-    expect(result.model.containers["api"]).toBeDefined();
+    expect(result.model.elements["api"]).toBeDefined();
   });
 
   it("surfaces preParseIssue when a Deployment_Node is encountered", () => {
@@ -35,8 +35,8 @@ Container(api, "API")
     expect(result.preParseIssues[0].kind).toBe("info");
     expect(result.preParseIssues[0].message).toMatch(/Deployment/);
     // The deployment-wrapped Container is gone; the standalone Person remains.
-    expect(result.model.containers["api"]).toBeUndefined();
-    expect(result.model.containers["c"]).toBeDefined();
+    expect(result.model.elements["api"]).toBeUndefined();
+    expect(result.model.elements["c"]).toBeDefined();
   });
 
   it("trims subsequent @startuml diagrams with info-issue", () => {
@@ -45,8 +45,8 @@ Container(api, "API")
     expect(result.preParseIssues.map((i) => i.message)).toEqual([
       expect.stringMatching(/Multiple/),
     ]);
-    expect(result.model.containers["a"]).toBeDefined();
-    expect(result.model.containers["b"]).toBeUndefined();
+    expect(result.model.elements["a"]).toBeDefined();
+    expect(result.model.elements["b"]).toBeUndefined();
   });
 
   it("preserves SourceLocation across the full pipeline", () => {
@@ -58,8 +58,8 @@ Container(api, "API")
 `;
     const expected = src.indexOf("Container(api");
     const { model } = parseSource(src, FILE);
-    expect(model.containers["api"].sourceLocation?.start.offset).toBe(expected);
-    expect(model.containers["api"].sourceLocation?.file).toBe(FILE);
+    expect(model.elements["api"].sourceLocation?.start.offset).toBe(expected);
+    expect(model.elements["api"].sourceLocation?.file).toBe(FILE);
   });
 });
 
@@ -76,14 +76,14 @@ describe("parseSource — canonical fixtures from .parser-refs/C4-PlantUML/sampl
     const src = readFixture("C4_Context Diagram Sample - bigbankplc.puml");
     const result = parseSource(src, FILE);
     expect(result.parseErrors).toEqual([]);
-    expect(Object.keys(result.model.containers).sort()).toEqual([
+    expect(Object.keys(result.model.elements).sort()).toEqual([
       "banking_system",
       "customer",
       "mail_system",
       "mainframe",
     ]);
     // Rel_Back(customer, mail_system) → mail_system → customer
-    expect(result.model.containers["mail_system"].relations[0]?.to).toBe(
+    expect(result.model.elements["mail_system"].relations[0]?.to).toBe(
       "customer",
     );
   });
@@ -93,10 +93,10 @@ describe("parseSource — canonical fixtures from .parser-refs/C4-PlantUML/sampl
     const result = parseSource(src, FILE);
     expect(result.parseErrors).toEqual([]);
     expect(result.model.rootBoundaryNames).toEqual(["c1"]);
-    expect(result.model.boundaries["c1"].containerNames.length).toBe(5);
+    expect(result.model.boundaries["c1"].elementNames.length).toBe(5);
     // External systems are siblings of the boundary, not inside it.
-    expect(result.model.containers["email_system"].external).toBe(true);
-    expect(result.model.containers["banking_system"].external).toBe(true);
+    expect(result.model.elements["email_system"].external).toBe(true);
+    expect(result.model.elements["banking_system"].external).toBe(true);
   });
 
   it("techtribesjs: Lay_R does NOT produce a relation", () => {
@@ -104,7 +104,7 @@ describe("parseSource — canonical fixtures from .parser-refs/C4-PlantUML/sampl
     const result = parseSource(src, FILE);
     expect(result.parseErrors).toEqual([]);
     // Lay_R(rel_db, filesystem) — layout hint, no relation.
-    expect(result.model.containers["rel_db"].relations).toEqual([]);
+    expect(result.model.elements["rel_db"].relations).toEqual([]);
   });
 
   it("bigbankplc component: Container_Boundary with 4 Components + internal Rels", () => {
@@ -112,14 +112,14 @@ describe("parseSource — canonical fixtures from .parser-refs/C4-PlantUML/sampl
     const result = parseSource(src, FILE);
     expect(result.parseErrors).toEqual([]);
     expect(result.model.boundaries["api"].kind).toBe("Container");
-    expect([...result.model.boundaries["api"].containerNames].sort()).toEqual([
+    expect([...result.model.boundaries["api"].elementNames].sort()).toEqual([
       "accounts",
       "mbsfacade",
       "security",
       "sign",
     ]);
     // sign → security relation declared inside the boundary block.
-    const signRels = result.model.containers["sign"].relations.map((r) => r.to);
+    const signRels = result.model.elements["sign"].relations.map((r) => r.to);
     expect(signRels).toEqual(["security"]);
   });
 
@@ -152,7 +152,7 @@ describe("parseSource — canonical fixtures from .parser-refs/C4-PlantUML/sampl
       // Every fixture has at least one Container (the deployment ones
       // surface their wrapped containers via preParse-strip — they
       // still leave standalone elements).
-      expect(Object.keys(result.model.containers).length).toBeGreaterThan(0);
+      expect(Object.keys(result.model.elements).length).toBeGreaterThan(0);
     },
   );
 
@@ -191,6 +191,6 @@ Container(api, "API")
     expect(result.parseErrors.length).toBeGreaterThan(0);
     // Despite the parse error, the parser recovers and the in-scope
     // Container survives.
-    expect(result.model.containers["api"]).toBeDefined();
+    expect(result.model.elements["api"]).toBeDefined();
   });
 });

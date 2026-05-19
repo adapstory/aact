@@ -1,6 +1,6 @@
 import YAML from "yaml";
 
-import type { Container, Model, Relation } from "../../model";
+import type { Element, Model, Relation } from "../../model";
 import type { FormatOutput } from "../types";
 
 export interface KubernetesGenerateOptions {
@@ -15,7 +15,7 @@ const toEnvKey = (name: string): string =>
 
 const buildEnvVar = (
   relation: Relation,
-  targetKind: Container["kind"] | undefined,
+  targetKind: Element["kind"] | undefined,
   targetExternal: boolean | undefined,
   sourceKebab: string,
   options: { defaultPort: number; dbConnectionTemplate: string },
@@ -53,7 +53,7 @@ const buildEnvVar = (
 };
 
 /**
- * Model → k8s deployment YAML files (one per Container kind:Container).
+ * Model → k8s deployment YAML files (one per Container kind: Element).
  * Heuristic mapping: env vars from relations using technology hints.
  *
  * Document caveat (см. README): k8s — deployment artifact, не C4 source.
@@ -73,16 +73,16 @@ export const generate = (
 
   // Only Container kind elements become deployment YAML.
   // Person/System/Component не deployable units в этом контексте.
-  const containers = Object.values(model.containers).filter(
+  const containers = Object.values(model.elements).filter(
     (c) => c.kind === "Container",
   );
 
-  const files = containers.map((container) => {
-    const kebabName = toKebab(container.name);
+  const files = containers.map((element) => {
+    const kebabName = toKebab(element.name);
 
     const envEntries: { key: string; value: string }[] = [];
-    for (const relation of container.relations) {
-      const target = model.containers[relation.to];
+    for (const relation of element.relations) {
+      const target = model.elements[relation.to];
       const entry = buildEnvVar(
         relation,
         target?.kind,

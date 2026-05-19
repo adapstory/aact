@@ -5,8 +5,8 @@ import path from "pathe";
 
 import { generate } from "../../../src/formats/plantuml/generate";
 import { load } from "../../../src/formats/plantuml/load";
-import type { Container, Model, Relation } from "../../../src/model";
-import { allContainers } from "../../../src/model";
+import type { Element, Model, Relation } from "../../../src/model";
+import { allElements } from "../../../src/model";
 import { makeModel } from "../../helpers/makeModel";
 
 /**
@@ -28,7 +28,7 @@ beforeAll(async () => {
  * Поля которые мы заведомо НЕ переносим через round-trip (см. known gaps
  * в load.test.ts) — исключаем: properties, sourceLocation, order на relation.
  */
-const normalizeContainer = (c: Container) => ({
+const normalizeContainer = (c: Element) => ({
   name: c.name,
   label: c.label,
   kind: c.kind,
@@ -55,7 +55,7 @@ const normalizeRelation = (r: Relation) => ({
 });
 
 const normalize = (model: Model) => ({
-  containers: allContainers(model)
+  elements: allElements(model)
     .map(normalizeContainer)
     .toSorted((a, b) => a.name.localeCompare(b.name)),
   boundaries: Object.values(model.boundaries)
@@ -64,7 +64,7 @@ const normalize = (model: Model) => ({
       label: b.label,
       kind: b.kind,
       tags: [...b.tags].toSorted(),
-      containerNames: [...b.containerNames].toSorted(),
+      elementNames: [...b.elementNames].toSorted(),
       boundaryNames: [...b.boundaryNames].toSorted(),
       link: b.link,
     }))
@@ -84,7 +84,7 @@ const roundTrip = async (model: Model): Promise<Model> => {
 describe("PlantUML round-trip integrity (F3)", () => {
   it("preserves a flat container model", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         { name: "orders_api", label: "Orders API", technology: "Java" },
         { name: "orders_db", label: "Orders DB", kind: "ContainerDb" },
       ],
@@ -95,7 +95,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves a container with all fields populated", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         {
           name: "svc",
           label: "Service",
@@ -114,7 +114,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves Person and System contexts (no techn slot)", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         { name: "user", label: "End User", kind: "Person" },
         { name: "core", label: "Core System", kind: "System" },
         {
@@ -129,9 +129,9 @@ describe("PlantUML round-trip integrity (F3)", () => {
     expect(normalize(rebuilt)).toEqual(normalize(original));
   });
 
-  it("preserves all ContainerKind variants (Db, Queue, Component)", async () => {
+  it("preserves all ElementKind variants (Db, Queue, Component)", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         { name: "api", label: "API", kind: "Container" },
         { name: "db", label: "DB", kind: "ContainerDb" },
         { name: "queue", label: "Queue", kind: "ContainerQueue" },
@@ -146,7 +146,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves external flag across all kinds", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         { name: "ext_p", label: "Ext Person", kind: "Person", external: true },
         { name: "ext_s", label: "Ext Sys", kind: "System", external: true },
         {
@@ -169,7 +169,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves relations with all field variants", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         {
           name: "a",
           relations: [
@@ -194,7 +194,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves boundary nesting", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         { name: "api", label: "API" },
         { name: "worker", label: "Worker" },
         { name: "inner_svc", label: "Inner Svc" },
@@ -204,12 +204,12 @@ describe("PlantUML round-trip integrity (F3)", () => {
           name: "outer",
           label: "Outer",
           boundaryNames: ["inner"],
-          containerNames: ["api", "worker"],
+          elementNames: ["api", "worker"],
         },
         {
           name: "inner",
           label: "Inner",
-          containerNames: ["inner_svc"],
+          elementNames: ["inner_svc"],
           tags: ["domain"],
         },
       ],
@@ -221,7 +221,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves cross-boundary relations", async () => {
     const original = makeModel({
-      containers: [
+      elements: [
         {
           name: "api",
           label: "API",
@@ -230,7 +230,7 @@ describe("PlantUML round-trip integrity (F3)", () => {
         { name: "ext", label: "External", kind: "System", external: true },
       ],
       boundaries: [
-        { name: "platform", label: "Platform", containerNames: ["api"] },
+        { name: "platform", label: "Platform", elementNames: ["api"] },
       ],
     });
     const rebuilt = await roundTrip(original);
@@ -239,12 +239,12 @@ describe("PlantUML round-trip integrity (F3)", () => {
 
   it("preserves boundary tags and link", async () => {
     const original = makeModel({
-      containers: [{ name: "svc" }],
+      elements: [{ name: "svc" }],
       boundaries: [
         {
           name: "ctx",
           label: "Context",
-          containerNames: ["svc"],
+          elementNames: ["svc"],
           tags: ["domain", "core"],
           link: "https://wiki.example.com/ctx",
         },
@@ -264,15 +264,15 @@ describe("PlantUML round-trip integrity (F3)", () => {
     const rebuilt = await roundTrip(fixtureModel);
 
     // Container count + name set must match exactly.
-    expect(Object.keys(rebuilt.containers).toSorted()).toEqual(
-      Object.keys(fixtureModel.containers).toSorted(),
+    expect(Object.keys(rebuilt.elements).toSorted()).toEqual(
+      Object.keys(fixtureModel.elements).toSorted(),
     );
 
     // Per container: kind/external/tags/relations должны быть identical
     // (description/technology могут отсутствовать в fixture).
-    for (const name of Object.keys(fixtureModel.containers)) {
-      const before = fixtureModel.containers[name];
-      const after = rebuilt.containers[name];
+    for (const name of Object.keys(fixtureModel.elements)) {
+      const before = fixtureModel.elements[name];
+      const after = rebuilt.elements[name];
       expect(after.kind).toBe(before.kind);
       expect(after.external).toBe(before.external);
       expect([...after.tags].toSorted()).toEqual([...before.tags].toSorted());

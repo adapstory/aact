@@ -5,26 +5,26 @@ import { plantumlSyntax } from "../../src/formats/plantuml/syntax";
 import { structurizrDslSyntax } from "../../src/formats/structurizr/syntax";
 import { crudRule } from "../../src/rules";
 import { applyEdits } from "../../src/rules/lib/applyEdits";
-import type { BoundarySpec, ContainerSpec } from "../helpers/makeModel";
+import type { BoundarySpec, ElementSpec } from "../helpers/makeModel";
 import { makeModel } from "../helpers/makeModel";
 
 const nameArb = fc
   .string({ minLength: 2, maxLength: 8 })
   .filter((s) => /^[a-z][a-z0-9_]*$/.test(s));
 
-const dbSpec = (name = "orders_db", label = "Orders DB"): ContainerSpec => ({
+const dbSpec = (name = "orders_db", label = "Orders DB"): ElementSpec => ({
   name,
   label,
   kind: "ContainerDb",
 });
 
-const violation = (container: string) => ({ container, message: "" });
+const violation = (element: string) => ({ element, message: "" });
 
-const buildModel = (containers: ContainerSpec[], boundaries?: BoundarySpec[]) =>
-  makeModel({ containers, boundaries });
+const buildModel = (elements: ElementSpec[], boundaries?: BoundarySpec[]) =>
+  makeModel({ elements, boundaries });
 
 const fixPuml = (
-  containers: ContainerSpec[],
+  containers: ElementSpec[],
   violationContainer: string,
   options?: { repoTags?: string[] },
   boundaries?: BoundarySpec[],
@@ -54,7 +54,7 @@ describe("crudRule.check", () => {
     ]);
     const v = crudRule.check(model);
     expect(v).toHaveLength(1);
-    expect(v[0].container).toBe("orders");
+    expect(v[0].element).toBe("orders");
     expect(v[0].message).toMatch(/repo/);
   });
 
@@ -313,8 +313,8 @@ describe("crudRule.fix — non-repo accesses DB", () => {
       "fulfillment_api",
       undefined,
       [
-        { name: "orders", containerNames: ["orders_db"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_db"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     );
     expect(warn).toHaveBeenCalled();
@@ -522,11 +522,11 @@ describe("crudRule.fix — cross-boundary", () => {
   const crossBoundary: BoundarySpec[] = [
     {
       name: "orders",
-      containerNames: ["orders_public_api", "orders_repo", "orders_db"],
+      elementNames: ["orders_public_api", "orders_repo", "orders_db"],
     },
-    { name: "fulfillment", containerNames: ["fulfillment_api"] },
+    { name: "fulfillment", elementNames: ["fulfillment_api"] },
   ];
-  const crossBoundaryContainers: ContainerSpec[] = [
+  const crossBoundaryContainers: ElementSpec[] = [
     { name: "orders_public_api" },
     { name: "orders_repo", tags: ["repo"], relations: [{ to: "orders_db" }] },
     dbSpec(),
@@ -551,7 +551,7 @@ describe("crudRule.fix — cross-boundary", () => {
       [{ name: "orders_api", relations: [{ to: "orders_db" }] }, dbSpec()],
       "orders_api",
       undefined,
-      [{ name: "orders", containerNames: ["orders_db"] }],
+      [{ name: "orders", elementNames: ["orders_db"] }],
     );
     expect(results).toHaveLength(1);
     expect(results[0].edits).toHaveLength(3);
@@ -562,7 +562,7 @@ describe("crudRule.fix — cross-boundary", () => {
       [{ name: "orders_api", relations: [{ to: "orders_db" }] }, dbSpec()],
       "orders_api",
       undefined,
-      [{ name: "orders", containerNames: ["orders_api"] }],
+      [{ name: "orders", elementNames: ["orders_api"] }],
     );
     expect(results).toHaveLength(1);
     expect(results[0].edits).toHaveLength(3);
@@ -573,7 +573,7 @@ describe("crudRule.fix — cross-boundary", () => {
       [{ name: "orders_api", relations: [{ to: "orders_db" }] }, dbSpec()],
       "orders_api",
       undefined,
-      [{ name: "orders", containerNames: ["orders_api", "orders_db"] }],
+      [{ name: "orders", elementNames: ["orders_api", "orders_db"] }],
     );
     expect(results).toHaveLength(1);
     expect(results[0].edits).toHaveLength(3);
@@ -594,8 +594,8 @@ describe("crudRule.fix — cross-boundary", () => {
       "fulfillment_api",
       undefined,
       [
-        { name: "orders", containerNames: ["orders_repo", "orders_db"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_repo", "orders_db"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     );
     expect(results).toHaveLength(0);
@@ -610,8 +610,8 @@ describe("crudRule.fix — cross-boundary", () => {
       "fulfillment_api",
       undefined,
       [
-        { name: "orders", containerNames: ["orders_db"] },
-        { name: "fulfillment", containerNames: ["fulfillment_api"] },
+        { name: "orders", elementNames: ["orders_db"] },
+        { name: "fulfillment", elementNames: ["fulfillment_api"] },
       ],
     );
     expect(results).toHaveLength(0);

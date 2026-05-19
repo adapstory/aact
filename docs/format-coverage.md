@@ -30,7 +30,7 @@ not applicable to this format, `gap` = silent drop (документирован
 | `kind`           | ✓ `Boundary` / `System_Boundary` / `Container_Boundary` / `Enterprise_Boundary` | ✓ reverse map | hardcoded `"System"` (internal system → Boundary)                       |
 | `description`    | ⚠ `gap` — parser принимает только 4 positional, descr (6-й) недоступен          | ⚠ gap         | ✓ `description`                                                         |
 | `tags`           | ✓                                                                               | ✓             | ✓ CSV                                                                   |
-| `containerNames` | ✓ via elements scan                                                             | ✓             | ✓ s.containers                                                          |
+| `elementNames`   | ✓ via elements scan                                                             | ✓             | ✓ s.containers                                                          |
 | `boundaryNames`  | ✓ nested boundaries                                                             | ✓             | always `[]` — Structurizr не nests softwareSystem inside softwareSystem |
 | `link`           | ✓                                                                               | ✓ `$link=`    | ✓ `url`                                                                 |
 | `properties`     | ⚠ `gap`                                                                         | ⚠ gap         | ✓ user + group + perspectives                                           |

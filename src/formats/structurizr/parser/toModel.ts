@@ -19,8 +19,8 @@
 
 import type {
   Boundary,
-  Container,
-  ContainerKind,
+  Element,
+  ElementKind,
   ModelIssue,
   Relation,
 } from "../../../model";
@@ -44,7 +44,7 @@ import type {
  * later passes.
  */
 export const toModel = (workspace: WorkspaceNode): LoadResult => {
-  const containers: Container[] = [];
+  const containers: Element[] = [];
   const boundaries: Boundary[] = [];
 
   // Identifier index — declaration site → element name. We rely on this
@@ -86,7 +86,7 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
   }
 
   const built = buildModel({
-    containers,
+    elements: containers,
     boundaries,
     rootBoundaryNames: boundaries.map((b) => b.name),
     workspace: workspaceMetadata(workspace),
@@ -181,12 +181,12 @@ const impliedRelationshipsEnabled = (workspace: WorkspaceNode): boolean => {
  *         description and technology, with empty tags — unless an
  *         identical relation already exists between S' and D'.
  *
- * Boundaries can have child containers (`Boundary.containerNames`)
+ * Boundaries can have child containers (`Boundary.elementNames`)
  * and child boundaries (`Boundary.boundaryNames`); the parent chain
  * is reversed by scanning every boundary once.
  */
 const applyImpliedRelationships = (
-  containers: Container[],
+  containers: Element[],
   boundaries: Boundary[],
 ): void => {
   // Build a child-name → parent-name index for both containers and
@@ -196,7 +196,7 @@ const applyImpliedRelationships = (
   // ancestor itself isn't a Container today.
   const parentOf = new Map<string, string>();
   for (const b of boundaries) {
-    for (const c of b.containerNames) parentOf.set(c, b.name);
+    for (const c of b.elementNames) parentOf.set(c, b.name);
     for (const nested of b.boundaryNames) parentOf.set(nested, b.name);
   }
 
@@ -290,7 +290,7 @@ const ELEMENT_KINDS = new Set([
 
 const collectModelChild = (
   child: ModelChildNode,
-  containers: Container[],
+  containers: Element[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
@@ -358,7 +358,7 @@ const elementChildren = (
 
 const handleGroup = (
   group: Extract<ElementNode, { kind: "group" }>,
-  containers: Container[],
+  containers: Element[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
@@ -413,7 +413,7 @@ const handleGroup = (
   }
 };
 
-const withGroupProperty = <T extends Container | Boundary>(
+const withGroupProperty = <T extends Element | Boundary>(
   el: T,
   groupName: string,
 ): T => ({
@@ -424,7 +424,7 @@ const withGroupProperty = <T extends Container | Boundary>(
 const handleBoundary = (
   element: Extract<ElementNode, { kind: "softwareSystem" | "container" }>,
   children: readonly (ElementNode | RelationshipNode)[],
-  containers: Container[],
+  containers: Element[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   selfIdentifierPath: string,
@@ -475,7 +475,7 @@ const handleBoundary = (
     kind: element.kind === "softwareSystem" ? "System" : "Container",
     description: agg.description,
     tags: agg.tags,
-    containerNames: childContainerNames,
+    elementNames: childContainerNames,
     boundaryNames: childBoundaryNames,
     link: agg.link,
     properties: agg.properties,
@@ -592,7 +592,7 @@ const aggregateBody = (
 const handleLeaf = (
   element: Exclude<ElementNode, { kind: "group" }>,
   children: readonly (ElementNode | RelationshipNode)[],
-  containers: Container[],
+  containers: Element[],
   identifierMap: Map<string, string>,
   name: string,
 ): void => {
@@ -620,7 +620,7 @@ const handleLeaf = (
 
 const handleElement = (
   element: ElementNode,
-  containers: Container[],
+  containers: Element[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   parentIdentifierPath: string | undefined,
@@ -657,7 +657,7 @@ const handleElement = (
   // Keys are stored lowercased and looked up lowercased to mirror the
   // reference parser's equalsIgnoreCase identifier resolution. The
   // mapped value is the canonical identifier itself (the
-  // Model.containers key) — relations / reopens resolve to that.
+  // Model.elements key) — relations / reopens resolve to that.
   identifierMap.set(lookupKey.toLowerCase(), lookupKey);
   const selfIdentifierPath = parentIdentifierPath
     ? `${parentIdentifierPath}.${lookupKey}`
@@ -708,7 +708,7 @@ const handleElement = (
   handleLeaf(element, children, containers, identifierMap, lookupKey);
 };
 
-const kindFromAstKind = (k: ElementNode["kind"]): ContainerKind => {
+const kindFromAstKind = (k: ElementNode["kind"]): ElementKind => {
   switch (k) {
     case "person": {
       return "Person";
@@ -749,7 +749,7 @@ const kindFromAstKind = (k: ElementNode["kind"]): ContainerKind => {
  */
 const handleRelationship = (
   rel: RelationshipNode,
-  containers: Container[],
+  containers: Element[],
   identifierMap: Map<string, string>,
   enclosingElementName?: string,
 ): void => {
@@ -802,7 +802,7 @@ const handleRelationship = (
  */
 const handleReopen = (
   reopen: ReopenNode,
-  containers: Container[],
+  containers: Element[],
   boundaries: Boundary[],
   identifierMap: Map<string, string>,
   parserIssues: ModelIssue[],
@@ -863,7 +863,7 @@ const handleReopen = (
       handleRelationship(rel, containers, identifierMap, targetDisplay);
     }
     // New nested elements: process them, then patch the target
-    // Boundary's containerNames / boundaryNames lists to include
+    // Boundary's elementNames / boundaryNames lists to include
     // the newcomers so the structural Model stays consistent.
     const containersBefore = containers.length;
     const boundariesBefore = boundaries.length;
@@ -891,7 +891,7 @@ const handleReopen = (
       const target = boundaries[boundaryIdx];
       boundaries[boundaryIdx] = {
         ...target,
-        containerNames: [...target.containerNames, ...addedContainerNames],
+        elementNames: [...target.elementNames, ...addedContainerNames],
         boundaryNames: [...target.boundaryNames, ...addedBoundaryNames],
       };
     }
@@ -905,12 +905,12 @@ const handleReopen = (
  * properties) to an existing Container. Used by the reopen path.
  */
 const mergeContainerBody = (
-  c: Container,
+  c: Element,
   statements: readonly Exclude<
     ElementBodyNode,
     ElementNode | RelationshipNode
   >[],
-): Container => {
+): Element => {
   const delta = aggregateBodyStatements(statements);
   return {
     ...c,

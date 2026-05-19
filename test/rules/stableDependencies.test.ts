@@ -4,7 +4,7 @@ import { makeModel } from "../helpers/makeModel";
 describe("stableDependenciesRule.check", () => {
   it("no violation when deps point to more stable", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "b" }] },
         { name: "b", relations: [{ to: "c" }] },
         { name: "c" },
@@ -22,7 +22,7 @@ describe("stableDependenciesRule.check", () => {
     // Now flip: e is "stable" (afferent=2, efferent=1) → I=1/3 ≈ 0.33
     // e → a (I=1) — stable depends on UNstable → fire.
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "x" }] },
         { name: "b", relations: [{ to: "e" }] },
         { name: "c", relations: [{ to: "e" }] },
@@ -31,9 +31,7 @@ describe("stableDependenciesRule.check", () => {
       ],
     });
     const v = stableDependenciesRule.check(model);
-    const eToA = v.find(
-      (it) => it.container === "e" && it.message.includes("a"),
-    );
+    const eToA = v.find((it) => it.element === "e" && it.message.includes("a"));
     expect(eToA).toBeDefined();
     // Message format pin: covers StringLiteral mutants on the message
     expect(eToA!.message).toMatch(/stable module .I=\d\.\d{2}/);
@@ -41,7 +39,7 @@ describe("stableDependenciesRule.check", () => {
   });
 
   it("returns array (covers initial violations: [] AssignmentOperator)", () => {
-    const model = makeModel({ containers: [] });
+    const model = makeModel({ elements: [] });
     const v = stableDependenciesRule.check(model);
     expect(Array.isArray(v)).toBe(true);
     expect(v).toHaveLength(0);
@@ -52,7 +50,7 @@ describe("stableDependenciesRule.check", () => {
     // ce=1 (efferent), I_a = 1; "ext" would be in internal set so checking
     // "iSource < iTarget" might fire. Pin: external excluded.
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "ext" }] },
         { name: "ext", kind: "System", external: true },
       ],
@@ -66,7 +64,7 @@ describe("stableDependenciesRule.check", () => {
     // internal, a would have I_a = 1 and ext would have I_ext = 0, leading
     // to false violation.
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "b" }, { to: "ext" }] },
         { name: "b" },
         { name: "ext", kind: "System", external: true },
@@ -80,7 +78,7 @@ describe("stableDependenciesRule.check", () => {
     // returns 1), instability(a) would divide by 0 → NaN, behavior undefined.
     // Pin: isolated container coexists with other relations without throwing.
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a" },
         { name: "b", relations: [{ to: "c" }] },
         { name: "c" },
@@ -96,7 +94,7 @@ describe("stableDependenciesRule.check", () => {
     //   x: ca=2, ce=0 → I=0
     // Now a → b: iSource(a)=1, iTarget(b)=1 → 1 < 1 is false → no violation.
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "a", relations: [{ to: "x" }, { to: "b" }] },
         { name: "b", relations: [{ to: "x" }] },
         { name: "x" },
@@ -105,7 +103,7 @@ describe("stableDependenciesRule.check", () => {
     // a → b should NOT trigger (equal stability).
     const v = stableDependenciesRule.check(model);
     expect(
-      v.find((it) => it.container === "a" && it.message.includes("b")),
+      v.find((it) => it.element === "a" && it.message.includes("b")),
     ).toBeUndefined();
   });
 

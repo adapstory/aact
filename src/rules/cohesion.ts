@@ -1,5 +1,5 @@
 import type { Boundary, Model } from "../model";
-import { getBoundary, getContainer } from "../model";
+import { getBoundary, getElement } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
 /**
@@ -11,12 +11,12 @@ import type { RuleDefinition, Violation } from "./types";
  */
 
 const getBoundaryCohesion = (model: Model, boundary: Boundary): number => {
-  const names = new Set(boundary.containerNames);
+  const names = new Set(boundary.elementNames);
   let result = 0;
-  for (const containerName of boundary.containerNames) {
-    const container = getContainer(model, containerName);
-    if (!container) continue;
-    result += container.relations.filter((r) => names.has(r.to)).length;
+  for (const containerName of boundary.elementNames) {
+    const element = getElement(model, containerName);
+    if (!element) continue;
+    result += element.relations.filter((r) => names.has(r.to)).length;
   }
   for (const innerName of boundary.boundaryNames) {
     const inner = getBoundary(model, innerName);
@@ -26,14 +26,14 @@ const getBoundaryCohesion = (model: Model, boundary: Boundary): number => {
 };
 
 const getBoundaryCoupling = (model: Model, boundary: Boundary): number => {
-  const names = new Set(boundary.containerNames);
+  const names = new Set(boundary.elementNames);
   let result = 0;
 
-  for (const containerName of boundary.containerNames) {
-    const container = getContainer(model, containerName);
-    if (!container) continue;
-    result += container.relations.filter((r) => {
-      const target = getContainer(model, r.to);
+  for (const containerName of boundary.elementNames) {
+    const element = getElement(model, containerName);
+    if (!element) continue;
+    result += element.relations.filter((r) => {
+      const target = getElement(model, r.to);
       return target && !target.external && !names.has(r.to);
     }).length;
   }
@@ -41,11 +41,11 @@ const getBoundaryCoupling = (model: Model, boundary: Boundary): number => {
   for (const innerName of boundary.boundaryNames) {
     const inner = getBoundary(model, innerName);
     if (!inner) continue;
-    for (const containerName of inner.containerNames) {
-      const container = getContainer(model, containerName);
-      if (!container) continue;
-      result += container.relations.filter(
-        (r) => getContainer(model, r.to)?.external === true,
+    for (const containerName of inner.elementNames) {
+      const element = getElement(model, containerName);
+      if (!element) continue;
+      result += element.relations.filter(
+        (r) => getElement(model, r.to)?.external === true,
       ).length;
     }
   }
@@ -73,7 +73,7 @@ export const cohesionRule: RuleDefinition = {
 
       if (cohesion <= coupling) {
         violations.push({
-          container: boundary.name,
+          element: boundary.name,
           message: `coupling (${coupling}) ≥ cohesion (${cohesion}) — more cross-boundary dependencies than internal connections`,
           ...(loc ? { sourceLocation: loc } : {}),
         });
@@ -89,7 +89,7 @@ export const cohesionRule: RuleDefinition = {
         );
         if (cohesion >= innerCohesionSum) {
           violations.push({
-            container: boundary.name,
+            element: boundary.name,
             message: `parent cohesion (${cohesion}) ≥ sum of inner cohesions (${innerCohesionSum}) — parent boundary should be less cohesive than its sub-boundaries`,
             ...(loc ? { sourceLocation: loc } : {}),
           });

@@ -114,11 +114,11 @@ const crudViolations = crudRule.check(model, { repoTags: ["repo", "dao"] });
 const { report } = analyzeArchitecture(model);
 console.log(`Elements: ${report.elementsCount}`);
 
-// Прямой доступ к containers / boundaries — Record<name, ...>
-for (const container of Object.values(model.containers)) {
-  console.log(`${container.kind} ${container.name}`);
+// Прямой доступ к elements / boundaries — Record<name, ...>
+for (const element of Object.values(model.elements)) {
+  console.log(`${element.kind} ${element.name}`);
 }
-const ordersService = model.containers["orders"];
+const ordersService = model.elements["orders"];
 ```
 
 Полный API: [`Model`](./src/model/types.ts), [`Format`](./src/formats/types.ts),

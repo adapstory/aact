@@ -25,7 +25,7 @@ import { configArg, jsonArg } from "../sharedArgs";
 
 export interface CheckViolation {
   readonly rule: string;
-  readonly container: string;
+  readonly element: string;
   readonly message: string;
   /** v1: always "error". Per-rule severity will be additive in a future bump. */
   readonly severity: "error";
@@ -33,7 +33,7 @@ export interface CheckViolation {
    * Optional location of the offending construct in source. Populated
    * either from `Violation.sourceLocation` if the rule set it
    * explicitly, or by looking up
-   * `model.containers[v.container].sourceLocation` as fallback.
+   * `model.elements[v.element].sourceLocation` as fallback.
    * Surfaces in the JSON envelope for agents and powers OSC8
    * hyperlinks in text mode (`terminal-link`).
    */
@@ -197,19 +197,19 @@ const flattenViolations = (
   const out: CheckViolation[] = [];
   for (const result of results) {
     for (const v of result.violations) {
-      // Fall back to the container's sourceLocation when the rule
+      // Fall back to the element's sourceLocation when the rule
       // didn't set one. Boundary-level rules (cohesion) use the
-      // `container` field to carry a boundary name — fall through to
+      // `element` field to carry a boundary name — fall through to
       // `model.boundaries[name]` so those violations are anchored
       // too. Rules that flag a specific relation should set
       // `v.sourceLocation` explicitly for precision.
       const sourceLocation =
         v.sourceLocation ??
-        model.containers[v.container]?.sourceLocation ??
-        model.boundaries[v.container]?.sourceLocation;
+        model.elements[v.element]?.sourceLocation ??
+        model.boundaries[v.element]?.sourceLocation;
       out.push({
         rule: result.name,
-        container: v.container,
+        element: v.element,
         message: v.message,
         severity: "error",
         ...(sourceLocation ? { sourceLocation } : {}),
@@ -357,7 +357,7 @@ const renderGithubAnnotations = (
       ? `file=${loc.file},line=${loc.start.line},col=${loc.start.col},`
       : "";
     sink.write(
-      `::error ${locAttrs}title=${v.rule}::${v.container}: ${v.message}\n`,
+      `::error ${locAttrs}title=${v.rule}::${v.element}: ${v.message}\n`,
     );
   }
 };
@@ -387,7 +387,7 @@ const renderViolationsTable = (
       locText,
       sourceLocation: loc,
       rule: v.rule,
-      container: v.container,
+      element: v.element,
       message: v.message,
     };
   });
@@ -402,7 +402,7 @@ const renderViolationsTable = (
     const locCell = colors.dim(linked);
     const severity = colors.red("error");
     const ruleCell = colors.yellow(r.rule.padEnd(ruleWidth));
-    const subject = colors.bold(r.container);
+    const subject = colors.bold(r.element);
     sink.write(
       `  ${locCell}  ${severity}  ${ruleCell}  ${subject}: ${r.message}\n`,
     );

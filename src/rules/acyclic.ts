@@ -1,10 +1,10 @@
-import { allContainers, getContainer } from "../model";
+import { allElements, getElement } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
 /**
  * Acyclic Dependencies Principle: dependency graph не должен иметь циклов.
  * Per-container DFS, visited set предотвращает infinite loop. Dangling refs
- * (rel.to не в model.containers) — early return false; validateModel
+ * (rel.to не в model.elements) — early return false; validateModel
  * surface'ит их отдельно.
  *
  * Violation anchoring: emit the first outgoing relation's
@@ -26,10 +26,10 @@ export const acyclicRule: RuleDefinition = {
       target: string,
       visited: Set<string>,
     ): boolean => {
-      const container = getContainer(model, fromName);
-      if (!container) return false;
+      const source = getElement(model, fromName);
+      if (!source) return false;
 
-      for (const rel of container.relations) {
+      for (const rel of source.relations) {
         if (rel.to === target) return true;
         if (visited.has(rel.to)) continue;
         visited.add(rel.to);
@@ -38,11 +38,11 @@ export const acyclicRule: RuleDefinition = {
       return false;
     };
 
-    for (const container of allContainers(model)) {
-      if (findCycle(container.name, container.name, new Set())) {
-        const firstRel = container.relations[0];
+    for (const element of allElements(model)) {
+      if (findCycle(element.name, element.name, new Set())) {
+        const firstRel = element.relations[0];
         violations.push({
-          container: container.name,
+          element: element.name,
           message: "participates in a dependency cycle",
           ...(firstRel?.sourceLocation
             ? { sourceLocation: firstRel.sourceLocation }

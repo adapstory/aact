@@ -2,11 +2,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import type {SkillData} from "../../src/cli/commands/skill";
 import {
   createInstallPlans,
   executeSkill,
   installAgentSkill,
+  renderSkillText
 } from "../../src/cli/commands/skill";
+import type { CliEnvelope } from "../../src/cli/output";
 
 const defaultRepo = "https://github.com/ChS23/aact-architect-skill.git";
 const fixedDate = new Date("2026-05-16T00:00:00.000Z");
@@ -209,5 +212,148 @@ describe("skill install command", () => {
     expect(result.data.plans[0].skillDir).toBe(
       path.join(root, "aact-architect"),
     );
+  });
+});
+
+describe("skill install — error paths", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), "aact-skill-err-"));
+  });
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it("throws config.invalidSchema on unknown --client value", async () => {
+    const { runtime } = createRuntime();
+    await expect(
+      executeSkill({ client: "vim-mode", target: root }, runtime),
+    ).rejects.toMatchObject({ kind: "config.invalidSchema" });
+  });
+
+  it("throws skill.repoMismatch when reinstalling from a different repo", async () => {
+    const { runtime } = createRuntime();
+    await installAgentSkill({ target: root }, runtime);
+    await expect(
+      installAgentSkill(
+        { target: root, repo: "https://example.com/other.git" },
+        runtime,
+      ),
+    ).rejects.toMatchObject({ kind: "skill.repoMismatch" });
+  });
+
+  it("throws skill.unmanagedDir when marker exists but .git is gone", async () => {
+    const { runtime } = createRuntime();
+    await installAgentSkill({ target: root }, runtime);
+    // Simulate a user wiping .git but keeping our marker file
+    await fs.rm(path.join(root, "aact-architect", ".git"), {
+      recursive: true,
+      force: true,
+    });
+    await expect(
+      installAgentSkill({ target: root }, runtime),
+    ).rejects.toMatchObject({
+      kind: "skill.unmanagedDir",
+    });
+  });
+
+  it("throws skill.unmanagedDir when cloned repo is missing SKILL.md", async () => {
+    const runtime = {
+      now: () => fixedDate,
+      git: async (args: readonly string[]) => {
+        // Clone makes the dir + .git but no SKILL.md — ensureSkillFile path
+        if (args[0] === "clone") {
+          const skillDir = args.at(-1);
+          if (!skillDir) throw new Error("missing target");
+          await fs.mkdir(path.join(skillDir, ".git"), { recursive: true });
+        }
+      },
+    };
+    await expect(
+      installAgentSkill({ target: root }, runtime),
+    ).rejects.toMatchObject({
+      kind: "skill.unmanagedDir",
+    });
+  });
+});
+
+describe("renderSkillText", () => {
+  it("emits a ✔ line per plan in install mode", () => {
+    const chunks: string[] = [];
+    const sink = {
+      write: (c: string) => {
+        chunks.push(c);
+        return true;
+      },
+    } as NodeJS.WritableStream;
+
+    renderSkillText(
+      {
+        data: {
+          skill: "aact-architect",
+          repo: "https://example.com/repo.git",
+          ref: "main",
+          dryRun: false,
+          plans: [
+            {
+              kind: "shared",
+              label: "shared agents skills dir",
+              action: "installed",
+              rootDir: "/r",
+              skillDir: "/r/aact-architect",
+            },
+            {
+              kind: "claude",
+              label: "Claude Code",
+              action: "updated",
+              rootDir: "/c",
+              skillDir: "/c/aact-architect",
+            },
+          ],
+        },
+      } as unknown as CliEnvelope<SkillData>,
+      sink,
+    );
+
+    const out = chunks.join("");
+    expect(out).toContain("Installing community aact-architect");
+    expect(out).toMatch(/✔ Installed.*\/r\/aact-architect/);
+    expect(out).toMatch(/✔ Updated.*\/c\/aact-architect/);
+  });
+
+  it("emits [dry run] prefix instead of ✔ in dry-run mode", () => {
+    const chunks: string[] = [];
+    const sink = {
+      write: (c: string) => {
+        chunks.push(c);
+        return true;
+      },
+    } as NodeJS.WritableStream;
+
+    renderSkillText(
+      {
+        data: {
+          skill: "aact-architect",
+          repo: "r",
+          ref: "main",
+          dryRun: true,
+          plans: [
+            {
+              kind: "shared",
+              label: "shared agents skills dir",
+              action: "installed",
+              rootDir: "/r",
+              skillDir: "/r/aact-architect",
+            },
+          ],
+        },
+      } as unknown as CliEnvelope<SkillData>,
+      sink,
+    );
+
+    const out = chunks.join("");
+    expect(out).toContain("[dry run]");
+    expect(out).not.toContain("✔");
   });
 });

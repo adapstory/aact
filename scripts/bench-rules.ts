@@ -5,7 +5,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import url from "node:url";
 
-import type { Boundary, Container, Model, RuleDefinition } from "../src/index";
+import type { Boundary, Element, Model, RuleDefinition } from "../src/index";
 import {
   aclRule,
   acyclicRule,
@@ -52,15 +52,15 @@ const measure = (label: string, fn: () => void): number => {
 // services-per-boundary mix: 1 repo, k callers; each caller -> repo (cohesion),
 // some -> next boundary's repo (cross-boundary), some -> own db.
 const synth = (B: number, perB: number): Model => {
-  const containers: Container[] = [];
+  const containers: Element[] = [];
   const boundaries: Boundary[] = [];
   const root: string[] = [];
 
   for (let b = 0; b < B; b++) {
-    const containerNames: string[] = [];
+    const elementNames: string[] = [];
     const repo = `b${b}_repo`;
     const db = `b${b}_db`;
-    containerNames.push(repo, db);
+    elementNames.push(repo, db);
     containers.push(
       {
         name: repo,
@@ -83,7 +83,7 @@ const synth = (B: number, perB: number): Model => {
     );
     for (let i = 0; i < perB - 2; i++) {
       const svc = `b${b}_svc${i}`;
-      containerNames.push(svc);
+      elementNames.push(svc);
       const rels: Array<{ to: string; tags: string[]; technology?: string }> = [
         { to: repo, tags: [], technology: "http" },
       ];
@@ -108,14 +108,14 @@ const synth = (B: number, perB: number): Model => {
       label: bname,
       kind: "System",
       tags: [],
-      containerNames,
+      elementNames,
       boundaryNames: [],
     });
     root.push(bname);
   }
 
   const { model, issues } = buildModel({
-    containers,
+    elements: containers,
     boundaries,
     rootBoundaryNames: root,
   });
@@ -126,8 +126,8 @@ const synth = (B: number, perB: number): Model => {
 };
 
 const benchModel = (label: string, model: Model): void => {
-  const V = Object.keys(model.containers).length;
-  const E = Object.values(model.containers).reduce(
+  const V = Object.keys(model.elements).length;
+  const E = Object.values(model.elements).reduce(
     (s, c) => s + c.relations.length,
     0,
   );

@@ -1,5 +1,5 @@
-import type { Container } from "../model";
-import { allContainers, targetOf } from "../model";
+import type { Element } from "../model";
+import { allElements, targetOf } from "../model";
 import {
   DEFAULT_ACL_NAME_PATTERNS,
   matchesAnyName,
@@ -24,13 +24,13 @@ export interface ApiGatewayOptions {
  *  `isAcl` helper in `acl.ts` (kept inline to avoid coupling rules
  *  through helper imports). */
 const isAcl = (
-  container: Container,
+  element: Element,
   options: ApiGatewayOptions | undefined,
 ): boolean => {
   const tag = options?.aclTag ?? "acl";
-  if (container.tags.includes(tag)) return true;
+  if (element.tags.includes(tag)) return true;
   return matchesAnyName(
-    container.name,
+    element.name,
     options?.aclNamePatterns ?? DEFAULT_ACL_NAME_PATTERNS,
   );
 };
@@ -48,16 +48,16 @@ export const apiGatewayRule: RuleDefinition<ApiGatewayOptions> = {
     const gatewayPattern = options?.gatewayPattern ?? /gateway/i;
     const violations: Violation[] = [];
 
-    for (const container of allContainers(model)) {
-      if (!isAcl(container, options)) continue;
+    for (const element of allElements(model)) {
+      if (!isAcl(element, options)) continue;
 
-      for (const rel of container.relations) {
+      for (const rel of element.relations) {
         if (targetOf(model, rel)?.external !== true) continue;
 
         const techs = rel.technology?.split(", ") ?? [];
         if (!techs.some((t) => gatewayPattern.test(t))) {
           violations.push({
-            container: container.name,
+            element: element.name,
             message: `calls external "${rel.to}" without going through an API Gateway`,
             ...(rel.sourceLocation
               ? { sourceLocation: rel.sourceLocation }

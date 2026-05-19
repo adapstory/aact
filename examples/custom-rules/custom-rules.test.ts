@@ -15,7 +15,7 @@ describe("custom-rules example", () => {
     it("flags direct cross-BC call that bypasses the public API", () => {
       const violations = bcIsolationRule.check(model);
       expect(violations).toHaveLength(1);
-      expect(violations[0].container).toBe("orders_svc");
+      expect(violations[0].element).toBe("orders_svc");
       expect(violations[0].message).toContain("orders");
       expect(violations[0].message).toContain("inventory");
       expect(violations[0].message).toContain("inventory_svc");
@@ -30,9 +30,7 @@ describe("custom-rules example", () => {
 
     it("ignores cross-BC calls via a broker-tagged container", () => {
       const violations = bcIsolationRule.check(model);
-      expect(violations.every((v) => v.container !== "inventory_svc")).toBe(
-        true,
-      );
+      expect(violations.every((v) => v.element !== "inventory_svc")).toBe(true);
     });
 
     it("respects the apiSuffix option", () => {
@@ -49,13 +47,13 @@ describe("custom-rules example", () => {
     it("flags containers without an owner:* tag", () => {
       const violations = requireOwnerTagRule.check(model);
       expect(violations).toHaveLength(1);
-      expect(violations[0].container).toBe("inventory_svc");
+      expect(violations[0].element).toBe("inventory_svc");
       expect(violations[0].message).toContain("owner:");
     });
 
     it("ignores containers that already carry an owner tag", () => {
       const violations = requireOwnerTagRule.check(model);
-      const flagged = violations.map((v) => v.container);
+      const flagged = violations.map((v) => v.element);
       expect(flagged).not.toContain("orders_svc");
       expect(flagged).not.toContain("orders_db");
       expect(flagged).not.toContain("inventory_api");
@@ -74,7 +72,7 @@ describe("custom-rules example", () => {
       ...requireOwnerTagRule.check(model),
     ];
     for (const v of all) {
-      expect(typeof v.container).toBe("string");
+      expect(typeof v.element).toBe("string");
       expect(typeof v.message).toBe("string");
     }
   });

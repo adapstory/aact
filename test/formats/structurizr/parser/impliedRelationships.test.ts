@@ -17,11 +17,11 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
     // Explicit: api -> user
-    expect(model.containers["api"]?.relations).toEqual([
+    expect(model.elements["api"]?.relations).toEqual([
       expect.objectContaining({ to: "user", description: "Sends data to" }),
     ]);
     // Implied: Bank (parent of api) -> User
-    const bankFromContainers = model.containers["bank"];
+    const bankFromContainers = model.elements["bank"];
     expect(bankFromContainers).toBeUndefined(); // Bank is a Boundary
     // The implied edge attaches at the Boundary's identifier; since
     // Bank is represented as a Boundary (no Container), the implied
@@ -48,10 +48,10 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
     // Explicit edge keeps default + header tags
-    const explicit = model.containers["a"]?.relations[0];
+    const explicit = model.elements["a"]?.relations[0];
     expect(explicit?.tags).toEqual(["Relationship", "internal"]);
     // No implied edge from "B" (no relation from B exists)
-    expect(model.containers["b"]?.relations).toEqual([]);
+    expect(model.elements["b"]?.relations).toEqual([]);
   });
 
   it("does nothing when the directive is absent", () => {
@@ -66,11 +66,11 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["a"]?.relations).toEqual([
+    expect(model.elements["a"]?.relations).toEqual([
       expect.objectContaining({ to: "ext", description: "uses" }),
     ]);
     // No implied edges
-    expect(model.containers["ext"]?.relations).toEqual([]);
+    expect(model.elements["ext"]?.relations).toEqual([]);
   });
 
   it("does nothing for `!impliedRelationships false`", () => {
@@ -86,6 +86,6 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["ext"]?.relations).toEqual([]);
+    expect(model.elements["ext"]?.relations).toEqual([]);
   });
 });

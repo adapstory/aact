@@ -58,8 +58,8 @@ describe("JsonReporter", () => {
         ...result.envelope,
         diagnostics: [
           {
-            kind: "model.duplicateContainerName",
-            message: "Duplicate container name 'foo'",
+            kind: "model.duplicateElementName",
+            message: "Duplicate element name 'foo'",
             severity: "warning",
             context: { name: "foo" },
           },
@@ -71,8 +71,8 @@ describe("JsonReporter", () => {
     const parsed = JSON.parse(captured[0]) as { diagnostics: unknown[] };
     expect(parsed.diagnostics).toEqual([
       {
-        kind: "model.duplicateContainerName",
-        message: "Duplicate container name 'foo'",
+        kind: "model.duplicateElementName",
+        message: "Duplicate element name 'foo'",
         severity: "warning",
         context: { name: "foo" },
       },

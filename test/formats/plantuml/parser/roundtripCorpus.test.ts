@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { generate } from "../../../../src/formats/plantuml/generate";
 import { parseSource } from "../../../../src/formats/plantuml/parser";
-import type { Boundary, Container, Model } from "../../../../src/model";
+import type { Boundary, Element, Model } from "../../../../src/model";
 
 /**
  * Roundtrip corpus test — every in-scope reference fixture must
@@ -45,7 +45,7 @@ const fixturesDir = path.join(
 const readFixture = (filename: string): string =>
   fs.readFileSync(path.join(fixturesDir, filename), "utf8");
 
-const containerKey = (c: Container) => ({
+const containerKey = (c: Element) => ({
   name: c.name,
   label: c.label,
   kind: c.kind,
@@ -65,12 +65,12 @@ const boundaryKey = (b: Boundary) => ({
   name: b.name,
   label: b.label,
   kind: b.kind,
-  containerNames: [...b.containerNames].toSorted(),
+  elementNames: [...b.elementNames].toSorted(),
   boundaryNames: [...b.boundaryNames].toSorted(),
 });
 
 const modelKey = (m: Model) => ({
-  containers: Object.values(m.containers)
+  containers: Object.values(m.elements)
     .map(containerKey)
     .toSorted((a, b) => a.name.localeCompare(b.name)),
   boundaries: Object.values(m.boundaries)

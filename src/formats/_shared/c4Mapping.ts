@@ -1,4 +1,4 @@
-import type { BoundaryKind, ContainerKind } from "../../model";
+import type { BoundaryKind, ElementKind } from "../../model";
 
 /**
  * PlantUML C4 stdlib и Mermaid C4 имеют идентичные macro names (Microsoft
@@ -6,10 +6,10 @@ import type { BoundaryKind, ContainerKind } from "../../model";
  *
  * `external` orthogonal flag — для variants с `_Ext` суффиксом возвращаем
  * базовый kind + external=true. Это убирает 8 дополнительных kind'ов из
- * ContainerKind union'а.
+ * ElementKind union'а.
  */
 interface C4Kind {
-  readonly kind: ContainerKind;
+  readonly kind: ElementKind;
   readonly external: boolean;
 }
 
@@ -75,7 +75,7 @@ export const parseBoundaryMacro = (macroName: string): BoundaryKind =>
  * Используется PlantUML/Mermaid generator'ами для round-trip. Identity
  * для kinds без Db/Queue subtypes (Person/Component используют base name).
  */
-export const c4MacroName = (kind: ContainerKind, external: boolean): string => {
+export const c4MacroName = (kind: ElementKind, external: boolean): string => {
   if (kind === "Person") return external ? "Person_Ext" : "Person";
   if (kind === "System") return external ? "System_Ext" : "System";
   return external ? `${kind}_Ext` : kind;

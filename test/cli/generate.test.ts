@@ -64,7 +64,7 @@ describe("executeGenerate — plantuml (single-file)", () => {
   });
 
   it("streams to stdout when no --output (UNIX default)", async () => {
-    setupModel(makeModel({ containers: [{ name: "orders" }] }));
+    setupModel(makeModel({ elements: [{ name: "orders" }] }));
     const capture = captureStdout();
     try {
       const result = await executeGenerate(baseConfig, {});
@@ -80,7 +80,7 @@ describe("executeGenerate — plantuml (single-file)", () => {
   });
 
   it("streams to stdout when --output - (explicit sentinel)", async () => {
-    setupModel(makeModel({ containers: [{ name: "svc" }] }));
+    setupModel(makeModel({ elements: [{ name: "svc" }] }));
     const capture = captureStdout();
     try {
       const result = await executeGenerate(baseConfig, { output: "-" });
@@ -94,7 +94,7 @@ describe("executeGenerate — plantuml (single-file)", () => {
   });
 
   it("writes to file when --output path", async () => {
-    setupModel(makeModel({ containers: [{ name: "svc" }] }));
+    setupModel(makeModel({ elements: [{ name: "svc" }] }));
     mockWriteFile.mockResolvedValue();
 
     const result = await executeGenerate(baseConfig, { output: "out.puml" });
@@ -109,7 +109,7 @@ describe("executeGenerate — plantuml (single-file)", () => {
   });
 
   it("errors when --json + stdout sink would collide", async () => {
-    setupModel(makeModel({ containers: [{ name: "svc" }] }));
+    setupModel(makeModel({ elements: [{ name: "svc" }] }));
 
     await expect(
       executeGenerate(baseConfig, { json: true }),
@@ -120,7 +120,7 @@ describe("executeGenerate — plantuml (single-file)", () => {
   });
 
   it("errors when --json --output - (explicit stdout) collides", async () => {
-    setupModel(makeModel({ containers: [{ name: "svc" }] }));
+    setupModel(makeModel({ elements: [{ name: "svc" }] }));
 
     await expect(
       executeGenerate(baseConfig, { json: true, output: "-" }),
@@ -131,7 +131,7 @@ describe("executeGenerate — plantuml (single-file)", () => {
   });
 
   it("--json + --output <file> works without collision", async () => {
-    setupModel(makeModel({ containers: [{ name: "svc" }] }));
+    setupModel(makeModel({ elements: [{ name: "svc" }] }));
     mockWriteFile.mockResolvedValue();
 
     const result = await executeGenerate(baseConfig, {
@@ -153,7 +153,7 @@ describe("executeGenerate — kubernetes (multi-file)", () => {
   it("writes to directory via --output", async () => {
     setupModel(
       makeModel({
-        containers: [
+        elements: [
           { name: "orders", relations: [{ to: "payments" }] },
           { name: "payments" },
         ],
@@ -175,7 +175,7 @@ describe("executeGenerate — kubernetes (multi-file)", () => {
   });
 
   it("uses config.generate.kubernetes.path when --output omitted", async () => {
-    setupModel(makeModel({ containers: [{ name: "a" }, { name: "b" }] }));
+    setupModel(makeModel({ elements: [{ name: "a" }, { name: "b" }] }));
     mockMkdir.mockResolvedValue();
     mockWriteFile.mockResolvedValue();
 
@@ -192,7 +192,7 @@ describe("executeGenerate — kubernetes (multi-file)", () => {
   });
 
   it("--output - errors for multi-file", async () => {
-    setupModel(makeModel({ containers: [{ name: "a" }, { name: "b" }] }));
+    setupModel(makeModel({ elements: [{ name: "a" }, { name: "b" }] }));
 
     await expect(
       executeGenerate(baseConfig, { format: "kubernetes", output: "-" }),
@@ -221,7 +221,7 @@ describe("executeGenerate — error cases", () => {
   it("emits format.emptyOutput diagnostic when generator produces no files", async () => {
     setupModel(
       makeModel({
-        containers: [{ name: "orders_db", kind: "ContainerDb" }],
+        elements: [{ name: "orders_db", kind: "ContainerDb" }],
       }),
     );
     mockMkdir.mockResolvedValue();

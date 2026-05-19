@@ -5,8 +5,8 @@ import path from "pathe";
 
 import { load as loadPlantuml } from "../../src/formats/plantuml/load";
 import { load as loadStructurizr } from "../../src/formats/structurizr/load";
-import type { Container, Model, Relation } from "../../src/model";
-import { allContainers } from "../../src/model";
+import type { Element, Model, Relation } from "../../src/model";
+import { allElements } from "../../src/model";
 
 /**
  * F4 — same architecture в PUML и Structurizr должна produce equivalent
@@ -44,7 +44,7 @@ const writeStructurizr = async (
 };
 
 /** Канонизируем Container к sequence-проверяемой form (без `name` — он может различаться между форматами по convention). */
-const canonContainer = (c: Container) => ({
+const canonContainer = (c: Element) => ({
   kind: c.kind,
   external: c.external,
   technology: c.technology,
@@ -62,7 +62,7 @@ const containersByCanonName = (
   model: Model,
 ): Map<string, ReturnType<typeof canonContainer>> => {
   const out = new Map<string, ReturnType<typeof canonContainer>>();
-  for (const c of allContainers(model)) {
+  for (const c of allElements(model)) {
     out.set(c.name, canonContainer(c));
   }
   return out;
@@ -71,7 +71,7 @@ const containersByCanonName = (
 /** Set of edges as `from→to|tech|tags` strings. */
 const edgeSet = (model: Model): Set<string> => {
   const out = new Set<string>();
-  for (const c of allContainers(model)) {
+  for (const c of allElements(model)) {
     for (const r of c.relations) {
       const rel = canonRelation(r);
       out.add(
@@ -157,8 +157,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    const pumlDb = pumlModel.containers.orders_db;
-    const structDb = structModel.containers.orders_db;
+    const pumlDb = pumlModel.elements.orders_db;
+    const structDb = structModel.elements.orders_db;
     expect(pumlDb.kind).toBe("ContainerDb");
     expect(structDb.kind).toBe("ContainerDb");
     expect(pumlDb.external).toBe(structDb.external);
@@ -191,8 +191,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    const pumlExt = pumlModel.containers.payments;
-    const structExt = structModel.containers.payments;
+    const pumlExt = pumlModel.elements.payments;
+    const structExt = structModel.elements.payments;
     expect(pumlExt.kind).toBe("System");
     expect(structExt.kind).toBe("System");
     expect(pumlExt.external).toBe(true);
@@ -219,8 +219,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    expect(pumlModel.containers.user.kind).toBe("Person");
-    expect(structModel.containers.user.kind).toBe("Person");
+    expect(pumlModel.elements.user.kind).toBe("Person");
+    expect(structModel.elements.user.kind).toBe("Person");
   });
 
   it("Relations: technology and tags preserved both sides", async () => {
@@ -265,8 +265,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    const pumlRel = pumlModel.containers.a.relations[0];
-    const structRel = structModel.containers.a.relations[0];
+    const pumlRel = pumlModel.elements.a.relations[0];
+    const structRel = structModel.elements.a.relations[0];
     expect(pumlRel.technology).toBe(structRel.technology);
     expect([...pumlRel.tags].toSorted()).toEqual(
       [...structRel.tags].toSorted(),
@@ -315,8 +315,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    expect(pumlModel.containers.a.relations[0].tags).toContain("async");
-    expect(structModel.containers.a.relations[0].tags).toContain("async");
+    expect(pumlModel.elements.a.relations[0].tags).toContain("async");
+    expect(structModel.elements.a.relations[0].tags).toContain("async");
   });
 
   it("Boundary: PUML System_Boundary ↔ Structurizr internal SoftwareSystem", async () => {
@@ -358,8 +358,8 @@ describe("Cross-format Model equivalence (F4)", () => {
 
     expect(Object.keys(pumlModel.boundaries)).toEqual(["orders"]);
     expect(Object.keys(structModel.boundaries)).toEqual(["orders"]);
-    expect([...pumlModel.boundaries.orders.containerNames].toSorted()).toEqual(
-      [...structModel.boundaries.orders.containerNames].toSorted(),
+    expect([...pumlModel.boundaries.orders.elementNames].toSorted()).toEqual(
+      [...structModel.boundaries.orders.elementNames].toSorted(),
     );
   });
 
@@ -441,8 +441,8 @@ describe("Cross-format Model equivalence (F4)", () => {
     const pumlModel = (await loadPlantuml(pumlFile)).model;
     const structModel = (await loadStructurizr(structFile)).model;
 
-    expect([...pumlModel.containers.svc.tags].toSorted()).toEqual(
-      [...structModel.containers.svc.tags].toSorted(),
+    expect([...pumlModel.elements.svc.tags].toSorted()).toEqual(
+      [...structModel.elements.svc.tags].toSorted(),
     );
   });
 });

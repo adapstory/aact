@@ -1,4 +1,4 @@
-import type { Container, ContainerKind, Model } from "./types";
+import type { Element, ElementKind, Model } from "./types";
 
 /**
  * Issue найденный validateModel — проблема в loader output'е, которую
@@ -11,23 +11,23 @@ import type { Container, ContainerKind, Model } from "./types";
 export type ModelIssue =
   | { kind: "dangling-relation"; from: string; to: string }
   | {
-      kind: "container-in-boundary-not-in-model";
-      container: string;
+      kind: "element-in-boundary-not-in-model";
+      element: string;
       boundary: string;
     }
   | { kind: "boundary-not-in-model"; parent: string; child: string }
   | { kind: "boundary-cycle"; path: readonly string[] }
-  | { kind: "duplicate-container-name"; name: string }
+  | { kind: "duplicate-element-name"; name: string }
   | { kind: "duplicate-boundary-name"; name: string }
   /** Two distinct elements registered under the same DSL identifier
    * (`api = container "X"` then `api = container "Y"` later). Reference
    * Structurizr throws on this; we surface it as an issue so the linter
    * runs all rules but the user sees the collision. */
   | { kind: "duplicate-identifier"; identifier: string }
-  | { kind: "self-relation"; container: string }
-  | { kind: "unknown-kind"; container: string; raw: string };
+  | { kind: "self-relation"; element: string }
+  | { kind: "unknown-kind"; element: string; raw: string };
 
-const KNOWN_KINDS = new Set<ContainerKind>([
+const KNOWN_KINDS = new Set<ElementKind>([
   "Person",
   "System",
   "Container",
@@ -52,38 +52,38 @@ const KNOWN_KINDS = new Set<ContainerKind>([
 export const validateModel = (model: Model): ModelIssue[] => {
   const issues: ModelIssue[] = [];
 
-  // Container-level checks: relations targets, kinds, self-loops
-  for (const container of Object.values(model.containers)) {
-    if (!KNOWN_KINDS.has(container.kind)) {
+  // Element-level checks: relations targets, kinds, self-loops
+  for (const element of Object.values(model.elements)) {
+    if (!KNOWN_KINDS.has(element.kind)) {
       issues.push({
         kind: "unknown-kind",
-        container: container.name,
-        raw: container.kind,
+        element: element.name,
+        raw: element.kind,
       });
     }
 
-    for (const rel of container.relations) {
-      if (rel.to === container.name) {
-        issues.push({ kind: "self-relation", container: container.name });
+    for (const rel of element.relations) {
+      if (rel.to === element.name) {
+        issues.push({ kind: "self-relation", element: element.name });
         continue;
       }
-      if (!(rel.to in model.containers)) {
+      if (!(rel.to in model.elements)) {
         issues.push({
           kind: "dangling-relation",
-          from: container.name,
+          from: element.name,
           to: rel.to,
         });
       }
     }
   }
 
-  // Boundary-level checks: child container refs, child boundary refs
+  // Boundary-level checks: child element refs, child boundary refs
   for (const boundary of Object.values(model.boundaries)) {
-    for (const containerName of boundary.containerNames) {
-      if (!(containerName in model.containers)) {
+    for (const elementName of boundary.elementNames) {
+      if (!(elementName in model.elements)) {
         issues.push({
-          kind: "container-in-boundary-not-in-model",
-          container: containerName,
+          kind: "element-in-boundary-not-in-model",
+          element: elementName,
           boundary: boundary.name,
         });
       }
@@ -158,7 +158,7 @@ const detectBoundaryCycles = (model: Model, issues: ModelIssue[]): void => {
 
 // Helper для loader'ов: возвращает true если name уже занят в существующем
 // Record (для surfacing duplicate-* issues на этапе сборки).
-export const isDuplicateContainer = (
-  containers: Readonly<Record<string, Container>>,
+export const isDuplicateElement = (
+  elements: Readonly<Record<string, Element>>,
   name: string,
-): boolean => name in containers;
+): boolean => name in elements;

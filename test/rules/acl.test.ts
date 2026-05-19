@@ -5,14 +5,14 @@ import { plantumlSyntax } from "../../src/formats/plantuml/syntax";
 import { structurizrDslSyntax } from "../../src/formats/structurizr/syntax";
 import { aclRule } from "../../src/rules";
 import { applyEdits } from "../../src/rules/lib/applyEdits";
-import type { ContainerSpec } from "../helpers/makeModel";
+import type { ElementSpec } from "../helpers/makeModel";
 import { makeModel } from "../helpers/makeModel";
 
 const nameArb = fc
   .string({ minLength: 2, maxLength: 8 })
   .filter((s) => /^[a-z][a-z0-9_]*$/.test(s));
 
-const extSystem: ContainerSpec = {
+const extSystem: ElementSpec = {
   name: "ext_system",
   label: "External System",
   kind: "System",
@@ -22,7 +22,7 @@ const extSystem: ContainerSpec = {
 describe("aclRule.check", () => {
   it("returns no violations when acl-tagged container depends on external", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "my_acl", tags: ["acl"], relations: [{ to: "ext_system" }] },
         extSystem,
       ],
@@ -32,27 +32,27 @@ describe("aclRule.check", () => {
 
   it("returns violation when non-acl container depends on external", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "my_service", relations: [{ to: "ext_system" }] },
         extSystem,
       ],
     });
     const v = aclRule.check(model);
     expect(v).toHaveLength(1);
-    expect(v[0].container).toBe("my_service");
+    expect(v[0].element).toBe("my_service");
     expect(v[0].message).toContain("ext_system");
   });
 
   it("returns no violations when no external dependencies", () => {
     const model = makeModel({
-      containers: [{ name: "a", relations: [{ to: "b" }] }, { name: "b" }],
+      elements: [{ name: "a", relations: [{ to: "b" }] }, { name: "b" }],
     });
     expect(aclRule.check(model)).toHaveLength(0);
   });
 
   it("includes all external systems in violation message", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "svc", relations: [{ to: "ext1" }, { to: "ext2" }] },
         { name: "ext1", kind: "System", external: true },
         { name: "ext2", kind: "System", external: true },
@@ -67,7 +67,7 @@ describe("aclRule.check", () => {
 
   it("respects custom tag option", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "anti_corruption",
           tags: ["custom-acl"],
@@ -83,7 +83,7 @@ describe("aclRule.check", () => {
     "property: container with 'acl' tag never fires violation",
     () => {
       const model = makeModel({
-        containers: [
+        elements: [
           { name: "svc", tags: ["acl"], relations: [{ to: "e" }] },
           { name: "e", kind: "System", external: true },
         ],
@@ -94,14 +94,14 @@ describe("aclRule.check", () => {
 });
 
 const fixWithPlantuml = (
-  containers: ContainerSpec[],
+  containers: ElementSpec[],
   violationContainer: string,
   options?: { tag?: string },
 ) => {
-  const model = makeModel({ containers });
+  const model = makeModel({ elements: containers });
   return aclRule.fix!(
     model,
-    [{ container: violationContainer, message: "" }],
+    [{ element: violationContainer, message: "" }],
     plantumlSyntax,
     options,
   );
@@ -109,7 +109,7 @@ const fixWithPlantuml = (
 
 describe("aclRule.fix (plantuml syntax)", () => {
   it("returns empty for empty violations", () => {
-    const model = makeModel({ containers: [extSystem] });
+    const model = makeModel({ elements: [extSystem] });
     expect(aclRule.fix!(model, [], plantumlSyntax)).toEqual([]);
   });
 
@@ -229,8 +229,8 @@ describe("aclRule.fix (plantuml syntax)", () => {
   });
 
   it("picks the container by exact name when several exist (covers === predicate)", () => {
-    // Stryker mutated `c.name === violation.container` to `true`. With true,
-    // the first container in allContainers would be picked regardless of
+    // Stryker mutated `c.name === violation.element` to `true`. With true,
+    // the first container in allElements would be picked regardless of
     // the violation name — leading to ACLs around the wrong service.
     const results = fixWithPlantuml(
       [
@@ -253,13 +253,9 @@ describe("aclRule.fix (plantuml syntax)", () => {
   it("silently skips a violation that names a non-existent container", () => {
     // Stryker mutated `if (!container) continue` to `false` (don't skip).
     // Pin: an unknown name yields no fix entry, no edits, no throw.
-    const model = makeModel({ containers: [extSystem] });
+    const model = makeModel({ elements: [extSystem] });
     expect(
-      aclRule.fix!(
-        model,
-        [{ container: "ghost", message: "" }],
-        plantumlSyntax,
-      ),
+      aclRule.fix!(model, [{ element: "ghost", message: "" }], plantumlSyntax),
     ).toHaveLength(0);
   });
 
@@ -325,7 +321,7 @@ describe("aclRule.fix (plantuml syntax)", () => {
 
   test.prop([nameArb])("never throws, always returns FixResult[]", (name) => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name, relations: [{ to: "ext" }] },
         { name: "ext", kind: "System", external: true },
       ],
@@ -339,7 +335,7 @@ describe("aclRule.fix (plantuml syntax)", () => {
     "produces at least one edit per fixable violation",
     (name) => {
       const model = makeModel({
-        containers: [
+        elements: [
           { name, relations: [{ to: "ext" }] },
           { name: "ext", kind: "System", external: true },
         ],
@@ -353,7 +349,7 @@ describe("aclRule.fix (plantuml syntax)", () => {
 
   test.prop([nameArb])("is deterministic for same input", (name) => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name, relations: [{ to: "ext" }] },
         { name: "ext", kind: "System", external: true },
       ],
@@ -382,7 +378,7 @@ describe("aclRule.fix (plantuml syntax)", () => {
 describe("aclRule.fix (structurizr syntax)", () => {
   it("adds container declaration with tags block", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "my_service",
           label: "My Service",
@@ -393,7 +389,7 @@ describe("aclRule.fix (structurizr syntax)", () => {
     });
     const results = aclRule.fix!(
       model,
-      [{ container: "my_service", message: "" }],
+      [{ element: "my_service", message: "" }],
       structurizrDslSyntax,
     );
     const addEdit = results[0].edits.find(
@@ -407,14 +403,14 @@ describe("aclRule.fix (structurizr syntax)", () => {
 
   it("replaces Rel(svc, ext) with Rel(acl, ext)", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "my_service", relations: [{ to: "ext_system" }] },
         extSystem,
       ],
     });
     const results = aclRule.fix!(
       model,
-      [{ container: "my_service", message: "" }],
+      [{ element: "my_service", message: "" }],
       structurizrDslSyntax,
     );
     const replaceEdit = results[0].edits.find((e) => e.type === "replace");
@@ -424,7 +420,7 @@ describe("aclRule.fix (structurizr syntax)", () => {
 
   it("applies edits correctly to dsl fragment", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "my_service",
           relations: [
@@ -444,7 +440,7 @@ describe("aclRule.fix (structurizr syntax)", () => {
     ].join("\n");
     const results = aclRule.fix!(
       model,
-      [{ container: "my_service", message: "" }],
+      [{ element: "my_service", message: "" }],
       structurizrDslSyntax,
     );
     const patched = applyEdits(dsl, results[0].edits);

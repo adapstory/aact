@@ -13,7 +13,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["bank"]?.description).toBe("Body description");
+    expect(model.elements["bank"]?.description).toBe("Body description");
   });
 
   it("body `technology` lands on Container.technology", () => {
@@ -26,7 +26,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.technology).toBe("Node.js 22");
+    expect(model.elements["api"]?.technology).toBe("Node.js 22");
   });
 
   it("body `tags` appends to header tags (comma-split, de-duped)", () => {
@@ -39,7 +39,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.tags).toEqual([
+    expect(model.elements["api"]?.tags).toEqual([
       "Element",
       "Container",
       "external",
@@ -58,7 +58,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.tags).toEqual([
+    expect(model.elements["api"]?.tags).toEqual([
       "Element",
       "Container",
       "alpha",
@@ -79,7 +79,7 @@ describe("Structurizr parser — body statements + directives", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["api"]?.tags).toEqual([
+    expect(model.elements["api"]?.tags).toEqual([
       "Element",
       "Container",
       "alpha",
@@ -96,7 +96,7 @@ describe("Structurizr parser — body statements + directives", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["api"]?.tags).toEqual([
+    expect(model.elements["api"]?.tags).toEqual([
       "Element",
       "Container",
       "alpha",
@@ -116,7 +116,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("body `tag` appends a single tag", () => {
@@ -128,7 +128,7 @@ describe("Structurizr parser — body statements + directives", () => {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["api"]?.tags).toEqual([
+    expect(model.elements["api"]?.tags).toEqual([
       "Element",
       "Container",
       "compliance",
@@ -145,7 +145,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.link).toBe("https://docs.example.com/api");
+    expect(model.elements["api"]?.link).toBe("https://docs.example.com/api");
   });
 
   it("body `properties` accepts bare `/` as a value (e.g. groupSeparator)", () => {
@@ -174,7 +174,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.properties).toEqual({
+    expect(model.elements["api"]?.properties).toEqual({
       owner: "platform-team",
       sla: "99.99",
     });
@@ -193,7 +193,7 @@ describe("Structurizr parser — body statements + directives", () => {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.properties).toEqual({
+    expect(model.elements["api"]?.properties).toEqual({
       "perspective.Security": "OWASP top 10 covered",
       "perspective.Security.value": "",
       "perspective.Scalability": "Tested to 10k rps",
@@ -211,7 +211,7 @@ workspace {
 }`;
     const { parseErrors, model } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("parses workspace-scope !const before model { }", () => {
@@ -224,7 +224,7 @@ workspace {
     }`;
     const { parseErrors, model } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("parses workspace-scope properties { } block", () => {
@@ -238,7 +238,7 @@ workspace {
     }`;
     const { parseErrors, model } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("supports !const with a triple-quoted text block value", () => {
@@ -263,7 +263,7 @@ workspace {
     }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
   });
 
   it("supports !include at model scope", () => {
@@ -339,8 +339,8 @@ workspace {
         tags: ["Element", "Software System", "core"],
       }),
     );
-    expect(model.containers["api"]).toBeDefined();
-    expect(model.containers["db"]).toBeDefined();
+    expect(model.elements["api"]).toBeDefined();
+    expect(model.elements["db"]).toBeDefined();
   });
 
   it("preserves sourceLocation on body-driven Container fields", () => {
@@ -352,7 +352,7 @@ workspace {
       }
     }`;
     const { model } = parse(src);
-    const c = model.containers["api"];
+    const c = model.elements["api"];
     expect(c?.sourceLocation?.file).toBe("test.dsl");
     expect(c?.technology).toBe("Node.js");
   });

@@ -3,7 +3,7 @@ import { makeModel } from "./helpers/makeModel";
 
 describe("analyzeArchitecture", () => {
   const model = makeModel({
-    containers: [
+    elements: [
       { name: "orders_db", label: "Orders DB", kind: "ContainerDb" },
       {
         name: "ext_payment",
@@ -30,7 +30,7 @@ describe("analyzeArchitecture", () => {
       {
         name: "project",
         label: "Project",
-        containerNames: ["svc_a", "svc_b", "orders_db", "ext_payment"],
+        elementNames: ["svc_a", "svc_b", "orders_db", "ext_payment"],
       },
     ],
   });
@@ -71,7 +71,7 @@ describe("analyzeArchitecture", () => {
     // svc1→svc2: cohesion for domainA, cohesion for parent
     // svc1→svc3: coupling for domainA (sibling), cohesion for parent
     const nestedModel = makeModel({
-      containers: [
+      elements: [
         { name: "svc1", relations: [{ to: "svc2" }, { to: "svc3" }] },
         { name: "svc2" },
         { name: "svc3" },
@@ -85,9 +85,9 @@ describe("analyzeArchitecture", () => {
         {
           name: "domainA",
           label: "Domain A",
-          containerNames: ["svc1", "svc2"],
+          elementNames: ["svc1", "svc2"],
         },
-        { name: "domainB", label: "Domain B", containerNames: ["svc3"] },
+        { name: "domainB", label: "Domain B", elementNames: ["svc3"] },
       ],
       rootBoundaryNames: ["parent"],
     });
@@ -119,7 +119,7 @@ describe("analyzeArchitecture", () => {
     it("attributes out-of-parent relation to parent.coupling, not child", () => {
       // svc1 also connects to an external system outside any boundary
       const m = makeModel({
-        containers: [
+        elements: [
           { name: "svc1", relations: [{ to: "ext" }] },
           { name: "ext", kind: "System", external: true },
         ],
@@ -128,7 +128,7 @@ describe("analyzeArchitecture", () => {
           {
             name: "domainA",
             label: "Domain A",
-            containerNames: ["svc1"],
+            elementNames: ["svc1"],
           },
         ],
         rootBoundaryNames: ["parent"],

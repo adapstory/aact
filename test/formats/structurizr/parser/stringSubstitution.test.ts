@@ -12,7 +12,7 @@ workspace {
 }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.description).toBe("Owned by Platform");
+    expect(model.elements["api"]?.description).toBe("Owned by Platform");
   });
 
   it("expands ${NAME} from !var as well", () => {
@@ -24,7 +24,7 @@ workspace {
 }`;
     const { model, parseErrors } = parse(src);
     expect(parseErrors).toEqual([]);
-    expect(model.containers["api"]?.description).toBe("Running in prod");
+    expect(model.elements["api"]?.description).toBe("Running in prod");
   });
 
   it("resolves chained references via fixed-point iteration", () => {
@@ -36,7 +36,7 @@ workspace {
   }
 }`;
     const { model } = parse(src);
-    expect(model.containers["api"]?.description).toBe("ultimate");
+    expect(model.elements["api"]?.description).toBe("ultimate");
   });
 
   it("leaves unknown ${NAME} references in place (lexer treats as text)", () => {
@@ -46,7 +46,7 @@ workspace {
       }
     }`;
     const { model } = parse(src);
-    expect(model.containers["api"]?.description).toBe("Hello ${UNKNOWN}");
+    expect(model.elements["api"]?.description).toBe("Hello ${UNKNOWN}");
   });
 
   it("substitutes inside triple-quoted text blocks (TextBlock)", () => {

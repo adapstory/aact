@@ -1,13 +1,13 @@
 import { generate } from "../../../src/formats/plantuml/generate";
-import type { ContainerSpec } from "../../helpers/makeModel";
+import type { ElementSpec } from "../../helpers/makeModel";
 import { makeModel } from "../../helpers/makeModel";
 
 const renderModel = (
-  containers: ContainerSpec[],
+  containers: ElementSpec[],
   boundaries: Parameters<typeof makeModel>[0]["boundaries"] = [],
   options?: Parameters<typeof generate>[1],
 ): string => {
-  const model = makeModel({ containers, boundaries });
+  const model = makeModel({ elements: containers, boundaries });
   const output = generate(model, options);
   return output.files[0].content;
 };
@@ -110,7 +110,7 @@ describe("plantuml generate", () => {
         {
           name: "platform",
           label: "Platform",
-          containerNames: ["orders"],
+          elementNames: ["orders"],
         },
       ],
     );
@@ -135,7 +135,7 @@ describe("plantuml generate", () => {
           label: "Parent",
           boundaryNames: ["child"],
         },
-        { name: "child", label: "Child", containerNames: ["svc"] },
+        { name: "child", label: "Child", elementNames: ["svc"] },
       ],
     );
     // makeModel passes rootBoundaryNames default = all boundaries — but
@@ -148,7 +148,7 @@ describe("plantuml generate", () => {
 
   it("wraps in project boundary when boundaryLabel is set", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         { name: "svc", label: "Service" },
         {
           name: "ext",
@@ -157,7 +157,7 @@ describe("plantuml generate", () => {
           external: true,
         },
       ],
-      boundaries: [{ name: "ctx", label: "Context", containerNames: ["svc"] }],
+      boundaries: [{ name: "ctx", label: "Context", elementNames: ["svc"] }],
     });
     const output = generate(model, { boundaryLabel: "My System" });
     const result = output.files[0].content;
@@ -196,7 +196,7 @@ describe("plantuml generate", () => {
 
   it("renders a full model end-to-end (regression snapshot)", () => {
     const model = makeModel({
-      containers: [
+      elements: [
         {
           name: "orders_api",
           label: "Orders API",
@@ -223,7 +223,7 @@ describe("plantuml generate", () => {
         {
           name: "orders",
           label: "Orders Context",
-          containerNames: ["orders_api", "orders_repo", "orders_db"],
+          elementNames: ["orders_api", "orders_repo", "orders_db"],
         },
       ],
     });
@@ -254,7 +254,7 @@ describe("plantuml generate", () => {
         { name: "inside_svc" },
         { name: "ext", label: "External", kind: "System", external: true },
       ],
-      [{ name: "ctx", label: "Context", containerNames: ["inside_svc"] }],
+      [{ name: "ctx", label: "Context", elementNames: ["inside_svc"] }],
     );
     const lines = result.split("\n");
     const insideOccurrences = lines.filter((l) => l.includes("inside_svc"));

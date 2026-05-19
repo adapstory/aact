@@ -48,14 +48,14 @@ const fakeFormat = (name = "plantuml"): Format => ({
 
 const cleanModel = (): Model =>
   makeModel({
-    containers: [{ name: "svc_a" }, { name: "svc_b" }],
-    boundaries: [{ name: "project", containerNames: ["svc_a", "svc_b"] }],
+    elements: [{ name: "svc_a" }, { name: "svc_b" }],
+    boundaries: [{ name: "project", elementNames: ["svc_a", "svc_b"] }],
   });
 
 const taggedModel = (): Model =>
   makeModel({
-    containers: [{ name: "svc_a", tags: ["legacy"] }, { name: "svc_b" }],
-    boundaries: [{ name: "project", containerNames: ["svc_a", "svc_b"] }],
+    elements: [{ name: "svc_a", tags: ["legacy"] }, { name: "svc_b" }],
+    boundaries: [{ name: "project", elementNames: ["svc_a", "svc_b"] }],
   });
 
 interface LegacyTagOptions {
@@ -68,9 +68,9 @@ const noLegacyRule = defineRule({
   description: "Containers must not carry legacy tag",
   check(model: Model, options?: LegacyTagOptions) {
     const tag = options?.tag ?? "legacy";
-    return Object.values(model.containers)
+    return Object.values(model.elements)
       .filter((c) => c.tags.includes(tag))
-      .map((c) => ({ container: c.name, message: `tagged "${tag}"` }));
+      .map((c) => ({ element: c.name, message: `tagged "${tag}"` }));
   },
 });
 
@@ -80,14 +80,14 @@ const noLegacyWithFixRule = defineRule({
   description: "Containers must not carry legacy tag (with fix)",
   check(model: Model, options?: LegacyTagOptions) {
     const tag = options?.tag ?? "legacy";
-    return Object.values(model.containers)
+    return Object.values(model.elements)
       .filter((c) => c.tags.includes(tag))
-      .map((c) => ({ container: c.name, message: `tagged "${tag}"` }));
+      .map((c) => ({ element: c.name, message: `tagged "${tag}"` }));
   },
   fix(_model: Model, violations) {
     return violations.map((v) => ({
       rule: "noLegacyFix",
-      description: `Remove legacy tag from ${v.container}`,
+      description: `Remove legacy tag from ${v.element}`,
       edits: [],
     }));
   },
@@ -199,7 +199,7 @@ describe("executeCheck — customRules integration", () => {
     expect(result.exitCode).toBe(1);
     const noLegacy = result.data.violations.find((v) => v.rule === "noLegacy");
     expect(noLegacy).toBeDefined();
-    expect(noLegacy?.container).toBe("svc_a");
+    expect(noLegacy?.element).toBe("svc_a");
   });
 
   it("auto-enables customRules without rules.<name> entry", async () => {

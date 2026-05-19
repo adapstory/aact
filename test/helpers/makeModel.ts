@@ -1,16 +1,16 @@
 import type {
   Boundary,
   BoundaryKind,
-  Container,
-  ContainerKind,
+  Element,
+  ElementKind,
   Model,
 } from "../../src/model";
 import { buildModel } from "../../src/model";
 
-export interface ContainerSpec {
+export interface ElementSpec {
   readonly name: string;
   readonly label?: string;
-  readonly kind?: ContainerKind;
+  readonly kind?: ElementKind;
   readonly external?: boolean;
   readonly description?: string;
   readonly technology?: string;
@@ -36,12 +36,12 @@ export interface BoundarySpec {
   readonly kind?: BoundaryKind;
   readonly description?: string;
   readonly tags?: readonly string[];
-  readonly containerNames?: readonly string[];
+  readonly elementNames?: readonly string[];
   readonly boundaryNames?: readonly string[];
   readonly link?: string;
 }
 
-const makeContainer = (spec: ContainerSpec): Container => ({
+const makeElement = (spec: ElementSpec): Element => ({
   name: spec.name,
   label: spec.label ?? spec.name,
   kind: spec.kind ?? "Container",
@@ -68,21 +68,21 @@ const makeBoundary = (spec: BoundarySpec): Boundary => ({
   kind: spec.kind ?? "System",
   description: spec.description,
   tags: spec.tags ?? [],
-  containerNames: spec.containerNames ?? [],
+  elementNames: spec.elementNames ?? [],
   boundaryNames: spec.boundaryNames ?? [],
   link: spec.link,
 });
 
 export interface ModelSpec {
-  readonly containers?: readonly ContainerSpec[];
+  readonly elements?: readonly ElementSpec[];
   readonly boundaries?: readonly BoundarySpec[];
   readonly rootBoundaryNames?: readonly string[];
 }
 
 export const makeModel = (spec: ModelSpec): Model => {
-  const containers = (spec.containers ?? []).map(makeContainer);
+  const elements = (spec.elements ?? []).map(makeElement);
   const boundaries = (spec.boundaries ?? []).map(makeBoundary);
   const rootBoundaryNames =
     spec.rootBoundaryNames ?? boundaries.map((b) => b.name);
-  return buildModel({ containers, boundaries, rootBoundaryNames }).model;
+  return buildModel({ elements, boundaries, rootBoundaryNames }).model;
 };

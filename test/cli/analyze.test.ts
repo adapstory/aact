@@ -27,7 +27,7 @@ const config: AactConfig = {
 
 const testModel = () =>
   makeModel({
-    containers: [
+    elements: [
       { name: "orders_db", label: "DB", kind: "ContainerDb" },
       {
         name: "svc_a",
@@ -39,7 +39,7 @@ const testModel = () =>
       {
         name: "project",
         label: "Project",
-        containerNames: ["svc_a", "orders_db"],
+        elementNames: ["svc_a", "orders_db"],
       },
     ],
   });
@@ -79,8 +79,8 @@ describe("executeAnalyze", () => {
     mockLoadModel.mockResolvedValue({
       model: testModel(),
       issues: [
-        { kind: "duplicate-container-name", name: "orders_db" },
-        { kind: "self-relation", container: "svc_a" },
+        { kind: "duplicate-element-name", name: "orders_db" },
+        { kind: "self-relation", element: "svc_a" },
       ],
     });
 
@@ -88,7 +88,7 @@ describe("executeAnalyze", () => {
 
     expect(result.diagnostics).toHaveLength(2);
     expect(result.diagnostics?.[0]).toMatchObject({
-      kind: "model.duplicateContainerName",
+      kind: "model.duplicateElementName",
       severity: "warning",
     });
     expect(result.diagnostics?.[1]).toMatchObject({

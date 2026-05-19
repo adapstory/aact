@@ -1,17 +1,17 @@
 import type {
   Boundary,
-  Container,
+  Element,
   Model,
   Relation,
   SourceLocation,
 } from "./types";
 
 /**
- * O(1) container lookup. Возвращает undefined для dangling references
+ * O(1) element lookup. Возвращает undefined для dangling references
  * (которые validateModel ловит как ModelIssue).
  */
-export const getContainer = (m: Model, name: string): Container | undefined =>
-  m.containers[name];
+export const getElement = (m: Model, name: string): Element | undefined =>
+  m.elements[name];
 
 /**
  * O(1) boundary lookup.
@@ -20,18 +20,17 @@ export const getBoundary = (m: Model, name: string): Boundary | undefined =>
   m.boundaries[name];
 
 /**
- * Resolve целевого Container'а по Relation.to (name-ref). Самый частый
+ * Resolve целевого Element'а по Relation.to (name-ref). Самый частый
  * pattern в правилах: `targetOf(model, rel)?.kind === "ContainerDb"`.
  */
-export const targetOf = (m: Model, rel: Relation): Container | undefined =>
-  m.containers[rel.to];
+export const targetOf = (m: Model, rel: Relation): Element | undefined =>
+  m.elements[rel.to];
 
 /**
- * Все контейнеры в model как массив. Удобно для `.filter()` / `.map()`,
+ * Все elements в model как массив. Удобно для `.filter()` / `.map()`,
  * когда нужен flat iteration.
  */
-export const allContainers = (m: Model): Container[] =>
-  Object.values(m.containers);
+export const allElements = (m: Model): Element[] => Object.values(m.elements);
 
 /**
  * Все boundaries в model как массив.
