@@ -34,8 +34,9 @@ Cursor, Codex).
   `--sarif` surfaces loader-level problems (dangling refs,
   duplicate ids, unknown kinds) as SARIF results under the
   `model.*` namespace so they can be reviewed in GitHub Code
-  Scanning alongside rule violations. Text mode prints a workspace
-  - element-count + boundary-tree summary for humans.
+  Scanning alongside rule violations. Text mode prints a summary
+  with workspace metadata, element counts by kind, the boundary
+  tree, and the relation count.
 
 - **Library API barrel.** `src/index.ts` re-exports the full
   CLI-envelope contract (`CliEnvelope`, `Diagnostic`,
