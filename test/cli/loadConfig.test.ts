@@ -73,6 +73,44 @@ describe("loadAndValidateConfig", () => {
     expect(result.source.path).toBe("test.puml");
   });
 
+  it("accepts empty-object form for option-less rules (symmetry with option-bearing)", async () => {
+    // After the AcyclicOptions/CohesionOptions/etc. additions, the
+    // four rules that have no options today still accept `rules:
+    // { acyclic: {} }` so the user can be explicit without
+    // resorting to `true`. The strict-empty shape rejects any
+    // unknown key — test that part separately.
+    mockLoadConfig.mockResolvedValue({
+      config: {
+        source: { type: "plantuml", path: "test.puml" },
+        rules: {
+          acyclic: {},
+          cohesion: {},
+          commonReuse: {},
+          stableDependencies: {},
+        },
+      },
+    });
+    const result = await loadAndValidateConfig();
+    expect(result.rules?.acyclic).toEqual({});
+    expect(result.rules?.cohesion).toEqual({});
+  });
+
+  it("rejects unknown keys inside an option-less rule object", async () => {
+    mockLoadConfig.mockResolvedValue({
+      config: {
+        source: { type: "plantuml", path: "test.puml" },
+        rules: {
+          // `bogus` is not a valid key on AcyclicOptions —
+          // strictObject({}) refuses any property.
+          acyclic: { bogus: 42 },
+        },
+      },
+    });
+    await expect(loadAndValidateConfig()).rejects.toMatchObject({
+      kind: "config.invalidSchema",
+    });
+  });
+
   it("wraps c12 load failure as ToolError config.loadFailed", async () => {
     mockLoadConfig.mockRejectedValue(new Error("c12 said nope"));
 

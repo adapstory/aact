@@ -1,9 +1,13 @@
 import * as v from "valibot";
 
 import type { AclOptions } from "./rules/acl";
+import type { AcyclicOptions } from "./rules/acyclic";
 import type { ApiGatewayOptions } from "./rules/apiGateway";
+import type { CohesionOptions } from "./rules/cohesion";
+import type { CommonReuseOptions } from "./rules/commonReuse";
 import type { CrudOptions } from "./rules/crud";
 import type { DbPerServiceOptions } from "./rules/dbPerService";
+import type { StableDependenciesOptions } from "./rules/stableDependencies";
 import type { RuleDefinition } from "./rules/types";
 
 const ruleOption = <T extends v.ObjectEntries>(entries: T) =>
@@ -48,7 +52,13 @@ export const AactConfigSchema = v.strictObject({
       acl: ruleOption({
         tag: v.optional(v.string()),
       }),
-      acyclic: v.optional(v.boolean()),
+      // The four option-less rules accept `boolean | {}` so the
+      // config shape is symmetric with the option-bearing rules.
+      // `ruleOption({})` produces `boolean | strictObject({})` —
+      // empty object literal is the only accepted object form
+      // until any of these rules grows real options (at which
+      // point the entry widens additively).
+      acyclic: ruleOption({}),
       apiGateway: ruleOption({
         aclTag: v.optional(v.string()),
         gatewayPattern: v.optional(v.instance(RegExp)),
@@ -59,9 +69,9 @@ export const AactConfigSchema = v.strictObject({
       dbPerService: ruleOption({
         ownerTags: v.optional(v.array(v.string())),
       }),
-      cohesion: v.optional(v.boolean()),
-      stableDependencies: v.optional(v.boolean()),
-      commonReuse: v.optional(v.boolean()),
+      cohesion: ruleOption({}),
+      stableDependencies: ruleOption({}),
+      commonReuse: ruleOption({}),
     }),
   ),
   // RuleDefinition содержит function fields (check/fix) — valibot не валидирует
@@ -95,13 +105,13 @@ export const AactConfigSchema = v.strictObject({
  */
 export interface BuiltinRulesConfig {
   readonly acl?: boolean | AclOptions;
-  readonly acyclic?: boolean;
+  readonly acyclic?: boolean | AcyclicOptions;
   readonly apiGateway?: boolean | ApiGatewayOptions;
   readonly crud?: boolean | CrudOptions;
   readonly dbPerService?: boolean | DbPerServiceOptions;
-  readonly cohesion?: boolean;
-  readonly stableDependencies?: boolean;
-  readonly commonReuse?: boolean;
+  readonly cohesion?: boolean | CohesionOptions;
+  readonly stableDependencies?: boolean | StableDependenciesOptions;
+  readonly commonReuse?: boolean | CommonReuseOptions;
 }
 
 /**
