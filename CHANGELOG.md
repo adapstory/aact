@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.11 — 2026-05-19
+
+API ergonomics + terminology cleanup. Two changes that custom rule
+authors care about: the field `Violation.element` no longer pretends
+boundary-level rules emit element names, and a handful of types
+that were already defined internally now actually re-export through
+the library barrel. Plus a wide doc sweep replacing leftover "byte
+range / byte offset" prose with the honest UTF-16 code-unit framing.
+
 ### Changed (breaking — rule API)
 
 - `Violation.element` renamed to `Violation.target` and gains a
