@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import path from "pathe";
 
+import type { SourceLocation } from "../../model";
 import { ruleRegistry } from "../../rules/registry";
 import type { RuleDefinition } from "../../rules/types";
 import type {
@@ -122,12 +123,11 @@ const fingerprint = (v: CheckViolation): string =>
     .digest("hex")
     .slice(0, 16);
 
-const violationToResult = (
-  v: CheckViolation,
-  ruleIndex: ReadonlyMap<string, number>,
+const buildSarifLocation = (
+  loc: SourceLocation | undefined,
   repoRoot: string,
-): SarifResult => {
-  const loc = v.sourceLocation;
+  label?: string,
+) => {
   const region = loc
     ? {
         startLine: loc.start.line,
@@ -137,21 +137,34 @@ const violationToResult = (
       }
     : { startLine: 1 };
   const uri = loc?.file ? relativizeUri(loc.file, repoRoot) : "unknown";
-  // Use `uriBaseId: "SRCROOT"` only when the URI is actually relative —
-  // otherwise consumers would try to resolve an absolute path against a
-  // base, which produces nonsense (e.g. concatenating `file:///root/` +
-  // `/Users/dev/proj/x` in GH Code Scanning).
   const artifactLocation =
     uri === "unknown" || path.isAbsolute(uri)
       ? { uri }
       : { uri, uriBaseId: "SRCROOT" as const };
+  return {
+    physicalLocation: { artifactLocation, region },
+    ...(label ? { message: { text: label } } : {}),
+  };
+};
+
+const violationToResult = (
+  v: CheckViolation,
+  ruleIndex: ReadonlyMap<string, number>,
+  repoRoot: string,
+): SarifResult => {
   const fp = fingerprint(v);
+  const relatedLocations = v.relatedLocations?.map((r) =>
+    buildSarifLocation(r.sourceLocation, repoRoot, r.message),
+  );
   return {
     ruleId: v.rule,
     ...(ruleIndex.has(v.rule) ? { ruleIndex: ruleIndex.get(v.rule) } : {}),
     level: "error",
     message: { text: `${v.target}: ${v.message}` },
-    locations: [{ physicalLocation: { artifactLocation, region } }],
+    locations: [buildSarifLocation(v.sourceLocation, repoRoot)],
+    ...(relatedLocations && relatedLocations.length > 0
+      ? { relatedLocations }
+      : {}),
     partialFingerprints: {
       primaryLocationLineHash: fp,
       aactViolationHash: fp,

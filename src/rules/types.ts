@@ -2,6 +2,23 @@ import type { FormatSyntax } from "../formats/types";
 import type { Model, SourceLocation } from "../model";
 
 /**
+ * Secondary source anchor on a `Violation`. Lets rules surface
+ * the *context* of the primary anchor — for `dbPerService` the
+ * primary anchor is the DB declaration ("this DB has multiple
+ * owners"), and `relatedLocations` carries each accessor edge
+ * so the user / agent sees *who* the offending accessors are.
+ * Maps natively to SARIF v2.1.0 §3.27.22
+ * (`result.relatedLocations[]`); rendered in text mode as an
+ * indented `↳ <message>: <file>:<line>:<col>` list.
+ */
+export interface RelatedLocation {
+  readonly sourceLocation: SourceLocation;
+  /** Short label describing what this location *is*, e.g.
+   *  "accessor", "target", "in cycle", "external system". */
+  readonly message?: string;
+}
+
+/**
  * A rule violation. `target` is the name of the offending node;
  * `targetKind` says whether to look it up in `model.elements` or
  * `model.boundaries`. Most rules fire on elements (acl, crud,
@@ -10,17 +27,21 @@ import type { Model, SourceLocation } from "../model";
  * `targetKind: "boundary"` so consumers don't have to guess which
  * lookup table to use.
  *
- * `sourceLocation` is optional but strongly recommended — rules
- * that anchor on a specific relation / declaration give the CLI
- * (and any LSP / agent consumer) precise click-to-jump. When
- * omitted, the CLI falls back to the target node's own
- * `sourceLocation`.
+ * `sourceLocation` is the primary anchor — where the violation
+ * conceptually lives (the offending edge for edge-based rules,
+ * the offending element/boundary declaration for structural
+ * rules). Optional but strongly recommended.
+ *
+ * `relatedLocations` carries secondary context anchors —
+ * supporting evidence that helps the consumer understand and
+ * fix the violation without re-reading the source. Optional.
  */
 export interface Violation {
   readonly target: string;
   readonly targetKind: "element" | "boundary";
   readonly message: string;
   readonly sourceLocation?: SourceLocation;
+  readonly relatedLocations?: readonly RelatedLocation[];
 }
 
 /**

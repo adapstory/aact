@@ -13,6 +13,7 @@ import { applyEdits, editLocation } from "../../rules/lib/applyEdits";
 import { ruleRegistry } from "../../rules/registry";
 import type {
   FixResult,
+  RelatedLocation,
   RuleDefinition,
   SourceEdit,
   Violation,
@@ -57,6 +58,16 @@ export interface CheckViolation {
    * Zed / Ghostty / iTerm2 / WezTerm / Kitty.
    */
   readonly sourceLocation?: SourceLocation;
+  /**
+   * Secondary anchors that give context for the primary
+   * `sourceLocation`. For `dbPerService` the primary anchor is the
+   * DB declaration ("this DB has too many owners") and
+   * `relatedLocations` lists each accessor edge so the consumer
+   * sees *who* the owners are without re-reading the source.
+   * Maps to SARIF v2.1.0 `result.relatedLocations[]`; rendered in
+   * text mode as indented `↳ <message>: <path>:<line>:<col>` rows.
+   */
+  readonly relatedLocations?: readonly RelatedLocation[];
 }
 
 export interface CheckSummary {
@@ -277,6 +288,9 @@ const flattenViolations = (
         message: v.message,
         severity: "error",
         ...(sourceLocation ? { sourceLocation } : {}),
+        ...(v.relatedLocations && v.relatedLocations.length > 0
+          ? { relatedLocations: v.relatedLocations }
+          : {}),
       });
     }
   }
@@ -492,6 +506,7 @@ const renderViolationsTable = (
       rule: v.rule,
       target: v.target,
       message: v.message,
+      relatedLocations: v.relatedLocations,
     };
   });
 
@@ -512,6 +527,22 @@ const renderViolationsTable = (
     sink.write(
       `  ${locCell}  ${severity}  ${ruleCell}  ${subject}: ${r.message}\n`,
     );
+
+    // Related locations — indented `↳ <label>: <file>:<line>:<col>`
+    // rows under the primary anchor. Each is independently
+    // Cmd-clickable. Gives the consumer the *context* of the
+    // violation (accessors, targets, cycle edges) without
+    // re-reading source.
+    if (r.relatedLocations && r.relatedLocations.length > 0) {
+      const indent = " ".repeat(locWidth + 2);
+      for (const rel of r.relatedLocations) {
+        const relText = formatLocation(rel.sourceLocation);
+        const relLink = linkSourceLocation(relText, rel.sourceLocation);
+        const label = rel.message ? `${rel.message}: ` : "";
+        const arrow = `↳ ${label}${relLink}`;
+        sink.write(`  ${indent}${colors.dim(arrow)}\n`);
+      }
+    }
   }
   sink.write("\n");
 };

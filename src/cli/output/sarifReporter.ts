@@ -72,6 +72,11 @@ export interface SarifResult {
   readonly level: SarifLevel;
   readonly message: SarifMessage;
   readonly locations: readonly SarifLocation[];
+  /** Secondary anchors that give context for the primary
+   *  `locations[0]` — accessors of a shared DB, edges of a cycle,
+   *  the external system on the other side of an ACL violation.
+   *  SARIF v2.1.0 §3.27.22. */
+  readonly relatedLocations?: readonly SarifLocation[];
   /** Stable hashes for idempotent alert correlation. GitHub uses
    *  `partialFingerprints` to dedupe alerts across runs — same
    *  fingerprint + same alert = same code-scanning alert, kept
@@ -88,6 +93,9 @@ export interface SarifMessage {
 
 export interface SarifLocation {
   readonly physicalLocation: SarifPhysicalLocation;
+  /** Optional label describing what this location *is* — surfaces in
+   *  GitHub Code Scanning's "related locations" panel. */
+  readonly message?: SarifMessage;
 }
 
 export interface SarifPhysicalLocation {

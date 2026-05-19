@@ -69,6 +69,54 @@ describe("dbPerServiceRule.check", () => {
     ]);
     expect(dbPerServiceRule.check(model)).toHaveLength(0);
   });
+
+  it("primary anchor points at the DB element declaration, not at any accessor edge", () => {
+    // The conceptual location of "this DB has too many owners" is the
+    // DB declaration. Anchoring at one of the edges (as the rule
+    // historically did) sent every dbPerService violation to whichever
+    // Rel(...) happened to be registered first — which is meaningless
+    // for the consumer trying to understand the violation.
+    const dbLoc = {
+      file: "arch.puml",
+      start: { line: 10, col: 1, offset: 100 },
+      end: { line: 10, col: 25, offset: 124 },
+    };
+    const edgeLoc = {
+      file: "arch.puml",
+      start: { line: 25, col: 1, offset: 400 },
+      end: { line: 25, col: 30, offset: 429 },
+    };
+    const model = buildModel([
+      { name: "a", relations: [{ to: "shared_db", sourceLocation: edgeLoc }] },
+      { name: "b", relations: [{ to: "shared_db" }] },
+      { ...dbSpec("shared_db"), sourceLocation: dbLoc },
+    ]);
+    const [v] = dbPerServiceRule.check(model);
+    expect(v.sourceLocation).toEqual(dbLoc);
+  });
+
+  it("each accessor edge becomes a related location with accessor name as label", () => {
+    const edgeA = {
+      file: "arch.puml",
+      start: { line: 25, col: 1, offset: 400 },
+      end: { line: 25, col: 30, offset: 429 },
+    };
+    const edgeB = {
+      file: "arch.puml",
+      start: { line: 26, col: 1, offset: 460 },
+      end: { line: 26, col: 30, offset: 489 },
+    };
+    const model = buildModel([
+      { name: "a", relations: [{ to: "shared_db", sourceLocation: edgeA }] },
+      { name: "b", relations: [{ to: "shared_db", sourceLocation: edgeB }] },
+      dbSpec("shared_db"),
+    ]);
+    const [v] = dbPerServiceRule.check(model);
+    expect(v.relatedLocations).toEqual([
+      { sourceLocation: edgeA, message: "accessor: a" },
+      { sourceLocation: edgeB, message: "accessor: b" },
+    ]);
+  });
 });
 
 describe("dbPerServiceRule.fix", () => {

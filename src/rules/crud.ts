@@ -2,7 +2,7 @@ import consola from "consola";
 
 import type { FormatSyntax } from "../formats/types";
 import type { Element, Model } from "../model";
-import { allElements, targetOf } from "../model";
+import { allElements, getElement, targetOf } from "../model";
 import {
   buildElementBoundaryMap,
   resolveRedirectTarget,
@@ -13,7 +13,13 @@ import {
 } from "./lib/namingPatterns";
 import type { NamingConvention } from "./lib/namingUtils";
 import { detectNamingConvention, joinName } from "./lib/namingUtils";
-import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
+import type {
+  FixResult,
+  RelatedLocation,
+  RuleDefinition,
+  SourceEdit,
+  Violation,
+} from "./types";
 
 export interface CrudOptions {
   /** Tags маркирующие repo/relay контейнеры. Default ["repo", "relay"]. */
@@ -261,8 +267,19 @@ export const crudRule: RuleDefinition<CrudOptions> = {
 
       if (!isRepoContainer && dbRelations.length > 0) {
         // Anchor on the first direct-db edge — lint-style click jumps
-        // to the `Rel(...)` that broke the rule.
+        // to the `Rel(...)` that broke the rule. Related anchors list
+        // every DB this element directly touches.
         const firstEdge = dbRelations[0];
+        const related: RelatedLocation[] = [];
+        for (const r of dbRelations) {
+          const db = getElement(model, r.to);
+          if (db?.sourceLocation) {
+            related.push({
+              sourceLocation: db.sourceLocation,
+              message: `database: ${r.to}`,
+            });
+          }
+        }
         violations.push({
           target: element.name,
           targetKind: "element" as const,
@@ -270,6 +287,7 @@ export const crudRule: RuleDefinition<CrudOptions> = {
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
             : {}),
+          ...(related.length > 0 ? { relatedLocations: related } : {}),
         });
       }
 
@@ -279,6 +297,16 @@ export const crudRule: RuleDefinition<CrudOptions> = {
       if (isRepoContainer && nonDbRels.length > 0) {
         const nonDbTargets = nonDbRels.map((r) => r.to).join(", ");
         const firstEdge = nonDbRels[0];
+        const related: RelatedLocation[] = [];
+        for (const r of nonDbRels) {
+          const target = getElement(model, r.to);
+          if (target?.sourceLocation) {
+            related.push({
+              sourceLocation: target.sourceLocation,
+              message: `non-db dependency: ${r.to}`,
+            });
+          }
+        }
         violations.push({
           target: element.name,
           targetKind: "element" as const,
@@ -286,6 +314,7 @@ export const crudRule: RuleDefinition<CrudOptions> = {
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
             : {}),
+          ...(related.length > 0 ? { relatedLocations: related } : {}),
         });
       }
     }

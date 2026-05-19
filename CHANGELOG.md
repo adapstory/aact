@@ -6,7 +6,45 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- **`Violation.relatedLocations`** — rules can now attach secondary
+  source anchors to a violation alongside the primary
+  `sourceLocation`. The primary anchor is _where_ the violation
+  lives; related locations are _the supporting evidence_. Threads
+  through every output mode:
+  - **Text**: indented `↳ <label>: <file>:<line>:<col>` rows under
+    the primary anchor, each independently Cmd-clickable.
+  - **`--json`**: `data.violations[].relatedLocations[]` —
+    `{ sourceLocation, message? }[]`. Additive, no `schemaVersion`
+    bump (we're in beta — see AGENTS.md schemaVersion policy).
+  - **`--sarif`**: maps to SARIF v2.1.0 `result.relatedLocations[]`
+    (§3.27.22). GitHub Code Scanning surfaces these in the alert
+    detail view's "Related locations" panel.
+
+  Each built-in rule now populates relevant context:
+  - `crud` — the DB element(s) this container directly accesses
+  - `acl` — the external system(s) being called
+  - `apiGateway` — the external system on the other side
+  - `stableDependencies` — the less-stable dependency target
+  - `dbPerService` — every accessor edge of the shared DB
+  - `acyclic` — every outgoing relation of the cycle participant
+
 ### Fixed
+
+- **`dbPerService` primary anchor now points at the DB declaration**,
+  not at whichever accessor edge happened to register first. The
+  conceptual location of "this DB has too many owners" is the DB
+  itself; the accessor edges are now surfaced via
+  `relatedLocations`. Two different rules firing on the same line
+  (because the historical anchor heuristic happened to pick the
+  same edge) is no longer the default UX.
+
+- **`Databases` count now includes `ComponentDb`** in addition to
+  `ContainerDb` — both at the `analyze` summary level and inside
+  the `dbPerService` / `crud` rules' database detection. The
+  earlier hardcoded `kind === "ContainerDb"` check silently dropped
+  component-level data stores.
 
 - **`envelope.meta.configPath` now reflects the resolved config
   file path even without an explicit `--config` flag.** Beta.15

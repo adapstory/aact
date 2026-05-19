@@ -333,6 +333,101 @@ describe("renderCheckText", () => {
     expect(text).toContain("1 violation");
   });
 
+  it("renders relatedLocations as indented `↳ label: path:line:col` rows", () => {
+    const { sink, output } = captureSink();
+    renderCheckText(
+      buildEnvelope({
+        command: "check",
+        exitCode: 1,
+        data: {
+          mode: "check",
+          violations: [
+            {
+              rule: "dbPerService",
+              target: "orders_db",
+              targetKind: "element" as const,
+              message: "shared between A, B",
+              severity: "error",
+              sourceLocation: {
+                file: "/abs/arch.puml",
+                start: { line: 10, col: 1, offset: 100 },
+                end: { line: 10, col: 20, offset: 119 },
+              },
+              relatedLocations: [
+                {
+                  sourceLocation: {
+                    file: "/abs/arch.puml",
+                    start: { line: 25, col: 1, offset: 400 },
+                    end: { line: 25, col: 30, offset: 429 },
+                  },
+                  message: "accessor: A",
+                },
+                {
+                  sourceLocation: {
+                    file: "/abs/arch.puml",
+                    start: { line: 26, col: 1, offset: 460 },
+                    end: { line: 26, col: 30, offset: 489 },
+                  },
+                  message: "accessor: B",
+                },
+              ],
+            },
+          ],
+          suggestedFixes: [],
+          summary: { failed: 1, passed: 7, total: 1 },
+          rules: [],
+        },
+        meta: { durationMs: 1, configPath: null, source: null },
+      }),
+      sink,
+    );
+    const text = output();
+    expect(text).toMatch(/↳ accessor: A: \/abs\/arch\.puml:25:1/);
+    expect(text).toMatch(/↳ accessor: B: \/abs\/arch\.puml:26:1/);
+  });
+
+  it("renders relatedLocations without label when message is absent", () => {
+    const { sink, output } = captureSink();
+    renderCheckText(
+      buildEnvelope({
+        command: "check",
+        exitCode: 1,
+        data: {
+          mode: "check",
+          violations: [
+            {
+              rule: "acyclic",
+              target: "svc_a",
+              targetKind: "element" as const,
+              message: "participates in cycle",
+              severity: "error",
+              sourceLocation: {
+                file: "/abs/x.puml",
+                start: { line: 5, col: 1, offset: 50 },
+                end: { line: 5, col: 10, offset: 59 },
+              },
+              relatedLocations: [
+                {
+                  sourceLocation: {
+                    file: "/abs/x.puml",
+                    start: { line: 7, col: 1, offset: 80 },
+                    end: { line: 7, col: 10, offset: 89 },
+                  },
+                },
+              ],
+            },
+          ],
+          suggestedFixes: [],
+          summary: { failed: 1, passed: 7, total: 1 },
+          rules: [],
+        },
+        meta: { durationMs: 1, configPath: null, source: null },
+      }),
+      sink,
+    );
+    expect(output()).toMatch(/↳ \/abs\/x\.puml:7:1/);
+  });
+
   it("renders suggested fixes preview only in dry-run mode", () => {
     const inDryRun = (() => {
       const { sink, output } = captureSink();

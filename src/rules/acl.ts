@@ -1,13 +1,19 @@
 import consola from "consola";
 
 import type { Element } from "../model";
-import { allElements, targetOf } from "../model";
+import { allElements, getElement, targetOf } from "../model";
 import {
   DEFAULT_ACL_NAME_PATTERNS,
   matchesAnyName,
 } from "./lib/namingPatterns";
 import { detectNamingConvention, joinName } from "./lib/namingUtils";
-import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
+import type {
+  FixResult,
+  RelatedLocation,
+  RuleDefinition,
+  SourceEdit,
+  Violation,
+} from "./types";
 
 export interface AclOptions {
   /** Tag, который маркирует ACL-контейнер. Default "acl". */
@@ -61,6 +67,16 @@ export const aclRule: RuleDefinition<AclOptions> = {
         // Anchor on the first offending edge — lint-style "click on
         // violation, jump to the Rel line that broke the rule".
         const firstEdge = externalRelations[0];
+        const related: RelatedLocation[] = [];
+        for (const r of externalRelations) {
+          const target = getElement(model, r.to);
+          if (target?.sourceLocation) {
+            related.push({
+              sourceLocation: target.sourceLocation,
+              message: `external system: ${r.to}`,
+            });
+          }
+        }
         violations.push({
           target: element.name,
           targetKind: "element" as const,
@@ -68,6 +84,7 @@ export const aclRule: RuleDefinition<AclOptions> = {
           ...(firstEdge.sourceLocation
             ? { sourceLocation: firstEdge.sourceLocation }
             : {}),
+          ...(related.length > 0 ? { relatedLocations: related } : {}),
         });
       }
     }

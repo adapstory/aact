@@ -1,7 +1,7 @@
 import consola from "consola";
 
 import type { Element, SourceLocation } from "../model";
-import { allElements, targetOf } from "../model";
+import { allElements, getElement, targetOf } from "../model";
 import {
   buildElementBoundaryMap,
   resolveRedirectTarget,
@@ -10,7 +10,13 @@ import {
   DEFAULT_REPO_NAME_PATTERNS,
   matchesAnyName,
 } from "./lib/namingPatterns";
-import type { FixResult, RuleDefinition, SourceEdit, Violation } from "./types";
+import type {
+  FixResult,
+  RelatedLocation,
+  RuleDefinition,
+  SourceEdit,
+  Violation,
+} from "./types";
 
 export interface DbPerServiceOptions {
   /** Tags маркирующие repo/relay контейнеры — определяют owner of DB. */
@@ -75,39 +81,60 @@ export const dbPerServiceRule: RuleDefinition<DbPerServiceOptions> = {
 
   check(model) {
     const violations: Violation[] = [];
-    // Track accessor name + first edge pointing at each db so we can
-    // anchor diagnostics on the actual `Rel(accessor, db, ...)` line.
-    interface DbAccess {
-      readonly accessors: string[];
-      readonly firstEdgeLocation: SourceLocation | undefined;
+    const primaryAnchor = (
+      db: Element | undefined,
+      edges: readonly { edgeLocation: SourceLocation | undefined }[],
+    ): { sourceLocation?: SourceLocation } => {
+      if (db?.sourceLocation) return { sourceLocation: db.sourceLocation };
+      const fallback = edges[0]?.edgeLocation;
+      return fallback ? { sourceLocation: fallback } : {};
+    };
+    // Track every accessor + its specific edge to the DB so we can
+    // primary-anchor on the DB declaration (the conceptual location
+    // of the problem: "this DB has too many owners") and list each
+    // offending accessor edge as a related location.
+    interface AccessorEdge {
+      readonly name: string;
+      readonly edgeLocation: SourceLocation | undefined;
     }
-    const dbAccessMap = new Map<string, DbAccess>();
+    const dbAccessMap = new Map<string, AccessorEdge[]>();
 
     for (const element of allElements(model)) {
       for (const rel of element.relations) {
         if (targetOf(model, rel)?.kind === "ContainerDb") {
           const existing = dbAccessMap.get(rel.to);
-          if (existing) {
-            existing.accessors.push(element.name);
-          } else {
-            dbAccessMap.set(rel.to, {
-              accessors: [element.name],
-              firstEdgeLocation: rel.sourceLocation,
-            });
-          }
+          const edge = { name: element.name, edgeLocation: rel.sourceLocation };
+          if (existing) existing.push(edge);
+          else dbAccessMap.set(rel.to, [edge]);
         }
       }
     }
 
-    for (const [db, { accessors, firstEdgeLocation }] of dbAccessMap) {
-      if (accessors.length > 1) {
-        violations.push({
-          target: db,
-          targetKind: "element" as const,
-          message: `shared between ${accessors.join(", ")} — each database should have a single owner`,
-          ...(firstEdgeLocation ? { sourceLocation: firstEdgeLocation } : {}),
-        });
+    for (const [dbName, accessorEdges] of dbAccessMap) {
+      if (accessorEdges.length <= 1) continue;
+
+      const dbElement = getElement(model, dbName);
+      const related: RelatedLocation[] = [];
+      for (const a of accessorEdges) {
+        if (a.edgeLocation) {
+          related.push({
+            sourceLocation: a.edgeLocation,
+            message: `accessor: ${a.name}`,
+          });
+        }
       }
+
+      violations.push({
+        target: dbName,
+        targetKind: "element" as const,
+        message: `shared between ${accessorEdges.map((a) => a.name).join(", ")} — each database should have a single owner`,
+        // Primary anchor: the DB declaration itself — that's where the
+        // "too many owners" property lives. Falls back to first
+        // accessor edge if the loader didn't populate the element's
+        // location (regex-based loaders may leave it undefined).
+        ...primaryAnchor(dbElement, accessorEdges),
+        ...(related.length > 0 ? { relatedLocations: related } : {}),
+      });
     }
 
     return violations;

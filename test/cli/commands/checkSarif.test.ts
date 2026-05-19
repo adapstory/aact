@@ -210,6 +210,59 @@ describe("checkSarifAdapter — repo-relative artifact URIs", () => {
   });
 });
 
+describe("checkSarifAdapter — relatedLocations mapping", () => {
+  it("maps Violation.relatedLocations to SarifResult.relatedLocations with messages", () => {
+    const v: CheckViolation = {
+      ...baseViolation,
+      relatedLocations: [
+        {
+          sourceLocation: {
+            file: "/abs/arch.puml",
+            start: { line: 30, col: 1, offset: 600 },
+            end: { line: 30, col: 25, offset: 624 },
+          },
+          message: "accessor: orders_repo",
+        },
+      ],
+    };
+    const log = checkSarifAdapter(envelopeWith([v]));
+    const related = log.runs[0].results[0].relatedLocations;
+    expect(related).toBeDefined();
+    expect(related).toHaveLength(1);
+    expect(related?.[0].physicalLocation.region).toEqual({
+      startLine: 30,
+      startColumn: 1,
+      endLine: 30,
+      endColumn: 25,
+    });
+    expect(related?.[0].message?.text).toBe("accessor: orders_repo");
+  });
+
+  it("omits relatedLocations on the SARIF result when none are present on the violation", () => {
+    const log = checkSarifAdapter(envelopeWith([baseViolation]));
+    expect(log.runs[0].results[0].relatedLocations).toBeUndefined();
+  });
+
+  it("renders a related location without `message` as a physicalLocation-only SARIF location", () => {
+    const v: CheckViolation = {
+      ...baseViolation,
+      relatedLocations: [
+        {
+          sourceLocation: {
+            file: "/abs/arch.puml",
+            start: { line: 40, col: 1, offset: 800 },
+            end: { line: 40, col: 10, offset: 809 },
+          },
+        },
+      ],
+    };
+    const log = checkSarifAdapter(envelopeWith([v]));
+    const [related] = log.runs[0].results[0].relatedLocations ?? [];
+    expect(related?.message).toBeUndefined();
+    expect(related?.physicalLocation.region?.startLine).toBe(40);
+  });
+});
+
 describe("checkSarifAdapter — partialFingerprints", () => {
   it("emits both primaryLocationLineHash and aactViolationHash with the same value", () => {
     // `primaryLocationLineHash` is the conventional key GitHub Code

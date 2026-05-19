@@ -1,5 +1,5 @@
 import { allElements, getElement } from "../model";
-import type { RuleDefinition, Violation } from "./types";
+import type { RelatedLocation, RuleDefinition, Violation } from "./types";
 
 /**
  * No options today. The shape is exported as `Record<string, never>`
@@ -50,6 +50,19 @@ export const acyclicRule: RuleDefinition<AcyclicOptions> = {
     for (const element of allElements(model)) {
       if (findCycle(element.name, element.name, new Set())) {
         const firstRel = element.relations[0];
+        // Each outgoing relation of a cycle participant is potentially
+        // part of (one of) the back-edges. Surface every outgoing edge
+        // as a related location so the user / agent sees the full
+        // pattern, not just one anchor.
+        const related: RelatedLocation[] = [];
+        for (const r of element.relations) {
+          if (r.sourceLocation) {
+            related.push({
+              sourceLocation: r.sourceLocation,
+              message: `relation: ${element.name} → ${r.to}`,
+            });
+          }
+        }
         violations.push({
           target: element.name,
           targetKind: "element" as const,
@@ -57,6 +70,7 @@ export const acyclicRule: RuleDefinition<AcyclicOptions> = {
           ...(firstRel?.sourceLocation
             ? { sourceLocation: firstRel.sourceLocation }
             : {}),
+          ...(related.length > 0 ? { relatedLocations: related } : {}),
         });
       }
     }

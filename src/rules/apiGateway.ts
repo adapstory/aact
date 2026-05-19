@@ -1,5 +1,5 @@
 import type { Element } from "../model";
-import { allElements, targetOf } from "../model";
+import { allElements, getElement, targetOf } from "../model";
 import {
   DEFAULT_ACL_NAME_PATTERNS,
   matchesAnyName,
@@ -56,12 +56,23 @@ export const apiGatewayRule: RuleDefinition<ApiGatewayOptions> = {
 
         const techs = rel.technology?.split(", ") ?? [];
         if (!techs.some((t) => gatewayPattern.test(t))) {
+          const target = getElement(model, rel.to);
           violations.push({
             target: element.name,
             targetKind: "element" as const,
             message: `calls external "${rel.to}" without going through an API Gateway`,
             ...(rel.sourceLocation
               ? { sourceLocation: rel.sourceLocation }
+              : {}),
+            ...(target?.sourceLocation
+              ? {
+                  relatedLocations: [
+                    {
+                      sourceLocation: target.sourceLocation,
+                      message: `external system: ${rel.to}`,
+                    },
+                  ],
+                }
               : {}),
           });
         }
