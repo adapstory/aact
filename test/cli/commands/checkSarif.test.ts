@@ -162,3 +162,38 @@ describe("checkSarifAdapter — results mapping", () => {
     expect(log.runs[0].results).toEqual([]);
   });
 });
+
+describe("checkSarifAdapter — repo-relative artifact URIs", () => {
+  it("declares originalUriBaseIds.SRCROOT pointing at the cwd", () => {
+    const log = checkSarifAdapter(envelopeWith([]));
+    const base = log.runs[0].originalUriBaseIds?.SRCROOT;
+    expect(base).toBeDefined();
+    expect(base?.uri).toMatch(/^file:\/\/\//);
+    expect(base?.uri.endsWith("/")).toBe(true);
+  });
+
+  it("relativizes paths inside cwd and tags them with uriBaseId=SRCROOT", () => {
+    const insideCwd: CheckViolation = {
+      ...baseViolation,
+      sourceLocation: {
+        file: `${process.cwd()}/architecture.puml`,
+        start: { line: 1, col: 1, offset: 0 },
+        end: { line: 1, col: 1, offset: 0 },
+      },
+    };
+    const log = checkSarifAdapter(envelopeWith([insideCwd]));
+    const artifact =
+      log.runs[0].results[0].locations[0].physicalLocation.artifactLocation;
+    expect(artifact.uri).toBe("architecture.puml");
+    expect(artifact.uriBaseId).toBe("SRCROOT");
+  });
+
+  it("keeps absolute paths absolute when source lives outside cwd (no uriBaseId)", () => {
+    // baseViolation.sourceLocation.file = "/abs/arch.puml" — outside cwd
+    const log = checkSarifAdapter(envelopeWith([baseViolation]));
+    const artifact =
+      log.runs[0].results[0].locations[0].physicalLocation.artifactLocation;
+    expect(artifact.uri).toBe("/abs/arch.puml");
+    expect(artifact.uriBaseId).toBeUndefined();
+  });
+});

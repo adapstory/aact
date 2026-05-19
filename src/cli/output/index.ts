@@ -11,10 +11,12 @@ export { resolveOutputMode } from "./resolveMode";
 export type {
   SarifAdapter,
   SarifArtifactLocation,
+  SarifInvocation,
   SarifLevel,
   SarifLocation,
   SarifLog,
   SarifMessage,
+  SarifNotification,
   SarifPhysicalLocation,
   SarifRegion,
   SarifReportingDescriptor,

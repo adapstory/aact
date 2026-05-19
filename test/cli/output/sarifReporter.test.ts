@@ -71,4 +71,50 @@ describe("SarifReporter", () => {
     new SarifReporter().emit({ envelope: baseEnvelope });
     expect(captured().endsWith("\n")).toBe(true);
   });
+
+  it("emits an error log with invocations when envelope is exit 2 (data=null)", () => {
+    // Reproduces the `aact check --config missing.ts --sarif` crash:
+    // run.ts builds an error envelope (exit 2, data null) and the
+    // adapter would dereference null. The reporter short-circuits.
+    const errorEnvelope: CliEnvelope<null> = {
+      schemaVersion: 1,
+      command: "check",
+      ok: false,
+      exitCode: 2,
+      data: null,
+      diagnostics: [
+        {
+          kind: "config.loadFailed",
+          message: "missing.ts not found",
+          severity: "warning",
+        },
+      ],
+      meta: {
+        aactVersion: "3.0.0-test",
+        durationMs: 1,
+        configPath: "./missing.ts",
+        source: null,
+      },
+    };
+
+    // Adapter that would crash on data=null — should NOT be called.
+    const crashingAdapter = vi.fn(() => {
+      throw new Error("adapter should not run on error envelope");
+    });
+
+    new SarifReporter(crashingAdapter).emit({ envelope: errorEnvelope });
+    const log = JSON.parse(captured()) as SarifLog;
+
+    expect(crashingAdapter).not.toHaveBeenCalled();
+    expect(log.runs[0].results).toEqual([]);
+    expect(log.runs[0].invocations).toHaveLength(1);
+    const inv = log.runs[0].invocations?.[0];
+    expect(inv?.executionSuccessful).toBe(false);
+    expect(inv?.exitCode).toBe(2);
+    expect(inv?.toolExecutionNotifications).toHaveLength(1);
+    const [note] = inv?.toolExecutionNotifications ?? [];
+    expect(note.level).toBe("error");
+    expect(note.descriptor?.id).toBe("config.loadFailed");
+    expect(note.message.text).toContain("missing.ts");
+  });
 });

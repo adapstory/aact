@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import path from "pathe";
+
 import { ruleRegistry } from "../../rules/registry";
 import type { RuleDefinition } from "../../rules/types";
 import type {
@@ -14,6 +16,25 @@ const SARIF_SCHEMA =
   "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.6.json";
 
 const AACT_INFO_URI = "https://github.com/Byndyusoft/aact";
+
+/**
+ * GitHub Code Scanning matches `artifactLocation.uri` against repo
+ * paths, so an absolute filesystem path like `/Users/dev/proj/...`
+ * fails to attach annotations to PR diffs. Relativize against the
+ * CWD (the user's working directory at invocation, normally the
+ * repo root) when the source is inside it, fall back to absolute
+ * otherwise. The `originalUriBaseIds.SRCROOT` entry tells consumers
+ * how to resolve the relative URI back to an absolute path if they
+ * need to.
+ */
+const cwd = (): string => process.cwd();
+
+const relativizeUri = (filePath: string): string => {
+  if (!path.isAbsolute(filePath)) return filePath;
+  const rel = path.relative(cwd(), filePath);
+  // `..` prefix means the file lives outside the cwd — keep absolute.
+  return rel === "" || rel.startsWith("..") ? filePath : rel;
+};
 
 /**
  * Build a `tool.driver.rules[]` catalogue from the built-in registry.
@@ -66,19 +87,21 @@ const violationToResult = (
         endColumn: loc.end.col,
       }
     : { startLine: 1 };
+  const uri = loc?.file ? relativizeUri(loc.file) : "unknown";
+  // Use `uriBaseId: "SRCROOT"` only when the URI is actually relative —
+  // otherwise consumers would try to resolve an absolute path against a
+  // base, which produces nonsense (e.g. concatenating `file:///cwd/` +
+  // `/Users/dev/proj/x` in GH Code Scanning).
+  const artifactLocation =
+    uri === "unknown" || path.isAbsolute(uri)
+      ? { uri }
+      : { uri, uriBaseId: "SRCROOT" as const };
   return {
     ruleId: v.rule,
     ...(ruleIndex.has(v.rule) ? { ruleIndex: ruleIndex.get(v.rule) } : {}),
     level: "error",
     message: { text: `${v.target}: ${v.message}` },
-    locations: [
-      {
-        physicalLocation: {
-          artifactLocation: { uri: loc?.file ?? "unknown" },
-          region,
-        },
-      },
-    ],
+    locations: [{ physicalLocation: { artifactLocation, region } }],
     partialFingerprints: { aactViolationHash: fingerprint(v) },
     properties: { targetKind: v.targetKind },
   };
@@ -112,6 +135,12 @@ export const checkSarifAdapter: SarifAdapter<CheckData> = (envelope) => {
             informationUri: AACT_INFO_URI,
             rules,
           },
+        },
+        // Declare SRCROOT so consumers can resolve any relative
+        // `artifactLocation.uri` back to an absolute path. Trailing
+        // `/` per SARIF v2.1.0 §3.14.13 (it's a directory).
+        originalUriBaseIds: {
+          SRCROOT: { uri: `file://${cwd()}/` },
         },
         results,
       },

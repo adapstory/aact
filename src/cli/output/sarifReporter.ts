@@ -26,6 +26,22 @@ export interface SarifRun {
   /** Original source URI base — lets consumers resolve relative paths
    *  against a known root (CI workspace, repo root). Optional. */
   readonly originalUriBaseIds?: Readonly<Record<string, SarifArtifactLocation>>;
+  /** Tool invocation records — used to surface execution-level
+   *  problems (config-load failure, missing source file, internal
+   *  error) that aren't violations. SARIF v2.1.0 §3.20. */
+  readonly invocations?: readonly SarifInvocation[];
+}
+
+export interface SarifInvocation {
+  readonly executionSuccessful: boolean;
+  readonly exitCode?: number;
+  readonly toolExecutionNotifications?: readonly SarifNotification[];
+}
+
+export interface SarifNotification {
+  readonly level: SarifLevel;
+  readonly message: SarifMessage;
+  readonly descriptor?: { readonly id: string };
 }
 
 export interface SarifTool {
@@ -105,36 +121,78 @@ export type SarifAdapter<TData> = (envelope: CliEnvelope<TData>) => SarifLog;
 const SARIF_SCHEMA_URI =
   "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.6.json";
 
+const baseRun = (toolName: string, version?: string): { tool: SarifTool } => ({
+  tool: {
+    driver: {
+      name: toolName,
+      ...(version ? { version } : {}),
+      informationUri: "https://github.com/Byndyusoft/aact",
+    },
+  },
+});
+
 const emptySarifLog = (toolName = "aact", version?: string): SarifLog => ({
+  $schema: SARIF_SCHEMA_URI,
+  version: "2.1.0",
+  runs: [{ ...baseRun(toolName, version), results: [] }],
+});
+
+const errorSarifLog = (
+  envelope: CliEnvelope<unknown>,
+  toolName = "aact",
+): SarifLog => ({
   $schema: SARIF_SCHEMA_URI,
   version: "2.1.0",
   runs: [
     {
-      tool: {
-        driver: {
-          name: toolName,
-          ...(version ? { version } : {}),
-          informationUri: "https://github.com/Byndyusoft/aact",
-        },
-      },
+      ...baseRun(toolName, envelope.meta.aactVersion),
       results: [],
+      invocations: [
+        {
+          executionSuccessful: false,
+          exitCode: envelope.exitCode,
+          toolExecutionNotifications: envelope.diagnostics.map((d) => ({
+            level: d.severity === "warning" ? "error" : "note",
+            descriptor: { id: d.kind },
+            message: { text: d.message },
+          })),
+        },
+      ],
     },
   ],
 });
 
 /**
- * Streams a SARIF v2.1.0 log on stdout. The adapter (if any)
- * decides how to map the command's envelope into the SARIF shape;
- * without one, the reporter emits an empty-but-valid log so the
- * "wrong command + --sarif" path doesn't surprise CI.
+ * Streams a SARIF v2.1.0 log on stdout. Three paths:
+ *
+ *  1. Successful envelope (exitCode 0 or 1) with an adapter → the
+ *     adapter maps `envelope.data` into a SARIF log. This is the
+ *     normal `check` flow.
+ *  2. Error envelope (exitCode 2 — config load failure, missing
+ *     source, internal error) → the data payload is `null`, so we
+ *     short-circuit before the adapter and emit a SARIF log with
+ *     `runs[].invocations[].toolExecutionNotifications[]` carrying
+ *     every diagnostic. This is the spec-canonical way to report
+ *     tool-execution problems and prevents the adapter from
+ *     dereferencing `null`.
+ *  3. Successful envelope but no adapter (commands like `init` /
+ *     `skill` that don't model SARIF semantics) → empty log so
+ *     `aact <whatever> --sarif` always produces a well-formed file
+ *     instead of crashing CI.
  */
 export class SarifReporter<TData = unknown> implements Reporter<TData> {
   constructor(private readonly adapter?: SarifAdapter<TData>) {}
 
   emit(result: CommandResult<TData>): void {
-    const log = this.adapter
-      ? this.adapter(result.envelope)
-      : emptySarifLog("aact", result.envelope.meta.aactVersion);
+    const env = result.envelope;
+    let log: SarifLog;
+    if (env.exitCode === 2 || env.data === null) {
+      log = errorSarifLog(env);
+    } else if (this.adapter) {
+      log = this.adapter(env);
+    } else {
+      log = emptySarifLog("aact", env.meta.aactVersion);
+    }
     process.stdout.write(JSON.stringify(log, undefined, 2) + "\n");
   }
 }
