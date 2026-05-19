@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.13 — 2026-05-19
+
+GH Code Scanning polish. The SARIF output that landed in beta.12
+was correct for the happy path but had three production
+inconveniences caught against real `code-scanning/upload-sarif`
+runs: `aact check --sarif` crashed on config-load failures,
+absolute paths didn't attach to PR diffs, and fingerprints used
+a non-conventional key. All three are closed. The eight built-in
+rules also gain symmetric options types so `rules: { acyclic: {} }`
+type-checks and runtime-validates the same way as
+`rules: { acl: { tag: "..." } }`.
+
 ### Fixed
 
 - **`aact check --sarif` no longer crashes on tool errors.** Running
