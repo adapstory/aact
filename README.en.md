@@ -48,6 +48,7 @@ After that, edit `architecture.puml` to describe your own system — the syntax 
 
 ```bash
 npx aact check --dry-run             # preview auto-fix without writing
+npx aact model                       # inspect the normalized C4 model
 npx aact analyze                     # coupling / cohesion metrics
 npx aact generate --format plantuml  # generate .puml from the source
 npx aact generate --format kubernetes

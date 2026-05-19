@@ -49,6 +49,7 @@ npx aact check
 
 ```bash
 npx aact check --dry-run             # preview auto-fix без записи
+npx aact model                       # inspect нормализованной C4-модели
 npx aact analyze                     # coupling/cohesion метрики
 npx aact generate --format plantuml  # сгенерировать .puml из источника
 npx aact generate --format kubernetes

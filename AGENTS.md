@@ -47,11 +47,19 @@ Every command supports `--json` and emits a **stable JSON envelope**
 
 ```bash
 npx aact check --json     # CheckData: violations[], suggestedFixes[], rules[], summary
+npx aact model --json     # ModelData: normalized C4 graph + loader issues
 npx aact analyze --json   # AnalysisReport: cohesion / coupling / sync vs async
 npx aact rule list --json # RuleListData: enabled / hasFix / description per rule
 npx aact generate --json --format kubernetes --output ./k8s/
 npx aact check --sarif    # SARIF v2.1.0 for GitHub Code Scanning
+npx aact model --sarif    # SARIF: loader-level issues only
 ```
+
+`aact model` is the primary inspection surface for agents — it
+returns the same normalized Model the rule engine sees, so any
+reasoning agents do about elements, boundaries, or relations stays
+consistent with what `aact check` would flag. Prefer it over
+re-parsing `.puml` / `.dsl` source by hand.
 
 Exit codes are part of the contract: **`0`** clean, **`1`** violations
 found, **`2`** tool error (config invalid, source missing, parse failed).
