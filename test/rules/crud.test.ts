@@ -446,6 +446,34 @@ describe("crudRule.fix — edge cases", () => {
   );
 });
 
+describe("crudRule.fix — UTF-16 offset semantics", () => {
+  it("rewires correctly when source contains cyrillic and emoji before the edit point", async () => {
+    // Regression: SourcePosition.offset is a UTF-16 code unit index,
+    // not a UTF-8 byte offset. If `applyEdits` ever switched to
+    // byte-based slicing (Buffer.from(...).slice), multibyte
+    // characters BEFORE the edited line would shift the offsets and
+    // the splice would land mid-glyph. Pin: cyrillic + emoji labels
+    // round-trip cleanly through `--fix` rewrite.
+    const puml = [
+      "@startuml",
+      STDLIB,
+      'Container(orders, "Сервис заказов 📦")',
+      'ContainerDb(orders_db, "База данных 💾")',
+      'Rel(orders, orders_db, "читает")',
+      "@enduml",
+    ].join("\n");
+    const { content } = await pumlFix(puml, "orders");
+    // Original labels survive byte-for-byte.
+    expect(content).toContain('Container(orders, "Сервис заказов 📦")');
+    expect(content).toContain('ContainerDb(orders_db, "База данных 💾")');
+    // New repo container injected.
+    expect(content).toContain("Container(orders_repo,");
+    // Original Rel was rewired (not duplicated, not corrupted).
+    expect(content).not.toMatch(/Rel\(orders, orders_db,\s*"читает"\)/);
+    expect(content).toContain("Rel(orders, orders_repo");
+  });
+});
+
 describe("crudRule.fix (structurizr syntax)", () => {
   it("emits structurizr DSL content via FormatSyntax helper", () => {
     // Synth model has no sourceLocation → fix returns no edits. The

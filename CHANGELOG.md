@@ -50,6 +50,19 @@ Overlapping edits between rules are detected and surfaced as
   `{ content, applied, conflicts }`. Pure function, no `consola.warn`
   side effects — the CLI surfaces conflicts as diagnostics instead.
 
+### Documentation
+
+- `SourcePosition.offset` JSDoc now states explicitly that the value
+  is a 0-based **UTF-16 code unit** index — matching JS string
+  semantics, chevrotain's `token.startOffset` / `endOffset`, and
+  LSP's default `positionEncoding: "utf-16"`. The previous wording
+  said "byte offset" which was wrong: applying `String.prototype.slice`
+  to a byte offset would land mid-glyph on cyrillic / emoji / CJK
+  content. Producer and consumer always agreed on the unit; only the
+  docstring lied. Regression tests pin the invariant through both
+  `applyEdits` directly and the full `crud --fix` rewrite path on a
+  PUML source containing non-ASCII labels.
+
 ### Added
 
 - `fix.editConflict` diagnostic kind. Emitted when two fix edits want

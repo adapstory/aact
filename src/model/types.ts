@@ -47,10 +47,17 @@ export type BoundaryKind = "System" | "Container" | "Component" | "Enterprise";
 
 /**
  * A position within a source file. 1-based for `line` and `col` (matches
- * editor conventions and OSC8 terminal-link expectations). `offset` is
- * 0-based byte offset from the start of the file — required for
- * range-based AST fixes ("replace bytes 1024..1051" rather than regex
- * search/replace).
+ * editor conventions and OSC8 terminal-link expectations).
+ *
+ * `offset` is a 0-based **UTF-16 code unit** index into the source string
+ * — the same unit `String.prototype.slice` / `charCodeAt` operate on,
+ * which is also what chevrotain emits (`token.startOffset` /
+ * `endOffset`) and what LSP uses by default (`positionEncoding:
+ * "utf-16"`). It is **not** a UTF-8 byte offset, despite the field name.
+ * Non-ASCII content (cyrillic, emoji, CJK) round-trips correctly
+ * through `applyEdits` because both producer and consumer use the
+ * same unit; consumers that need byte / codepoint offsets must
+ * convert themselves.
  *
  * All three are mandatory. If a position is not known, the enclosing
  * `SourceLocation` must be omitted entirely (it is optional on each
@@ -59,6 +66,7 @@ export type BoundaryKind = "System" | "Container" | "Component" | "Enterprise";
 export interface SourcePosition {
   readonly line: number;
   readonly col: number;
+  /** 0-based offset in UTF-16 code units (JS string index). */
   readonly offset: number;
 }
 

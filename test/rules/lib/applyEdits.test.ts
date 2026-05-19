@@ -174,6 +174,29 @@ describe("applyEdits", () => {
     expect(conflicts).toEqual([]);
   });
 
+  it("operates in UTF-16 code units, matching SourcePosition.offset semantics", () => {
+    // Non-ASCII content (cyrillic, emoji) lives in UTF-8 as multibyte
+    // sequences, but JS strings are UTF-16 and chevrotain emits
+    // UTF-16 code unit offsets. Pin: `applyEdits` slices the same
+    // unit producers populate, so cyrillic/emoji prefixes don't
+    // shift downstream edits.
+    const src = 'Container(svc, "Сервис 📦")\nRel(svc, db, "тест")';
+    // `Rel(svc, db, "тест")` starts right after `\n` — count code units.
+    const relStart = src.indexOf("Rel(svc, db,");
+    const relEnd = relStart + 'Rel(svc, db, "тест")'.length;
+    const { content } = applyEdits(src, [
+      {
+        kind: "replace",
+        range: loc(relStart, relEnd),
+        content: 'Rel(svc, db, "fixed")',
+      },
+    ]);
+    // Container line stays byte-for-byte intact (no truncated emoji)
+    expect(content).toContain('Container(svc, "Сервис 📦")');
+    expect(content).toContain('Rel(svc, db, "fixed")');
+    expect(content).not.toContain('"тест"');
+  });
+
   it("emits content verbatim — newline/indent are the rule's responsibility", () => {
     // The applier is a pure splicer. If the rule wants the inserted
     // content on its own line, the rule prepends `\n` to `content`.
