@@ -196,4 +196,37 @@ describe("checkSarifAdapter — repo-relative artifact URIs", () => {
     expect(artifact.uri).toBe("/abs/arch.puml");
     expect(artifact.uriBaseId).toBeUndefined();
   });
+
+  it("encodes SRCROOT via pathToFileURL (handles spaces / non-ascii / windows drive)", () => {
+    // Naive `file://${root}` would emit `file:///path with spaces/` —
+    // technically invalid (spaces are not URI-safe). `pathToFileURL`
+    // percent-encodes correctly. We assert the URI starts with `file://`
+    // and contains no literal space character.
+    const log = checkSarifAdapter(envelopeWith([]));
+    const base = log.runs[0].originalUriBaseIds?.SRCROOT;
+    expect(base?.uri).toMatch(/^file:\/\//);
+    expect(base?.uri).not.toMatch(/ /);
+  });
+});
+
+describe("checkSarifAdapter — partialFingerprints", () => {
+  it("emits both primaryLocationLineHash and aactViolationHash with the same value", () => {
+    // `primaryLocationLineHash` is the conventional key GitHub Code
+    // Scanning uses for alert deduplication. `aactViolationHash` is
+    // our namespaced sibling for multi-tool SARIF workflows.
+    const log = checkSarifAdapter(envelopeWith([baseViolation]));
+    const fp = log.runs[0].results[0].partialFingerprints;
+    expect(fp).toBeDefined();
+    expect(fp?.primaryLocationLineHash).toBeDefined();
+    expect(fp?.aactViolationHash).toBeDefined();
+    expect(fp?.primaryLocationLineHash).toBe(fp?.aactViolationHash);
+  });
+
+  it("partialFingerprints stay stable across runs (deterministic on same input)", () => {
+    const a = checkSarifAdapter(envelopeWith([baseViolation]));
+    const b = checkSarifAdapter(envelopeWith([baseViolation]));
+    expect(a.runs[0].results[0].partialFingerprints).toEqual(
+      b.runs[0].results[0].partialFingerprints,
+    );
+  });
 });

@@ -1,4 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 import path from "pathe";
 
@@ -18,21 +21,56 @@ const SARIF_SCHEMA =
 const AACT_INFO_URI = "https://github.com/Byndyusoft/aact";
 
 /**
- * GitHub Code Scanning matches `artifactLocation.uri` against repo
- * paths, so an absolute filesystem path like `/Users/dev/proj/...`
- * fails to attach annotations to PR diffs. Relativize against the
- * CWD (the user's working directory at invocation, normally the
- * repo root) when the source is inside it, fall back to absolute
- * otherwise. The `originalUriBaseIds.SRCROOT` entry tells consumers
- * how to resolve the relative URI back to an absolute path if they
- * need to.
+ * GitHub Code Scanning matches `artifactLocation.uri` against the
+ * **repository root**, not the working directory the tool was run
+ * from. Look up the git top-level via `git rev-parse` — succeeds in
+ * any subdir of a repo — and fall back to cwd if we're not in a
+ * git checkout (e.g. local smoke testing outside a repo).
+ *
+ * The lookup is sync (`execFileSync`) but runs once per `aact check`
+ * invocation, so the spawn cost is irrelevant. `cwd()` is captured
+ * at adapter-call time, not module-load time, so tests that change
+ * cwd between invocations see the right base.
  */
-const cwd = (): string => process.cwd();
+const computeRepoRoot = (): string => {
+  try {
+    const out = execFileSync(
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- `git` is universally PATH-installed; aact is itself a CLI tool that already trusts the user's shell environment.
+      "git",
+      ["rev-parse", "--show-toplevel"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+    return out || process.cwd();
+  } catch {
+    return process.cwd();
+  }
+};
 
-const relativizeUri = (filePath: string): string => {
+/**
+ * Resolve symlinks before comparing — macOS's `/tmp` ↔ `/private/tmp`
+ * symlink would otherwise produce a `..`-leading relative path even
+ * when both sides logically point at the same directory.
+ * `realpathSync` throws on non-existent paths, so we fall back to
+ * the original string (relativization still works on canonical
+ * inputs; only the edge case of "file disappeared between load and
+ * SARIF emit" lands here).
+ */
+const canonical = (p: string): string => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+};
+
+const relativizeUri = (filePath: string, base: string): string => {
   if (!path.isAbsolute(filePath)) return filePath;
-  const rel = path.relative(cwd(), filePath);
-  // `..` prefix means the file lives outside the cwd — keep absolute.
+  const rel = path.relative(canonical(base), canonical(filePath));
+  // `..` prefix means the file lives outside the repo root — keep absolute.
   return rel === "" || rel.startsWith("..") ? filePath : rel;
 };
 
@@ -67,6 +105,16 @@ const ruleIndexMap = (
  * hex chars — short enough to read, wide enough to avoid collisions.
  * `sourceLocation` is intentionally NOT folded in: edits that shift
  * line numbers should not break alert continuity.
+ *
+ * Emitted under two keys per result:
+ *  - `primaryLocationLineHash` — the conventional key GitHub Code
+ *    Scanning, ESLint SARIF formatter, Semgrep, etc. agree on.
+ *    GitHub uses it specifically to keep alerts continuous across
+ *    runs even when the alert moves between lines.
+ *  - `aactViolationHash` — the same value, namespaced for tooling
+ *    that wants to filter aact alerts specifically (or for
+ *    debugging when `primaryLocationLineHash` competes with other
+ *    SARIF producers in a multi-tool workflow).
  */
 const fingerprint = (v: CheckViolation): string =>
   createHash("sha256")
@@ -77,6 +125,7 @@ const fingerprint = (v: CheckViolation): string =>
 const violationToResult = (
   v: CheckViolation,
   ruleIndex: ReadonlyMap<string, number>,
+  repoRoot: string,
 ): SarifResult => {
   const loc = v.sourceLocation;
   const region = loc
@@ -87,22 +136,26 @@ const violationToResult = (
         endColumn: loc.end.col,
       }
     : { startLine: 1 };
-  const uri = loc?.file ? relativizeUri(loc.file) : "unknown";
+  const uri = loc?.file ? relativizeUri(loc.file, repoRoot) : "unknown";
   // Use `uriBaseId: "SRCROOT"` only when the URI is actually relative —
   // otherwise consumers would try to resolve an absolute path against a
-  // base, which produces nonsense (e.g. concatenating `file:///cwd/` +
+  // base, which produces nonsense (e.g. concatenating `file:///root/` +
   // `/Users/dev/proj/x` in GH Code Scanning).
   const artifactLocation =
     uri === "unknown" || path.isAbsolute(uri)
       ? { uri }
       : { uri, uriBaseId: "SRCROOT" as const };
+  const fp = fingerprint(v);
   return {
     ruleId: v.rule,
     ...(ruleIndex.has(v.rule) ? { ruleIndex: ruleIndex.get(v.rule) } : {}),
     level: "error",
     message: { text: `${v.target}: ${v.message}` },
     locations: [{ physicalLocation: { artifactLocation, region } }],
-    partialFingerprints: { aactViolationHash: fingerprint(v) },
+    partialFingerprints: {
+      primaryLocationLineHash: fp,
+      aactViolationHash: fp,
+    },
     properties: { targetKind: v.targetKind },
   };
 };
@@ -120,8 +173,9 @@ const violationToResult = (
 export const checkSarifAdapter: SarifAdapter<CheckData> = (envelope) => {
   const rules = buildRuleCatalogue(ruleRegistry);
   const indexMap = ruleIndexMap(ruleRegistry);
+  const repoRoot = computeRepoRoot();
   const results = envelope.data.violations.map((v) =>
-    violationToResult(v, indexMap),
+    violationToResult(v, indexMap, repoRoot),
   );
   const log: SarifLog = {
     $schema: SARIF_SCHEMA,
@@ -137,10 +191,12 @@ export const checkSarifAdapter: SarifAdapter<CheckData> = (envelope) => {
           },
         },
         // Declare SRCROOT so consumers can resolve any relative
-        // `artifactLocation.uri` back to an absolute path. Trailing
-        // `/` per SARIF v2.1.0 §3.14.13 (it's a directory).
+        // `artifactLocation.uri` back to an absolute path. `pathToFileURL`
+        // handles paths with spaces, non-ASCII characters, and Windows
+        // drive letters correctly — naive `file://${root}` concatenation
+        // would emit invalid URIs on those.
         originalUriBaseIds: {
-          SRCROOT: { uri: `file://${cwd()}/` },
+          SRCROOT: { uri: pathToFileURL(`${repoRoot}/`).href },
         },
         results,
       },
