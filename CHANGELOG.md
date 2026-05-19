@@ -6,7 +6,74 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-## v3.0.0-beta.6 — 2026-05-19
+## v3.0.0-beta.7 — 2026-05-19
+
+Architecture-as-code parsers rewritten from scratch on chevrotain;
+every third-party parsing dependency is dropped. `SourceLocation`
+(file + line + byte offset) now lands on every `Container` /
+`Boundary` / `Relation`, anchored to original-file bytes through
+whitespace-preserving pre-lex strip passes.
+
+### Added
+
+- **Structurizr DSL chevrotain parser** (`src/formats/structurizr/parser/`).
+  Replaces the v2 regex-based DSL loader with a typed lexer →
+  parser → CST → AST → Model pipeline. Covers the full Structurizr
+  DSL surface: model body, element bodies, body statements
+  (`description` / `technology` / `tags` / `url` / `properties` /
+  `perspectives`), explicit relationships (`a -> b`), group
+  nesting with separator, `!const` / `!var` substitution,
+  archetypes, selectors, deployment family (parsed-then-info-issue),
+  hard-removed constructs (`!ref` / `enterprise` → typed error with
+  modern-replacement hint), workspace metadata (`name` /
+  `description` / `extends`). Verified against reference fixtures
+  (`big-bank-plc.dsl`, `getting-started.dsl`, `this.dsl`,
+  `multi-line.dsl`).
+- **C4-PlantUML chevrotain parser** (`src/formats/plantuml/parser/`).
+  Replaces the `plantuml-parser` 0.4.0 third-party adapter end-to-
+  end. Covers all C4 stdlib macros: element family (Person /
+  System* / Container* / Component* + `_Ext` / `Db` / `Queue`
+  variants), boundary family (Enterprise / System / Container +
+  generic with `$type`), Rel family (12 variants including
+  `Rel_Back_Neighbor`), RelIndex family (12 variants), BiRel family
+  (10 variants), Lay\_* layout hints. Five pre-lex strip passes for
+  preprocessor directives, opaque macros, deployment blocks,
+  PlantUML native syntax, and multi-diagram trimming. 14 of 17
+  reference fixtures from `.parser-refs/C4-PlantUML/samples/`
+  load with zero parse errors; the 3 exclusions (sequence flavour
+  and deprecated `$index-N` old format) are pinned in tests and
+  documented in `grammar.md §8`.
+- **`SourceLocation` on every `Container` / `Boundary` / `Relation`**.
+  Foundation for terminal OSC8 file:line:col links, AST-aware fixes
+  ("replace bytes 1024..1051" instead of regex search/replace), and
+  precise CLI diagnostics. Preserved through both parsers' pre-lex
+  strip passes by replacing stripped content with same-length
+  whitespace so chevrotain offsets stay anchored to the user's
+  original file.
+
+### Removed
+
+- `plantuml-parser` 0.4.0 dependency. The chevrotain parser
+  obsoletes the entire `Enteee/plantuml-parser`-based adapter
+  layer; `src/formats/plantuml/lib/filterElements.ts` and the
+  marker-strip pre-transform hacks (`$tags=` → `__aact_tags__:`,
+  etc.) are gone with it.
+
+### Internal
+
+- Both parser stacks share the same shape: `tokens.ts` → `preParse.ts`
+  → `parser.ts` → `visitor.ts` → `toModel.ts` → `index.ts`. The
+  Structurizr stack has its own `preParse` for substitutions, opaque
+  blocks, deployment strip, inline directives, and hard-removed
+  errors. The PUML stack has five whitespace-preserving passes
+  covering preprocessor / native / opaque / deployment / arithmetic
+  / multi-diagram normalisation. Both produce a typed `FileNode` /
+  `WorkspaceNode` AST that `toModel` lowers to `Model`.
+- Roundtrip identity (`parse → Model → generate → re-parse → Model`)
+  verified against 12 PUML reference fixtures and the canonical
+  Structurizr DSL corpus.
+
+## v3.0.0-beta.6 — 2026-05-18
 
 Unified CLI output layer. Every command now speaks the same versioned
 JSON envelope (`schemaVersion: 1`) and follows a tight exit-code
@@ -80,16 +147,6 @@ before upgrading from beta.5.
   `HumanReporter` and exits with `envelope.exitCode`. The only
   remaining command-side `process.stdout.write` lives in `generate.ts`
   for explicit `--output -` artefact streaming.
-- PlantUML loader rewritten on top of a chevrotain parser stack
-  (`src/formats/plantuml/parser/`: tokens / preParse / parser /
-  visitor / toModel). Replaces the Enteee `plantuml-parser` 0.4.0
-  adapter end-to-end; the dependency is removed. `SourceLocation`
-  now lands on every `Container` / `Boundary` / `Relation`, anchored
-  to the original `.puml` byte offsets through the pre-lex strip
-  passes. 14 out of 17 reference fixtures from `C4-PlantUML/samples`
-  load with zero parse errors; the 3 exclusions (sequence flavour
-  and deprecated `$index-1` old format) are pinned in tests and
-  documented in `grammar.md §8`.
 
 ### Migration
 
