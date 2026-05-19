@@ -817,12 +817,6 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
 
   // Component_Boundary tests removed — it is NOT in the C4-PlantUML stdlib
   // (verified against upstream macro definitions, README, and c4model.com).
-  // The earlier beta.4 "fix" added rewriting for a token that was never part
-  // of the language. Use `Container_Boundary` to group components, as the
-  // upstream README explicitly directs.
-  it.todo(
-    "Component_Boundary nested inside another boundary (removed — not in C4-PlantUML stdlib)",
-  );
 });
 
 describe("PlantUML load — fixture-coverage edge", () => {
