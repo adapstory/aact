@@ -7,12 +7,13 @@ import type { AactConfig } from "../../config";
 import { loadFormat } from "../../formats/registry";
 import type { FixCapability, SourceSyntax } from "../../formats/types";
 import { canFix } from "../../formats/types";
-import type { Model } from "../../model";
+import type { Model, SourceLocation } from "../../model";
 import { applyEdits } from "../../rules/lib/applyEdits";
 import { ruleRegistry } from "../../rules/registry";
 import type { FixResult, RuleDefinition, Violation } from "../../rules/types";
 import { issueToDiagnostic, loadModel } from "../loadModel";
 import type { Diagnostic, ExitCode, Renderer } from "../output";
+import { linkSourceLocation } from "../output/hyperlinks";
 import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
 import { configArg, jsonArg } from "../sharedArgs";
@@ -27,6 +28,15 @@ export interface CheckViolation {
   readonly message: string;
   /** v1: always "error". Per-rule severity will be additive in a future bump. */
   readonly severity: "error";
+  /**
+   * Optional location of the offending construct in source. Populated
+   * either from `Violation.sourceLocation` if the rule set it
+   * explicitly, or by looking up
+   * `model.containers[v.container].sourceLocation` as fallback.
+   * Surfaces in the JSON envelope for agents and powers OSC8
+   * hyperlinks in text mode (`terminal-link`).
+   */
+  readonly sourceLocation?: SourceLocation;
 }
 
 export interface CheckSummary {
@@ -181,15 +191,23 @@ const generateFixes = (
 
 const flattenViolations = (
   results: readonly RuleResult[],
+  model: Model,
 ): CheckViolation[] => {
   const out: CheckViolation[] = [];
   for (const result of results) {
     for (const v of result.violations) {
+      // Fall back to the container's sourceLocation when the rule
+      // didn't set one. Rules that flag a relation or boundary may
+      // set v.sourceLocation explicitly to anchor diagnostics more
+      // precisely.
+      const sourceLocation =
+        v.sourceLocation ?? model.containers[v.container]?.sourceLocation;
       out.push({
         rule: result.name,
         container: v.container,
         message: v.message,
         severity: "error",
+        ...(sourceLocation ? { sourceLocation } : {}),
       });
     }
   }
@@ -273,7 +291,7 @@ export const executeCheck = async (
   for (const issue of issues) diagnostics.push(issueToDiagnostic(issue));
 
   const results = runRules(model, config.rules, effective);
-  const violations = flattenViolations(results);
+  const violations = flattenViolations(results, model);
   const summary = buildSummary(results);
   const mode = resolveMode(args);
 
@@ -324,7 +342,18 @@ const renderGithubAnnotations = (
   sink: NodeJS.WritableStream,
 ): void => {
   for (const v of data.violations) {
-    sink.write(`::error title=${v.rule}::${v.container}: ${v.message}\n`);
+    // GitHub Actions annotation format:
+    //   ::error file=<path>,line=<L>,col=<C>,title=<rule>::<msg>
+    // Without `file`/`line` the annotation appears only in the
+    // workflow log; with them it surfaces as an inline PR comment
+    // anchored to the offending byte (`SourceLocation` from Model).
+    const loc = v.sourceLocation;
+    const locAttrs = loc
+      ? `file=${loc.file},line=${loc.start.line},col=${loc.start.col},`
+      : "";
+    sink.write(
+      `::error ${locAttrs}title=${v.rule}::${v.container}: ${v.message}\n`,
+    );
   }
 };
 
@@ -345,9 +374,15 @@ const renderViolationsTable = (
     sink.write(`${colors.bold(colors.red(rule))}  ${countLabel}\n`);
     const maxLen = Math.max(...vs.map((v) => v.container.length));
     for (const v of vs) {
-      sink.write(
-        `  ${colors.bold(v.container.padEnd(maxLen))}  ${v.message}\n`,
-      );
+      // Order matters: pad → link → color.
+      // - padEnd on the raw text first so visual alignment is correct
+      //   (OSC8 escape sequences would inflate `.length`).
+      // - linkSourceLocation wraps with `\e]8;;file://...\e\\` — no-op
+      //   when terminal doesn't support OSC8.
+      // - colors.bold adds SGR around the whole thing last.
+      const padded = v.container.padEnd(maxLen);
+      const linked = linkSourceLocation(padded, v.sourceLocation);
+      sink.write(`  ${colors.bold(linked)}  ${v.message}\n`);
     }
     sink.write("\n");
   }

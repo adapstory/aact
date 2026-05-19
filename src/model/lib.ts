@@ -1,4 +1,10 @@
-import type { Boundary, Container, Model, Relation } from "./types";
+import type {
+  Boundary,
+  Container,
+  Model,
+  Relation,
+  SourceLocation,
+} from "./types";
 
 /**
  * O(1) container lookup. Возвращает undefined для dangling references
@@ -32,6 +38,16 @@ export const allContainers = (m: Model): Container[] =>
  */
 export const allBoundaries = (m: Model): Boundary[] =>
   Object.values(m.boundaries);
+
+/**
+ * Format `loc` as the canonical `<file>:<line>:<col>` string. Library-
+ * safe — pure data formatter, never emits escape sequences. Used by
+ * GitHub annotations, JSON / Slack / PR / dashboard renderers, and as
+ * the human-readable inline label whenever a structured
+ * `SourceLocation` needs to land in plain text.
+ */
+export const formatLocation = (loc: SourceLocation): string =>
+  `${loc.file}:${loc.start.line}:${loc.start.col}`;
 
 /**
  * Depth-first iteration всех boundaries — от root'ов вглубь. Visited set

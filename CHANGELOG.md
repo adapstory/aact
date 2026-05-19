@@ -6,6 +6,44 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+Clickable violations. The `SourceLocation` foundation from beta.7 now
+powers OSC8 terminal hyperlinks in text mode and `file=`/`line=`/
+`col=` attributes on GitHub Actions error annotations. JSON envelope
+carries the structured location through to agents.
+
+### Added
+
+- `CheckViolation.sourceLocation?: SourceLocation` on the JSON
+  envelope — `aact check --json` consumers (Claude Code / Codex
+  CLI / dashboards) get the violation's anchor in source. Falls
+  back to the container's location when the rule doesn't anchor
+  more precisely.
+- OSC8 hyperlinks on container names in `aact check` text output.
+  Clickable in iTerm2, Ghostty, VSCode terminal, Windows Terminal,
+  modern tmux. Detection via `terminal-link.isSupported` — CI
+  logs, piped output, and older terminals automatically fall back
+  to plain text (no opt-out flag needed; standard `NO_COLOR` /
+  `CI` envs honoured).
+- `file=<path>,line=<L>,col=<C>` attributes on GitHub Actions
+  error annotations — violations surface as inline PR comments
+  anchored to the offending byte instead of generic workflow-log
+  entries.
+- `formatLocation(loc): string` exported from the library — pure-
+  data `<file>:<line>:<col>` formatter for callers rendering text
+  outside the terminal (Slack, PR descriptions, dashboards).
+- `Violation.sourceLocation?: SourceLocation` on the rule API —
+  rules that flag a specific relation / boundary / property may
+  set it explicitly; legacy rules (just `container` + `message`)
+  get fallback anchoring through the container automatically.
+
+### Dependencies
+
+- Added `terminal-link@^5.0.0` (Sindre Sorhus). Handles
+  OSC8-capability detection across iTerm2, Ghostty, VSCode,
+  Windows Terminal, tmux, and CI environments. ~5 KB total with
+  transitive deps (`ansi-escapes` + `supports-hyperlinks` +
+  `has-flag`).
+
 ## v3.0.0-beta.7 — 2026-05-19
 
 Architecture-as-code parsers rewritten from scratch on chevrotain;

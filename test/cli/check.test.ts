@@ -392,6 +392,46 @@ describe("renderCheckText", () => {
     }
   });
 
+  it("annotates github errors with file/line/col when sourceLocation is present", () => {
+    const prev = process.env.GITHUB_ACTIONS;
+    process.env.GITHUB_ACTIONS = "true";
+    try {
+      const { sink, output } = captureSink();
+      renderCheckText(
+        buildEnvelope({
+          command: "check",
+          exitCode: 1,
+          data: {
+            mode: "check",
+            violations: [
+              {
+                rule: "acl",
+                container: "my_service",
+                message: "calls external",
+                severity: "error",
+                sourceLocation: {
+                  file: "/abs/arch.dsl",
+                  start: { line: 42, col: 5, offset: 800 },
+                  end: { line: 42, col: 25, offset: 820 },
+                },
+              },
+            ],
+            suggestedFixes: [],
+            summary: { failed: 1, passed: 0, total: 1 },
+          },
+          meta: { durationMs: 1, configPath: null, source: null },
+        }),
+        sink,
+      );
+      expect(output()).toMatch(
+        /^::error file=\/abs\/arch\.dsl,line=42,col=5,title=acl::my_service: calls external/m,
+      );
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_ACTIONS;
+      else process.env.GITHUB_ACTIONS = prev;
+    }
+  });
+
   it("renders fixesApplied summary when present", () => {
     const { sink, output } = captureSink();
     renderCheckText(

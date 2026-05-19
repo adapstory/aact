@@ -1,9 +1,19 @@
 import type { SourceSyntax } from "../formats/types";
-import type { Model } from "../model";
+import type { Model, SourceLocation } from "../model";
 
 export interface Violation {
   readonly container: string;
   readonly message: string;
+  /**
+   * Optional location pointing at the offending construct in source.
+   * When omitted, the CLI falls back to the violation's container's
+   * `model.containers[container].sourceLocation` so that legacy rules
+   * (that emit just `container` + `message`) still get diagnostic
+   * anchoring "for free". Rules that flag a specific relation /
+   * boundary / property may set this explicitly to point at the more
+   * precise byte range.
+   */
+  readonly sourceLocation?: SourceLocation;
 }
 
 export interface SourceEdit {

@@ -399,7 +399,7 @@ interface WalkAcc {
 const walkStatements = (
   statements: readonly DiagramStatement[],
   acc: WalkAcc,
-  parentBoundary: BoundaryMacro | undefined,
+  parentBoundary?: BoundaryMacro,
 ): { containerNames: string[]; boundaryNames: string[] } => {
   const containerNames: string[] = [];
   const boundaryNames: string[] = [];

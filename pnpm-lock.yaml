@@ -25,6 +25,9 @@ importers:
       pathe:
         specifier: ^2.0.3
         version: 2.0.3
+      terminal-link:
+        specifier: ^5.0.0
+        version: 5.0.0
       valibot:
         specifier: ^1.4.0
         version: 1.4.0(typescript@5.9.3)
@@ -4120,6 +4123,13 @@ packages:
       }
     engines: { node: ">=8" }
 
+  has-flag@5.0.1:
+    resolution:
+      {
+        integrity: sha512-CsNUt5x9LUdx6hnk/E2SZLsDyvfqANZSUq4+D3D8RzDJ2M+HDTIkF60ibS1vHaK55vzgiZw1bEPFG9yH7l33wA==,
+      }
+    engines: { node: ">=12" }
+
   has-symbols@1.1.0:
     resolution:
       {
@@ -5814,12 +5824,26 @@ packages:
     peerDependencies:
       postcss: ^8.4.32
 
+  supports-color@10.2.2:
+    resolution:
+      {
+        integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==,
+      }
+    engines: { node: ">=18" }
+
   supports-color@7.2.0:
     resolution:
       {
         integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==,
       }
     engines: { node: ">=8" }
+
+  supports-hyperlinks@4.4.0:
+    resolution:
+      {
+        integrity: sha512-UKbpT93hN5Nr9go5UY7bopIB9YQlMz9nm/ct4IXt/irb5YRkn9WaqrOBJGZ5Pwvsd5FQzSVeYlGdXoCAPQZrPg==,
+      }
+    engines: { node: ">=20" }
 
   supports-preserve-symlinks-flag@1.0.0:
     resolution:
@@ -5842,6 +5866,13 @@ packages:
         integrity: sha512-g9ljZiwki/LfxmQADO3dEY1CbpmXT5Hm2fJ+QaGKwSXUylMybePR7/67YW7jOrrvjEgL1Fmz5kzyAjWVWLlucg==,
       }
     engines: { node: ">=6" }
+
+  terminal-link@5.0.0:
+    resolution:
+      {
+        integrity: sha512-qFAy10MTMwjzjU8U16YS4YoZD+NQLHzLssFMNqgravjbvIPNiqkGFR4yjhJfmY9R5OFU7+yHxc6y+uGHkKwLRA==,
+      }
+    engines: { node: ">=20" }
 
   tinybench@2.9.0:
     resolution:
@@ -8605,6 +8636,8 @@ snapshots:
 
   has-flag@4.0.0: {}
 
+  has-flag@5.0.1: {}
+
   has-symbols@1.1.0: {}
 
   hasown@2.0.2:
@@ -9558,9 +9591,16 @@ snapshots:
       postcss: 8.5.6
       postcss-selector-parser: 7.1.1
 
+  supports-color@10.2.2: {}
+
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
+
+  supports-hyperlinks@4.4.0:
+    dependencies:
+      has-flag: 5.0.1
+      supports-color: 10.2.2
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
@@ -9575,6 +9615,11 @@ snapshots:
       sax: 1.4.4
 
   tapable@2.3.0: {}
+
+  terminal-link@5.0.0:
+    dependencies:
+      ansi-escapes: 7.3.0
+      supports-hyperlinks: 4.4.0
 
   tinybench@2.9.0: {}
 
