@@ -139,6 +139,37 @@ describe("commonReuseRule.check", () => {
     expect(v.find((it) => it.element === "full_ctx")).toBeUndefined();
   });
 
+  it("anchors violation on the first cross-boundary edge's sourceLocation", () => {
+    // `provider`'s public surface needs ≥2 names actually targeted from
+    // outside, so a sibling consumer (`full_c`) exercises p_b. The
+    // partial consumer in `cons_ctx` hits only p_a — that's the
+    // violation we anchor.
+    const firstLoc = {
+      file: "arch.dsl",
+      start: { line: 10, col: 1, offset: 100 },
+      end: { line: 10, col: 30, offset: 130 },
+    };
+    const model = makeModel({
+      elements: [
+        {
+          name: "consumer",
+          relations: [{ to: "p_a", sourceLocation: firstLoc }],
+        },
+        { name: "full_c", relations: [{ to: "p_a" }, { to: "p_b" }] },
+        { name: "p_a" },
+        { name: "p_b" },
+      ],
+      boundaries: [
+        { name: "provider", elementNames: ["p_a", "p_b"] },
+        { name: "cons_ctx", elementNames: ["consumer"] },
+        { name: "full_ctx", elementNames: ["full_c"] },
+      ],
+    });
+    const v = commonReuseRule.check(model);
+    const violation = v.find((it) => it.element === "cons_ctx");
+    expect(violation?.sourceLocation).toEqual(firstLoc);
+  });
+
   it("rule description mentions public surface usage", () => {
     expect(commonReuseRule.description.length).toBeGreaterThan(20);
     expect(commonReuseRule.description).toMatch(/public|surface|consumer/i);

@@ -32,9 +32,16 @@ export type ElementKind =
 
 /**
  * Boundary types сохраняются для round-trip без шумного diff'а в git.
- * PlantUML автор писал `System_Boundary` / `Container_Boundary` /
- * `Component_Boundary` / `Enterprise_Boundary` — `aact generate` обязан
- * вернуть тот же ключ. Generic `Boundary(...)` мапится на "System".
+ * PlantUML stdlib дает `System_Boundary` / `Container_Boundary` /
+ * `Enterprise_Boundary` (плюс generic `Boundary(name, label, $type=…)`,
+ * где `$type` подставляется в один из них). `aact generate` обязан
+ * вернуть тот же ключ.
+ *
+ * `"Component"` — model-level kind для случая, когда Structurizr или
+ * generic `Boundary($type="Component")` помечает scope как
+ * component-level. Stdlib не имеет `Component_Boundary` макроса, поэтому
+ * `aact generate` для PUML падает обратно в `Container_Boundary` —
+ * это документированная потеря fidelity на этой паре направлений.
  */
 export type BoundaryKind = "System" | "Container" | "Component" | "Enterprise";
 
@@ -169,11 +176,16 @@ export interface Model {
   /** Корневые boundaries — top-level в рендере. Все остальные boundary вложены через `boundaryNames`. */
   readonly rootBoundaryNames: readonly string[];
   /**
-   * Workspace-level metadata: name, description, version. Optional —
+   * Workspace-level metadata: name, description, extends target. Optional —
    * formats that don't carry workspace headers (e.g. PUML) leave it
    * undefined; Structurizr DSL / JSON populate it from `workspace
-   * "name" "description" extends "..."` and `properties` blocks.
-   * Reference parsers expose this via `Workspace.getName()` etc.
+   * "name" "description" extends "..."` headers. Reference parsers
+   * expose this via `Workspace.getName()` / `getExtends()` etc.
+   *
+   * Workspace `properties { … }` blocks and `version` fields are
+   * intentionally NOT surfaced here — they're Structurizr-specific
+   * authoring concerns (style overrides, layout hints) that don't
+   * affect linting. If a future rule needs them, extend the type.
    */
   readonly workspace?: WorkspaceMetadata;
 }

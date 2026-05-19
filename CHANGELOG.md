@@ -6,6 +6,48 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.9 — 2026-05-19
+
+C4 vocabulary alignment is the headline of this beta — the wrapper type
+that aggregates every architectural node was named `Container` for
+historical reasons, which collided with C4's own level-2 `Container`
+concept. Renamed to `Element` everywhere it surfaces in the public API.
+Custom rules and JSON envelope consumers have to update one field name
+(`container` → `element`); the C4 `kind: "Container"` literal value is
+unchanged.
+
+### Added
+
+- `aact init` now scaffolds a starter architecture that demonstrates
+  name-pattern role detection out of the box: `orders_repo` ships
+  without `$tags="repo"` but is auto-detected as a repository by the
+  default `*_{repo,…}` picomatch glob. Two intentional violations
+  (`crud` + `dbPerService`) clear in one `--fix` pass — closer to
+  importing a legacy archive than the prior single-rule demo.
+- All 8 built-in rules now anchor violations on the precise source
+  range that broke the principle. `stableDependencies` and
+  `commonReuse` were the last two falling back to the source element's
+  location through the CLI helper; both now point directly at the
+  offending edge. With this every text-mode lint line and every
+  GitHub-annotation comment lands on the byte the rule flagged.
+
+### Changed
+
+- `docs/format-coverage.md` refreshed to the post-beta.7 reality:
+  `sourceLocation` is documented as fully populated by chevrotain
+  loaders, the `Relation.order` and `Boundary.description` PUML gaps
+  are gone (covered since the chevrotain cutover), and the
+  "plantuml-parser 0.4 limit" framing was removed — the dep was
+  excised in commit `642ff23`.
+- `BoundaryKind` JSDoc clarifies that `Component_Boundary` does not
+  exist in C4-PlantUML stdlib; the `"Component"` kind is preserved
+  for model-level fidelity but `aact generate` for PUML falls back
+  to `Container_Boundary` (the canonical way to group components per
+  the stdlib).
+- `WorkspaceMetadata` JSDoc trimmed to match the actual shape —
+  earlier wording mentioned `version` and `properties` fields that
+  never made it onto the type. Linting rules don't need them.
+
 ### Changed (breaking — v3 API)
 
 - C4 vocabulary alignment: `Container` is no longer the umbrella term for

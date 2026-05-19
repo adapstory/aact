@@ -56,6 +56,28 @@ describe("apiGatewayRule.check", () => {
     expect(apiGatewayRule.check(model)).toHaveLength(0);
   });
 
+  it("anchors violation on the offending edge's sourceLocation", () => {
+    const edgeLoc = {
+      file: "arch.dsl",
+      start: { line: 17, col: 3, offset: 250 },
+      end: { line: 17, col: 40, offset: 287 },
+    };
+    const model = makeModel({
+      elements: [
+        {
+          name: "acl",
+          tags: ["acl"],
+          relations: [
+            { to: "ext", technology: "raw HTTP", sourceLocation: edgeLoc },
+          ],
+        },
+        { name: "ext", kind: "System", external: true },
+      ],
+    });
+    const [v] = apiGatewayRule.check(model);
+    expect(v.sourceLocation).toEqual(edgeLoc);
+  });
+
   it("respects custom gatewayPattern", () => {
     const model = makeModel({
       elements: [

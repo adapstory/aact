@@ -60,9 +60,17 @@ export const stableDependenciesRule: RuleDefinition = {
         const iSource = instability(c.name);
         const iTarget = instability(rel.to);
         if (iSource < iTarget) {
+          // Anchor on the offending edge so the lint-style table /
+          // OSC8 hyperlink jumps straight to the `Rel(c, rel.to, …)`
+          // line that broke the principle — same precision as crud/
+          // acl/acyclic. Falls back to the source container in the
+          // CLI layer when the loader didn't populate `sourceLocation`.
           violations.push({
             element: c.name,
             message: `stable module (I=${iSource.toFixed(2)}) depends on less stable "${rel.to}" (I=${iTarget.toFixed(2)}) — dependencies should point toward stability`,
+            ...(rel.sourceLocation
+              ? { sourceLocation: rel.sourceLocation }
+              : {}),
           });
         }
       }

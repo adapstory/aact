@@ -107,6 +107,33 @@ describe("stableDependenciesRule.check", () => {
     ).toBeUndefined();
   });
 
+  it("anchors violation on the offending edge's sourceLocation", () => {
+    const edgeLoc = {
+      file: "arch.dsl",
+      start: { line: 42, col: 5, offset: 800 },
+      end: { line: 42, col: 35, offset: 830 },
+    };
+    // Mirrors the "stable → less stable" case above; we just attach a
+    // fixture location to the e → a relation and expect it back on the
+    // violation. Loaders populate sourceLocation in production; CLI
+    // falls back to the source element when it's absent.
+    const model = makeModel({
+      elements: [
+        { name: "a", relations: [{ to: "x" }] },
+        { name: "b", relations: [{ to: "e" }] },
+        { name: "c", relations: [{ to: "e" }] },
+        {
+          name: "e",
+          relations: [{ to: "a", sourceLocation: edgeLoc }],
+        },
+        { name: "x" },
+      ],
+    });
+    const v = stableDependenciesRule.check(model);
+    const eToA = v.find((it) => it.element === "e" && it.message.includes("a"));
+    expect(eToA?.sourceLocation).toEqual(edgeLoc);
+  });
+
   it("description ends with 'stability' (covers description literal)", () => {
     // Stryker emptied the rule's description string. Lock it in via direct
     // assertion on the RuleDefinition itself.

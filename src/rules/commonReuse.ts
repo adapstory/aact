@@ -1,4 +1,4 @@
-import type { Boundary, Model } from "../model";
+import type { Boundary, Model, SourceLocation } from "../model";
 import { allElements } from "../model";
 import type { RuleDefinition, Violation } from "./types";
 
@@ -24,9 +24,14 @@ const collectPublicAndUsage = (
 ): {
   publicOf: Map<Boundary, Set<string>>;
   used: Map<string, Set<string>>;
+  /** First cross-boundary edge seen per (consumer, provider) pair — used
+   * as the violation anchor so the lint-style table / OSC8 link jumps to
+   * the partial-usage call instead of the consumer boundary header. */
+  firstEdgeLoc: Map<string, SourceLocation>;
 } => {
   const publicOf = new Map<Boundary, Set<string>>();
   const used = new Map<string, Set<string>>();
+  const firstEdgeLoc = new Map<string, SourceLocation>();
 
   for (const source of allElements(model)) {
     const srcBoundary = boundaryOf.get(source.name);
@@ -50,10 +55,13 @@ const collectPublicAndUsage = (
         used.set(key, u);
       }
       u.add(rel.to);
+      if (rel.sourceLocation && !firstEdgeLoc.has(key)) {
+        firstEdgeLoc.set(key, rel.sourceLocation);
+      }
     }
   }
 
-  return { publicOf, used };
+  return { publicOf, used, firstEdgeLoc };
 };
 
 export const commonReuseRule: RuleDefinition = {
@@ -63,7 +71,10 @@ export const commonReuseRule: RuleDefinition = {
 
   check(model) {
     const boundaryOf = buildBoundaryLookup(model);
-    const { publicOf, used } = collectPublicAndUsage(model, boundaryOf);
+    const { publicOf, used, firstEdgeLoc } = collectPublicAndUsage(
+      model,
+      boundaryOf,
+    );
     const violations: Violation[] = [];
 
     for (const [provider, pubNames] of publicOf) {
@@ -77,9 +88,11 @@ export const commonReuseRule: RuleDefinition = {
         if (!usedNames || usedNames.size >= pubNames.size) continue;
 
         const missing = [...pubNames].filter((n) => !usedNames.has(n));
+        const loc = firstEdgeLoc.get(key);
         violations.push({
           element: consumer.name,
           message: `uses ${[...usedNames].join(", ")} of "${provider.name}" but not ${missing.join(", ")} — all public services of a context should be used together`,
+          ...(loc ? { sourceLocation: loc } : {}),
         });
       }
     }

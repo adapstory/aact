@@ -4,6 +4,7 @@ import type {
   Element,
   ElementKind,
   Model,
+  SourceLocation,
 } from "../../src/model";
 import { buildModel } from "../../src/model";
 
@@ -28,6 +29,11 @@ export interface RelationSpec {
   readonly tags?: readonly string[];
   readonly order?: number;
   readonly link?: string;
+  /** Lets rule tests pin precise-anchor behavior without going through a
+   * full parser pass. Loaders populate this in production; here we inject
+   * a fixture location and assert the rule echoed it back on the
+   * resulting `Violation`. */
+  readonly sourceLocation?: SourceLocation;
 }
 
 export interface BoundarySpec {
@@ -57,6 +63,7 @@ const makeElement = (spec: ElementSpec): Element => ({
     tags: r.tags ?? [],
     order: r.order,
     link: r.link,
+    ...(r.sourceLocation ? { sourceLocation: r.sourceLocation } : {}),
   })),
   link: spec.link,
   properties: spec.properties,
