@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.14 — 2026-05-19
+
 Agent-facing surface. `aact check --json` now ships the rule
 catalogue inline (no separate `aact rule list` call needed), the
 new `aact model` command exposes the normalized graph for agents
