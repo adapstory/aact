@@ -1,5 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
+import { fc, test } from "@fast-check/vitest";
+
 import { executeCheck, renderCheckText } from "../../src/cli/commands/check";
 import { loadModel } from "../../src/cli/loadModel";
 import { buildEnvelope } from "../../src/cli/output";
@@ -621,5 +623,95 @@ describe("renderCheckText", () => {
     );
     expect(output()).toContain("Applied 3 fix(es)");
     expect(output()).toContain("/abs/test.puml");
+  });
+
+  // Property-based check that the `mode` argument — not the
+  // GITHUB_ACTIONS env — drives the branch. The bug class this catches:
+  // a future refactor reintroduces `process.env.GITHUB_ACTIONS` inside
+  // the renderer body, silently ignoring the explicit arg. fast-check
+  // sweeps arbitrary env values (including ones that look "truthy" to
+  // an accidental Boolean coercion) crossed with both modes, so any
+  // branch reading the env instead of the argument fails on at least
+  // one combination.
+  const violationEnvelope = () =>
+    buildEnvelope({
+      command: "check",
+      exitCode: 1,
+      data: {
+        mode: "check",
+        violations: [
+          {
+            rule: "acl",
+            target: "svc",
+            targetKind: "element" as const,
+            message: "msg",
+            severity: "error",
+          },
+        ],
+        suggestedFixes: [],
+        summary: { failed: 1, passed: 0, total: 1 },
+        rules: [],
+      },
+      meta: { durationMs: 1, configPath: null, source: null },
+    });
+
+  test.prop([
+    fc.constantFrom("human" as const, "github-actions" as const),
+    fc.constantFrom("true", "1", "yes", "", "false", "0"),
+  ])(
+    "explicit mode arg overrides GITHUB_ACTIONS env for any combination",
+    (mode, envValue) => {
+      const prev = process.env.GITHUB_ACTIONS;
+      process.env.GITHUB_ACTIONS = envValue;
+      try {
+        const { sink, output } = captureSink();
+        renderCheckText(violationEnvelope(), sink, mode);
+        const out = output();
+        if (mode === "github-actions") {
+          expect(out).toMatch(/^::error/m);
+        } else {
+          expect(out).not.toMatch(/^::error/m);
+        }
+      } finally {
+        if (prev === undefined) delete process.env.GITHUB_ACTIONS;
+        else process.env.GITHUB_ACTIONS = prev;
+      }
+    },
+  );
+
+  // Symmetric to the above: when the caller OMITS the mode argument,
+  // the env-derived default must still distinguish the two formats.
+  // The interesting bug class here: a future refactor pins the
+  // default to a literal ("human") and silently breaks the
+  // GitHub-Actions integration. The property holds whatever value
+  // shape GITHUB_ACTIONS takes — including the empty string, which
+  // is falsy and must fall through to "human".
+  test.prop([fc.constantFrom("true", "1", "yes", "false", "0")])(
+    "with no explicit mode, truthy GITHUB_ACTIONS produces ::error annotations",
+    (envValue) => {
+      const prev = process.env.GITHUB_ACTIONS;
+      process.env.GITHUB_ACTIONS = envValue;
+      try {
+        const { sink, output } = captureSink();
+        renderCheckText(violationEnvelope(), sink);
+        expect(output()).toMatch(/^::error/m);
+      } finally {
+        if (prev === undefined) delete process.env.GITHUB_ACTIONS;
+        else process.env.GITHUB_ACTIONS = prev;
+      }
+    },
+  );
+
+  test("with no explicit mode and empty GITHUB_ACTIONS, falls back to human table", () => {
+    const prev = process.env.GITHUB_ACTIONS;
+    process.env.GITHUB_ACTIONS = "";
+    try {
+      const { sink, output } = captureSink();
+      renderCheckText(violationEnvelope(), sink);
+      expect(output()).not.toMatch(/^::error/m);
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_ACTIONS;
+      else process.env.GITHUB_ACTIONS = prev;
+    }
   });
 });
