@@ -180,11 +180,11 @@ export const layoutScope = async (
         height: 20,
         color: "#94a3b8",
       },
+      // @xyflow/svelte 1.x renders the label as an HTML <div>, so
+      // styling goes through CSS / CSS variables (see App.svelte).
+      // The SVG-era `labelBgStyle` / `labelBgPadding` props are
+      // no-ops here — omitting them keeps the edge payload clean.
       style: "stroke: #94a3b8; stroke-width: 1.8;",
-      labelStyle: "fill: #f8fafc; font-weight: 600; font-size: 11px;",
-      labelBgStyle: "fill: #0f172a; stroke: #334155; stroke-width: 1; rx: 4;",
-      labelBgPadding: [6, 4],
-      labelBgBorderRadius: 4,
     };
   });
 

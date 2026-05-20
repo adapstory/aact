@@ -820,13 +820,32 @@
   :global(.svelte-flow) {
     background: #0b1220;
     /* xyflow exposes edge styling via CSS variables. Setting them
-       here overrides the pale-grey defaults baked into
+       here overrides the defaults baked into
        @xyflow/svelte/dist/style.css regardless of which template
-       (default / smoothstep / straight) renders the edge. */
+       (default / smoothstep / straight) renders the edge.
+       Edge labels are HTML <div>s, not SVG <text>, so they need
+       HTML CSS background / color — labelBgStyle prop is ignored
+       in @xyflow/svelte 1.x. */
     --xy-edge-stroke-default: #94a3b8;
     --xy-edge-stroke-selected-default: #38bdf8;
     --xy-edge-stroke-width-default: 1.8;
     --xy-connectionline-stroke-default: #38bdf8;
+    --xy-edge-label-color-default: #f8fafc;
+    --xy-edge-label-background-color-default: #1e293b;
+  }
+  :global(.svelte-flow__edge-label) {
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid #475569;
+    font-size: 11px;
+    font-weight: 700;
+    box-shadow: 0 4px 12px -8px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   :global(.svelte-flow__background) {
     background-color: #0b1220;
