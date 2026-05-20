@@ -1,4 +1,5 @@
 import { runCommand } from "citty";
+import path from "pathe";
 
 import { ToolError } from "../../src/cli/output";
 import { cliCommand, cliCommandWithConfig } from "../../src/cli/run";
@@ -236,7 +237,10 @@ describe("cliCommandWithConfig", () => {
     };
     expect(env.exitCode).toBe(2);
     expect(env.diagnostics[0].kind).toBe("model.parseError");
-    expect(env.meta.source).toBe("./arch.puml");
+    // meta.source is canonicalised to an absolute path so it lines
+    // up with the absolute configPath emitted by c12 — the JSON
+    // envelope shouldn't mix conventions for the two file fields.
+    expect(env.meta.source).toBe(path.resolve("./arch.puml"));
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 

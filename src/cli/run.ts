@@ -1,5 +1,6 @@
 import type { ArgsDef, CommandContext, CommandDef, CommandMeta } from "citty";
 import { defineCommand } from "citty";
+import path from "pathe";
 
 import type { AactConfig } from "../config";
 import { loadAndValidateConfig } from "./loadConfig";
@@ -223,6 +224,12 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
       }
 
       const loadedConfig = config;
+      // Resolve source to absolute so envelope.meta lines up with
+      // configPath (c12 already gives that absolute). Without this
+      // the JSON shows `configPath: "/abs/aact.config.ts"` next to
+      // `source: "./architecture.puml"` — same envelope, two
+      // conventions, downstream tools that join paths break.
+      const resolvedSource = path.resolve(loadedConfig.source.path);
 
       try {
         const exec = await opts.execute(ctx, loadedConfig);
@@ -231,7 +238,7 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
           exec,
           startedAt,
           configPath: resolvedConfigPath,
-          source: loadedConfig.source.path,
+          source: resolvedSource,
         });
         await reporter.emit(result);
         exitWith(result.envelope.exitCode);
@@ -241,7 +248,7 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
           error,
           startedAt,
           configPath: resolvedConfigPath,
-          source: loadedConfig.source.path,
+          source: resolvedSource,
         });
         await reporter.emit({ envelope } as CommandResult<TData>);
         exitWith(envelope.exitCode);
