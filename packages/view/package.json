@@ -43,5 +43,11 @@
   "devDependencies": {
     "aact": "workspace:*",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "h3": "2.0.1-rc.22",
+    "listhen": "^1.10.0",
+    "pathe": "^2.0.3"
   }
 }
