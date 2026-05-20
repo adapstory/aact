@@ -11,6 +11,7 @@ import type { Format } from "../../src/formats/types";
 import type { Model } from "../../src/model";
 import type { ElementSpec } from "../helpers/makeModel";
 import { makeModel } from "../helpers/makeModel";
+import { stripAnsi } from "../helpers/stripAnsi";
 
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
@@ -278,13 +279,25 @@ describe("renderCheckText", () => {
     };
     return {
       sink: sink as NodeJS.WritableStream,
-      output: () => Buffer.concat(chunks).toString("utf8"),
+      // Strip ANSI at the assertion boundary. consola's `colors.bold(...)`
+      // wraps labels mid-token (e.g. `[1mApplied [22m3 fix(es)`), so a
+      // toContain that anchors on `Applied 3 fix(es)` breaks whenever
+      // colour is auto-enabled (real TTY locally, GITHUB_ACTIONS in CI).
+      output: () => stripAnsi(Buffer.concat(chunks).toString("utf8")),
     };
   };
 
+  // Pin the renderer mode explicitly so the test stays decoupled from
+  // the ambient GITHUB_ACTIONS env. Tests that exercise the annotation
+  // branch use `renderGha`.
+  const renderHuman: typeof renderCheckText = (envelope, sink) =>
+    renderCheckText(envelope, sink, "human");
+  const renderGha: typeof renderCheckText = (envelope, sink) =>
+    renderCheckText(envelope, sink, "github-actions");
+
   it("renders box summary when clean", () => {
     const { sink, output } = captureSink();
-    renderCheckText(
+    renderHuman(
       buildEnvelope({
         command: "check",
         exitCode: 0,
@@ -304,7 +317,7 @@ describe("renderCheckText", () => {
 
   it("renders violations table when failing", () => {
     const { sink, output } = captureSink();
-    renderCheckText(
+    renderHuman(
       buildEnvelope({
         command: "check",
         exitCode: 1,
@@ -335,7 +348,7 @@ describe("renderCheckText", () => {
 
   it("renders relatedLocations as indented `↳ label: path:line:col` rows", () => {
     const { sink, output } = captureSink();
-    renderCheckText(
+    renderHuman(
       buildEnvelope({
         command: "check",
         exitCode: 1,
@@ -388,7 +401,7 @@ describe("renderCheckText", () => {
 
   it("renders relatedLocations without label when message is absent", () => {
     const { sink, output } = captureSink();
-    renderCheckText(
+    renderHuman(
       buildEnvelope({
         command: "check",
         exitCode: 1,
@@ -431,7 +444,7 @@ describe("renderCheckText", () => {
   it("renders suggested fixes preview only in dry-run mode", () => {
     const inDryRun = (() => {
       const { sink, output } = captureSink();
-      renderCheckText(
+      renderHuman(
         buildEnvelope({
           command: "check",
           exitCode: 1,
@@ -475,7 +488,7 @@ describe("renderCheckText", () => {
 
     const inCheck = (() => {
       const { sink, output } = captureSink();
-      renderCheckText(
+      renderHuman(
         buildEnvelope({
           command: "check",
           exitCode: 1,
@@ -521,86 +534,72 @@ describe("renderCheckText", () => {
     expect(inCheck).not.toContain("Suggested fixes");
   });
 
-  it("renders github annotations when GITHUB_ACTIONS env is set", () => {
-    const prev = process.env.GITHUB_ACTIONS;
-    process.env.GITHUB_ACTIONS = "true";
-    try {
-      const { sink, output } = captureSink();
-      renderCheckText(
-        buildEnvelope({
-          command: "check",
-          exitCode: 1,
-          data: {
-            mode: "check",
-            violations: [
-              {
-                rule: "acl",
-                target: "my_service",
-                targetKind: "element" as const,
-                message: "calls external",
-                severity: "error",
-              },
-            ],
-            suggestedFixes: [],
-            summary: { failed: 1, passed: 0, total: 1 },
-            rules: [],
-          },
-          meta: { durationMs: 1, configPath: null, source: null },
-        }),
-        sink,
-      );
-      expect(output()).toMatch(/^::error title=acl::my_service:/m);
-    } finally {
-      if (prev === undefined) delete process.env.GITHUB_ACTIONS;
-      else process.env.GITHUB_ACTIONS = prev;
-    }
+  it("renders github annotations in github-actions mode", () => {
+    const { sink, output } = captureSink();
+    renderGha(
+      buildEnvelope({
+        command: "check",
+        exitCode: 1,
+        data: {
+          mode: "check",
+          violations: [
+            {
+              rule: "acl",
+              target: "my_service",
+              targetKind: "element" as const,
+              message: "calls external",
+              severity: "error",
+            },
+          ],
+          suggestedFixes: [],
+          summary: { failed: 1, passed: 0, total: 1 },
+          rules: [],
+        },
+        meta: { durationMs: 1, configPath: null, source: null },
+      }),
+      sink,
+    );
+    expect(output()).toMatch(/^::error title=acl::my_service:/m);
   });
 
   it("annotates github errors with file/line/col when sourceLocation is present", () => {
-    const prev = process.env.GITHUB_ACTIONS;
-    process.env.GITHUB_ACTIONS = "true";
-    try {
-      const { sink, output } = captureSink();
-      renderCheckText(
-        buildEnvelope({
-          command: "check",
-          exitCode: 1,
-          data: {
-            mode: "check",
-            violations: [
-              {
-                rule: "acl",
-                target: "my_service",
-                targetKind: "element" as const,
-                message: "calls external",
-                severity: "error",
-                sourceLocation: {
-                  file: "/abs/arch.dsl",
-                  start: { line: 42, col: 5, offset: 800 },
-                  end: { line: 42, col: 25, offset: 820 },
-                },
+    const { sink, output } = captureSink();
+    renderGha(
+      buildEnvelope({
+        command: "check",
+        exitCode: 1,
+        data: {
+          mode: "check",
+          violations: [
+            {
+              rule: "acl",
+              target: "my_service",
+              targetKind: "element" as const,
+              message: "calls external",
+              severity: "error",
+              sourceLocation: {
+                file: "/abs/arch.dsl",
+                start: { line: 42, col: 5, offset: 800 },
+                end: { line: 42, col: 25, offset: 820 },
               },
-            ],
-            suggestedFixes: [],
-            summary: { failed: 1, passed: 0, total: 1 },
-            rules: [],
-          },
-          meta: { durationMs: 1, configPath: null, source: null },
-        }),
-        sink,
-      );
-      expect(output()).toMatch(
-        /^::error file=\/abs\/arch\.dsl,line=42,col=5,title=acl::my_service: calls external/m,
-      );
-    } finally {
-      if (prev === undefined) delete process.env.GITHUB_ACTIONS;
-      else process.env.GITHUB_ACTIONS = prev;
-    }
+            },
+          ],
+          suggestedFixes: [],
+          summary: { failed: 1, passed: 0, total: 1 },
+          rules: [],
+        },
+        meta: { durationMs: 1, configPath: null, source: null },
+      }),
+      sink,
+    );
+    expect(output()).toMatch(
+      /^::error file=\/abs\/arch\.dsl,line=42,col=5,title=acl::my_service: calls external/m,
+    );
   });
 
   it("renders fixesApplied summary when present", () => {
     const { sink, output } = captureSink();
-    renderCheckText(
+    renderHuman(
       buildEnvelope({
         command: "check",
         exitCode: 0,

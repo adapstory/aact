@@ -9,6 +9,7 @@ import { loadModel } from "../../src/cli/loadModel";
 import { buildEnvelope } from "../../src/cli/output";
 import type { AactConfig } from "../../src/config";
 import { makeModel } from "../helpers/makeModel";
+import { stripAnsi } from "../helpers/stripAnsi";
 
 vi.mock("../../src/cli/loadModel", async () => {
   const actual = await vi.importActual<
@@ -54,7 +55,10 @@ const captureSink = (): {
   stream.on("data", (chunk: Buffer) => chunks.push(chunk));
   return {
     sink: stream,
-    output: () => Buffer.concat(chunks).toString("utf8"),
+    // Strip ANSI here so assertions are stable across local TTY / CI's
+    // GITHUB_ACTIONS-driven colour. renderAnalyzeText uses consola
+    // `colors.bold(...)` which leaks `[1m...[22m` mid-token.
+    output: () => stripAnsi(Buffer.concat(chunks).toString("utf8")),
   };
 };
 

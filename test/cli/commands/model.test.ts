@@ -6,6 +6,7 @@ import { buildEnvelope } from "../../../src/cli/output";
 import type { AactConfig } from "../../../src/config";
 import type { Model, ModelIssue } from "../../../src/model";
 import { makeModel } from "../../helpers/makeModel";
+import { stripAnsi } from "../../helpers/stripAnsi";
 
 vi.mock("../../../src/cli/loadModel", async () => {
   const actual = await vi.importActual<
@@ -127,7 +128,11 @@ describe("renderModelText", () => {
     });
     const { sink, output } = captureSink();
     renderModelText(envelope, sink);
-    return output();
+    // ANSI bold/dim escapes from consola wrap labels mid-token (e.g.
+    // `[1mBoundaries: [22m2`) when running where colour is auto-detected
+    // (CI's GITHUB_ACTIONS or a real TTY). Strip at the assertion boundary
+    // so the SUT keeps its production styling.
+    return stripAnsi(output());
   };
 
   it("prints element counts grouped by kind", () => {

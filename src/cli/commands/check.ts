@@ -644,16 +644,27 @@ const renderFixes = (
   }
 };
 
+export type CheckTextMode = "human" | "github-actions";
+
+const detectCheckTextMode = (): CheckTextMode =>
+  process.env.GITHUB_ACTIONS ? "github-actions" : "human";
+
 /**
- * Text-mode renderer for `aact check`. Branches on GITHUB_ACTIONS env to
- * emit annotation lines (consumed by GitHub Actions Workflow UI) instead of
- * the table when running inside CI. JSON mode is handled by JsonReporter
- * upstream, never reaches this function.
+ * Text-mode renderer for `aact check`. The `mode` parameter selects either
+ * the human table (default for local terminals) or GitHub Actions
+ * annotation lines (consumed by the Workflow UI). The default reads
+ * `GITHUB_ACTIONS` from the env so production calls keep working without
+ * threading mode through every layer; tests pass it explicitly. JSON mode
+ * is handled by JsonReporter upstream, never reaches this function.
  */
-export const renderCheckText: Renderer<CheckData> = (envelope, sink) => {
+export const renderCheckText = (
+  envelope: Parameters<Renderer<CheckData>>[0],
+  sink: Parameters<Renderer<CheckData>>[1],
+  mode: CheckTextMode = detectCheckTextMode(),
+): void => {
   const { data } = envelope;
 
-  if (process.env.GITHUB_ACTIONS) {
+  if (mode === "github-actions") {
     renderGithubAnnotations(data, sink);
     return;
   }

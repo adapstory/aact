@@ -4,6 +4,7 @@ import {
   renderErrorEnvelope,
 } from "../../../src/cli/output/humanReporter";
 import type { CliEnvelope, Renderer } from "../../../src/cli/output/types";
+import { stripAnsi } from "../../helpers/stripAnsi";
 
 const makeEnvelope = (overrides: Partial<CliEnvelope> = {}): CliEnvelope => ({
   schemaVersion: 1,
@@ -113,7 +114,7 @@ describe("HumanReporter", () => {
       sink,
     );
 
-    expect(chunks.join("")).toMatch(/analyze failed/);
+    expect(stripAnsi(chunks.join(""))).toMatch(/analyze failed/);
   });
 
   it("isErrorEnvelope returns true only for exitCode 2", () => {

@@ -9,19 +9,6 @@ export default defineConfig({
     restoreMocks: true,
     reporters: ["default", ...ciReporter],
 
-    // Force plain text from consola/picocolors so toContain("Boundaries: 2")
-    // matches the same in CI (GITHUB_ACTIONS=true auto-enables color) and
-    // locally (no TTY → no color). Tests assert against rendered substrings;
-    // the ANSI wrapping `[1mBoundaries: [22m2` was masking the
-    // colon-space-number anchor.
-    env: {
-      NO_COLOR: "1",
-      // Neutralise so renderCheckText doesn't flip to the
-      // `::error file=...` GitHub annotation branch mid-suite. Tests that
-      // exercise that branch set the env explicitly (check.test.ts:524).
-      GITHUB_ACTIONS: "",
-    },
-
     projects: [
       {
         extends: true,
