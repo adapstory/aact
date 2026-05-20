@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.16 — 2026-05-20
+
+Agent-facing release. Three commands' worth of new surface for AI
+coding agents and architecture reviewers, plus rule-anchor and
+database-detection cleanup that was technically a regression
+against the CHANGELOG of earlier betas. New `aact diff` for PR
+review; new `aact rule explain` for in-context rule rationale;
+new `model-json` source format for LLM-generated architectures
+and stable snapshots. `Violation.relatedLocations` threads
+supporting evidence through text / JSON / SARIF, per-rule
+anchors point at the conceptually correct source (DB declaration
+instead of a random accessor edge for `dbPerService`), and
+`envelope.meta.configPath` now reports the c12-resolved config
+file even without an explicit `--config` flag.
+
 ### Added
 
 - **`model-json` source format.** A first-class registered Format —
