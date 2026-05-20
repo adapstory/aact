@@ -40,33 +40,56 @@ binds them to a browser tab.
 
 ### Решение
 
-Ship `aact view` as a **local architecture workbench** — a
-`pnpm`-workspace subpackage (`@aact/view` candidate) that the
-core `aact` CLI delegates to.
+Ship `@aact/view` as an **optional companion npm package** that
+the core `aact` CLI surfaces via the `view` subcommand. Follows
+the same pattern as `vitest` + `@vitest/ui` or `next` +
+`@next/eslint-plugin-next`: the companion stays out of the core
+tarball; the core CLI dynamic-imports it on demand and prints an
+actionable install hint when the package is absent.
 
 ```bash
-npx aact view                # uses aact.config.ts → source
-npx aact view ./workspace.dsl
-npx aact view ./architecture.puml
+pnpm add -D @aact/view@beta   # one-time install
+npx aact view                 # → reads aact.config.ts, opens browser
+```
+
+If `@aact/view` is not installed, `aact view` exits 2 with:
+
+```
+✗ aact view requires @aact/view to be installed.
+  pnpm add -D @aact/view@beta
+  # or one-off:
+  pnpm dlx -p aact -p @aact/view aact view
 ```
 
 Runtime shape:
 
-1. `aact view` loads the same `Model` the rule engine sees (via
-   the existing format registry — PUML / DSL / JSON / model-json
-   all work without renderer-specific code).
-2. A local HTTP server (UnJS `listhen` + `h3`, consistent with
-   the rest of the toolchain) serves a pre-built static SPA from
-   the package's `dist/`.
-3. The SPA fetches the current `ModelData` envelope, lays out
-   the graph (ELK hierarchical layout, Cytoscape interaction
-   layer), and overlays violations + metrics from the existing
-   `CheckData` / `AnalyzeData` envelopes.
-4. A `chokidar` file watcher on `config.source.path` + every
-   `customRules` import re-runs the loader on change and
-   pushes the new envelope over a WebSocket; the SPA diffs the
-   graph and animates the delta.
-5. Drill-down by level — Structurizr-style **double-click
+1. Core `aact view` subcommand (≈30 LOC in `src/cli/commands/view.ts`)
+   calls `loadAndValidateConfig`, then dynamic-imports
+   `@aact/view` and hands over the resolved config + a chokidar
+   handle. No React / Svelte / ELK code ever lands in core.
+2. `@aact/view` declares `aact` as a **peer dependency** and
+   imports `loadModel` / `loadFormat` from its public API —
+   never forks the loader, so format support (PUML / DSL /
+   JSON / model-json) tracks aact-core automatically.
+3. Companion spins a local HTTP server (UnJS `listhen` + `h3` v2
+   - CrossWS for the WebSocket upgrade, consistent with the
+     rest of the toolchain) and serves a pre-built static SPA from
+     its own `dist/`. `npx`-friendly: the SPA bundle ships in the
+     tarball — no build step on the user side.
+4. The SPA fetches the current `ModelData` envelope, lays out
+   the graph with ELK (hierarchical, native for C4 nesting),
+   renders nodes through **Svelte Flow** (the xyflow Svelte
+   port — official, DOM-node-based so custom C4 ribbons /
+   boundary frames are just HTML), and overlays violations from
+   `CheckData` + metrics from `AnalyzeData`.
+5. A `chokidar` file watcher on `config.source.path` + every
+   `customRules` import re-runs `loadModel` in-process and
+   pushes the new envelope over the WebSocket; the SPA diffs
+   the graph and animates the delta. Svelte 5 runes give
+   fine-grained reactivity — only the nodes that actually
+   changed re-render, so even a 500-element model updates
+   without jank.
+6. Drill-down by level — Structurizr-style **double-click
    descends one level**, breadcrumb / `Esc` ascends. Single-click
    selects the node and pins details to the side panel without
    changing scope.
@@ -133,19 +156,71 @@ are intentional non-goals:
 - **Style fidelity with PUML.** Tags / sprites / line styles do
   not flow into the workbench. The canonical line above.
 
-### Tech notes
+### Tech notes (May 2026 revision)
 
-| Layer            | Choice                                       | Why                                                                                    |
-| ---------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Package          | `@aact/view` in pnpm workspace               | Keeps core `aact` tarball lean; users who don't want it never pay for the dist.        |
-| Server           | UnJS `listhen` + `h3`                        | Matches the rest of aact's UnJS stack (c12 / citty / consola); zero lock-in.           |
-| File watcher     | `chokidar`                                   | The proven cross-platform watcher. Same dep most v3-era tools already pull in.         |
-| WebSocket        | `ws` via h3 upgrade                          | Plain `RFC 6455`; agents can also drive it from a `WebSocket` polyfill in headless.    |
-| Browser launch   | `open`                                       | Cross-platform; falls back to printing the URL if no display.                          |
-| Frontend bundle  | Vite + Solid (or Preact) + ELK + Cytoscape   | Solid keeps bundle < 200 kB gzipped; ELK lays out C4 nesting; Cytoscape handles click. |
-| Bundle delivery  | Pre-built `dist/` in the npm tarball         | `npx aact view` works without a build step on the user side.                           |
-| Communication    | The `CliEnvelope` shape, served from a route | Re-uses the contract already documented in `src/cli/output/types.ts`.                  |
-| Cold-start floor | Server up + browser open < 1 s on the target | The whole pitch is "zero friction" — every second of startup eats the value.           |
+The first draft pencilled in `Solid + Cytoscape`. Two findings
+from the 2026 stack survey flipped the call:
+
+- **dagre is no longer maintained** — out of the layout shortlist.
+- **xyflow (ex-React Flow) has official React and Svelte bindings,
+  no Solid binding** — so the cleanest "DOM-node custom C4 nodes
+  - ELK layout + fine-grained reactivity" combination is **Svelte
+    5 + Svelte Flow**. Svelte runes deliver the same signal-grain
+    reactivity Solid offers without the no-binding rough edge.
+
+| Layer            | Choice                                        | Why                                                                                                                                                                                                           |
+| ---------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Package          | `@aact/view` published separately on npm      | Companion install — core `aact` tarball stays lean; users who don't want the workbench never pay.                                                                                                             |
+| Integration      | `aact view` subcommand → dynamic import       | Same pattern as `vitest` + `@vitest/ui`. Single discoverable surface, optional install, actionable error when missing.                                                                                        |
+| Loader           | Peer dep on `aact`, imports `loadModel` etc.  | No loader fork; format support tracks aact-core automatically; in-process load = sub-100 ms reload.                                                                                                           |
+| Server           | UnJS `listhen` + `h3 v2`                      | Matches aact's UnJS stack (c12 / citty / consola); zero lock-in; h3 v2 lands cross-runtime WS via CrossWS.                                                                                                    |
+| WebSocket        | CrossWS (h3 v2 built-in)                      | Browser-side `WebSocket`; same runtime API on Node / Bun / Deno without a polyfill.                                                                                                                           |
+| File watcher     | `chokidar`                                    | The proven cross-platform watcher.                                                                                                                                                                            |
+| Browser launch   | `open`                                        | Cross-platform; falls back to printing the URL when no display is available.                                                                                                                                  |
+| Frontend bundle  | Vite + **Svelte 5** + **Svelte Flow** + ELK   | Svelte 5 runes give fine-grained reactivity; svelteflow is official xyflow Svelte port, DOM-node-based so custom C4 nodes are plain HTML; ELK lays out C4 nesting natively. Bundle floor ~120–150 kB gzipped. |
+| Bundle delivery  | Pre-built `dist/` in the `@aact/view` tarball | `npx aact view` works without a build step on the user side once the companion is added.                                                                                                                      |
+| Communication    | The `CliEnvelope` shape, served from a route  | Re-uses the contract already documented in `src/cli/output/types.ts`.                                                                                                                                         |
+| Cold-start floor | Server up + browser open < 1 s on the target  | The whole pitch is "zero friction" — every second of startup eats the value.                                                                                                                                  |
+
+### Integration pattern — companion package, not bundled
+
+Core `aact` ships nothing view-related at runtime. The pattern is
+borrowed from the broader 2026 OSS playbook (vitest + @vitest/ui,
+next + @next/eslint-plugin-next, eslint + per-plugin packages):
+
+```
+aact (always installed)
+└─ src/cli/commands/view.ts        ← ~30 LOC subcommand
+   ├─ loadAndValidateConfig()       ← shared with check / analyze / model
+   ├─ try dynamic import("@aact/view")
+   │    success → call its `runWorkbench({ config, sourceDir })`
+   │    failure → ToolError("view.companionMissing", install hint)
+   └─ exit code follows the companion (0 on user-quit, 2 on server boot fail)
+
+@aact/view (separately installed; peer dep aact ^3)
+├─ runWorkbench()                  ← lifecycle: load → serve → watch → cleanup
+├─ src/server/                     ← listhen + h3 + CrossWS
+├─ src/watcher/                    ← chokidar reload pipeline
+├─ ui/                             ← Svelte 5 SPA, Vite-built
+│   ├─ Routes: /, /system/:name, /element/:name
+│   ├─ Svelte Flow + ELK layout
+│   └─ Hot-reload subscriber over the CrossWS channel
+└─ dist/                           ← pre-built SPA, ships in tarball
+```
+
+Repo layout: `@aact/view` lives **inside this repo** as a pnpm
+workspace package under `packages/view/`, with the existing
+aact source tree at `src/` left untouched. The view package
+imports `loadModel`, `loadFormat`, and the `CliEnvelope` types
+through the `aact` workspace symlink — current code reused, not
+forked, not moved. CI publishes the two packages from the same
+checkout; their versions can diverge inside the v3 major.
+
+The user's mental model stays single-surface: they type
+`aact view` regardless of whether the companion is present. The
+core CLI is the one place that knows about the optional package;
+documentation, the agent skill, and `aact --help` all reference
+`aact view`, never `npx @aact/view` directly.
 
 ## Как покрыть тестами
 
