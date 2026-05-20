@@ -20,7 +20,10 @@ import type {
 } from "../../rules/types";
 import { issueToDiagnostic, loadModel } from "../loadModel";
 import type { Diagnostic, ExitCode, Renderer } from "../output";
-import { linkSourceLocation } from "../output/hyperlinks";
+import {
+  formatLocationDisplay,
+  linkSourceLocation,
+} from "../output/hyperlinks";
 import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
 import { configArg, jsonArg, sarifArg } from "../sharedArgs";
@@ -499,7 +502,10 @@ const renderViolationsTable = (
   // Pre-compute the cells so we can right-align all three columns.
   const rows = data.violations.map((v) => {
     const loc = v.sourceLocation;
-    const locText = loc ? formatLocation(loc) : "";
+    // Display-only relativisation against cwd — the SourceLocation
+    // itself stays absolute so linkSourceLocation can build a proper
+    // editor deeplink URI further down.
+    const locText = loc ? formatLocationDisplay(loc) : "";
     return {
       locText,
       sourceLocation: loc,
@@ -536,7 +542,7 @@ const renderViolationsTable = (
     if (r.relatedLocations && r.relatedLocations.length > 0) {
       const indent = " ".repeat(locWidth + 2);
       for (const rel of r.relatedLocations) {
-        const relText = formatLocation(rel.sourceLocation);
+        const relText = formatLocationDisplay(rel.sourceLocation);
         const relLink = linkSourceLocation(relText, rel.sourceLocation);
         const label = rel.message ? `${rel.message}: ` : "";
         const arrow = `↳ ${label}${relLink}`;

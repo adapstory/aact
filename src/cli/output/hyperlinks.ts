@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import terminalLink from "terminal-link";
 
 import type { SourceLocation } from "../../model";
@@ -156,3 +158,48 @@ export const linkSourceLocation = (
 };
 
 export { formatLocation } from "../../model";
+
+/**
+ * Display-only path formatter for text-mode renderers. Loaders run
+ * `path.resolve()` on the input, so `SourceLocation.file` is always
+ * absolute — fine for JSON / SARIF consumers and for the OSC 8 URI
+ * (editor deeplinks like `vscode://file/<abs>:line:col` need it), but
+ * verbose in a terminal table where the same `/Users/.../project/`
+ * prefix repeats on every row.
+ *
+ * Following the rustc / biome / eslint / oxlint convention: when the
+ * file is under `cwd`, return the relative form (no leading `./` so
+ * the canonical `path:line:col` autodetection in Zed and plain
+ * terminals still triggers). When the file is outside `cwd` —
+ * vendored examples, `git show <ref>:<path>` scratch tmpfiles, or any
+ * file referenced by absolute path — return the original absolute.
+ *
+ * The URI passed to `linkSourceLocation` stays absolute regardless;
+ * this helper only narrows the display TEXT.
+ */
+export const formatDisplayPath = (
+  file: string,
+  cwd: string = process.cwd(),
+): string => {
+  if (!path.isAbsolute(file)) return file;
+  const rel = path.relative(cwd, file);
+  // `path.relative` returns `..` segments when `file` is outside
+  // `cwd` — that's an absolute reference dressed up as a long
+  // relative one. Keep the absolute form so the user immediately
+  // sees the file isn't part of the project.
+  if (rel === "" || rel.startsWith("..")) return file;
+  return rel;
+};
+
+/**
+ * Pair `formatDisplayPath` with the canonical `:line:col` suffix.
+ * The output is what goes into the visible cell of a violation
+ * table — feed it to `linkSourceLocation` as the display text and
+ * pass the original `SourceLocation` (with absolute file) so the
+ * URI side stays correct.
+ */
+export const formatLocationDisplay = (
+  loc: SourceLocation,
+  cwd: string = process.cwd(),
+): string =>
+  `${formatDisplayPath(loc.file, cwd)}:${loc.start.line}:${loc.start.col}`;

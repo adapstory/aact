@@ -1,4 +1,10 @@
-import { linkSourceLocation } from "../../../src/cli/output/hyperlinks";
+import path from "node:path";
+
+import {
+  formatDisplayPath,
+  formatLocationDisplay,
+  linkSourceLocation,
+} from "../../../src/cli/output/hyperlinks";
 import type { SourceLocation } from "../../../src/model";
 import { formatLocation } from "../../../src/model";
 
@@ -19,6 +25,53 @@ describe("formatLocation", () => {
 
   it("is library-safe — no escape sequences", () => {
     expect(formatLocation(loc).includes(ESC)).toBe(false);
+  });
+});
+
+describe("formatDisplayPath", () => {
+  it("relativises an absolute path that lives under cwd", () => {
+    const cwd = "/Users/me/project";
+    expect(formatDisplayPath(`${cwd}/src/arch.puml`, cwd)).toBe(
+      path.join("src", "arch.puml"),
+    );
+  });
+
+  it("keeps the absolute form when the file is outside cwd (path.relative `..`)", () => {
+    expect(formatDisplayPath("/etc/hosts", "/Users/me/project")).toBe(
+      "/etc/hosts",
+    );
+  });
+
+  it("keeps the original string when the path is already relative", () => {
+    expect(formatDisplayPath("examples/x.puml", "/Users/me/project")).toBe(
+      "examples/x.puml",
+    );
+  });
+
+  it("returns the absolute file when it equals cwd exactly", () => {
+    // `path.relative(cwd, cwd) === ""` — the helper falls back to
+    // the absolute form so the user sees a real address.
+    const cwd = "/Users/me/project";
+    expect(formatDisplayPath(cwd, cwd)).toBe(cwd);
+  });
+});
+
+describe("formatLocationDisplay", () => {
+  it("pairs relativised path with the canonical :line:col suffix", () => {
+    const cwd = "/Users/me/project";
+    const here: SourceLocation = {
+      ...loc,
+      file: `${cwd}/src/arch.puml`,
+    };
+    expect(formatLocationDisplay(here, cwd)).toBe(
+      `${path.join("src", "arch.puml")}:12:5`,
+    );
+  });
+
+  it("falls back to the absolute path for files outside cwd", () => {
+    expect(formatLocationDisplay(loc, "/Users/me/project")).toBe(
+      "/abs/path/arch.puml:12:5",
+    );
   });
 });
 
