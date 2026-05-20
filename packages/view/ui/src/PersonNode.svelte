@@ -31,7 +31,13 @@
 >
   <Handle type="target" position={Position.Left} />
   <div class="head" aria-hidden="true">
-    <span class="silhouette"></span>
+    <svg viewBox="0 0 24 24" class="silhouette" xmlns="http://www.w3.org/2000/svg">
+      <!-- Head + shoulders silhouette. Two distinct shapes so it
+           reads as a person at a glance, with no overlap between
+           the head circle and the rounded shoulders below. -->
+      <circle cx="12" cy="7" r="4" />
+      <path d="M4 21c0-4.42 3.58-8 8-8s8 3.58 8 8" />
+    </svg>
   </div>
   <div class="body">
     <span class="kind">Person</span>
@@ -82,17 +88,19 @@
     justify-content: center;
   }
   .silhouette {
-    width: 30px;
-    height: 30px;
-    background:
-      radial-gradient(circle at 50% 30%, #f8fafc 0 8px, transparent 9px),
-      radial-gradient(
-        ellipse at 50% 90%,
-        #f8fafc 0 14px,
-        transparent 14px 100%
-      );
-    background-repeat: no-repeat;
+    width: 28px;
+    height: 28px;
+    color: #f8fafc;
     opacity: 0.92;
+  }
+  .silhouette circle {
+    fill: currentColor;
+  }
+  .silhouette path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
   }
   .body {
     display: flex;
