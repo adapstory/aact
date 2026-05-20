@@ -38,6 +38,13 @@ jobs:
           # Drop AACT_FILE_OPENER so hyperlink builder picks its
           # CI-safe default — runner has no TTY, anyway.
           AACT_FILE_OPENER: none
+          # `GITHUB_ACTIONS=true` (set by the runner) flips `aact check`
+          # into `::error file=...` annotation mode. The smoke
+          # assertions are about the human text mode — clearing the
+          # env for this block forces the default human renderer
+          # without affecting the GHA-annotation test path that
+          # check.test.ts already covers.
+          GITHUB_ACTIONS: ""
         run: |
           set -euo pipefail
           AACT="$GITHUB_WORKSPACE/dist/cli/index.mjs"
