@@ -119,11 +119,5 @@
     "terminal-link": "^5.0.0",
     "valibot": "^1.4.0",
     "yaml": "2.9.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "unrs-resolver"
-    ]
   }
 }
