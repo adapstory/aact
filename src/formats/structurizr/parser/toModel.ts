@@ -290,6 +290,23 @@ const ELEMENT_KINDS = new Set([
   "element",
 ]);
 
+type BodyStatementNode = Exclude<
+  ElementBodyNode,
+  ElementNode | RelationshipNode
+>;
+
+type AggregateBodyStatementNode =
+  | BodyStatementNode
+  | Extract<ElementNode, { kind: "group" }>;
+
+const isGroupPropertyStatement = (
+  node: ElementBodyNode,
+): node is Extract<ElementNode, { kind: "group" }> =>
+  node.kind === "group" && node.members.length === 0;
+
+const isStructuralElementNode = (node: ElementBodyNode): node is ElementNode =>
+  ELEMENT_KINDS.has(node.kind) && !isGroupPropertyStatement(node);
+
 const collectModelChild = (
   child: ModelChildNode,
   containers: Element[],
@@ -342,8 +359,9 @@ const collectModelChild = (
  */
 /**
  * `GroupNode` has `members` instead of `body` — handle separately.
- * Group children are inlined at the current scope today; a future pass
- * will route them into the parent's grouping properties.
+ * Non-empty group blocks are visual wrappers whose members are inlined
+ * at the current scope. Empty group statements inside an element body
+ * are grouping properties and are consumed by aggregateBody.
  */
 const elementChildren = (
   element: ElementNode,
@@ -351,8 +369,8 @@ const elementChildren = (
   if (element.kind === "group") return element.members;
   const out: (ElementNode | RelationshipNode)[] = [];
   for (const item of element.body) {
-    if (item.kind === "relationship" || ELEMENT_KINDS.has(item.kind)) {
-      out.push(item as ElementNode | RelationshipNode);
+    if (item.kind === "relationship" || isStructuralElementNode(item)) {
+      out.push(item);
     }
   }
   return out;
@@ -768,9 +786,8 @@ const kindFromAstKind = (k: ElementNode["kind"]): ElementKind => {
       return "Component";
     }
     case "group": {
-      // Groups have no Container counterpart — they're visual grouping.
-      // Today they surface as plain Containers; the future pass will
-      // route them to Container.properties["group"] instead.
+      // Groups have no Container counterpart and are handled before
+      // leaf kind mapping. This fallback keeps the switch exhaustive.
       return "Container";
     }
     case "element": {
@@ -857,8 +874,9 @@ const handleReopen = (
     identifierMap.get(reopen.target.name.toLowerCase()) ?? reopen.target.name;
 
   const bodyStatements = reopen.body.filter(
-    (b): b is Exclude<ElementBodyNode, ElementNode | RelationshipNode> =>
-      b.kind !== "relationship" && !ELEMENT_KINDS.has(b.kind),
+    (b): b is AggregateBodyStatementNode =>
+      b.kind !== "relationship" &&
+      (!ELEMENT_KINDS.has(b.kind) || isGroupPropertyStatement(b)),
   );
   const relationships = reopen.body.filter(
     (b): b is RelationshipNode => b.kind === "relationship",
@@ -868,7 +886,7 @@ const handleReopen = (
   //   parser walks them through the regular element handler with the
   //   target as the parent identifier path; we mirror that.
   const newElements = reopen.body.filter((b): b is ElementNode =>
-    ELEMENT_KINDS.has(b.kind),
+    isStructuralElementNode(b),
   );
 
   const containerIdx = containers.findIndex((c) => c.name === targetDisplay);
@@ -951,10 +969,7 @@ const handleReopen = (
  */
 const mergeContainerBody = (
   c: Element,
-  statements: readonly Exclude<
-    ElementBodyNode,
-    ElementNode | RelationshipNode
-  >[],
+  statements: readonly AggregateBodyStatementNode[],
 ): Element => {
   const delta = aggregateBodyStatements(statements);
   const technology = delta.technology ?? c.technology;
@@ -990,10 +1005,7 @@ const inferKindForExistingContainer = (
 
 const mergeBoundaryBody = (
   b: Boundary,
-  statements: readonly Exclude<
-    ElementBodyNode,
-    ElementNode | RelationshipNode
-  >[],
+  statements: readonly AggregateBodyStatementNode[],
 ): Boundary => {
   const delta = aggregateBodyStatements(statements);
   return {
@@ -1024,10 +1036,7 @@ const dedupeTags = (tags: readonly string[]): string[] => {
  * element header to seed defaults from.
  */
 const aggregateBodyStatements = (
-  statements: readonly Exclude<
-    ElementBodyNode,
-    ElementNode | RelationshipNode
-  >[],
+  statements: readonly AggregateBodyStatementNode[],
 ): {
   description: string | undefined;
   technology: string | undefined;
@@ -1079,6 +1088,13 @@ const aggregateBodyStatements = (
           if (entry.value) {
             properties[`${key}.value`] = entry.value.value;
           }
+        }
+        break;
+      }
+      case "group": {
+        if (item.members.length === 0) {
+          properties = properties ?? {};
+          properties.group = item.name.value;
         }
         break;
       }

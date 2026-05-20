@@ -181,6 +181,52 @@ describe("Structurizr parser — group → properties.group", () => {
     expect(model.elements["ctrl"]?.properties?.group).toBe("Web Layer");
   });
 
+  it("body-form group does not promote a leaf container into a boundary", () => {
+    const src = `workspace {
+      model {
+        api = container "API" {
+          group "Application Layer"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.elements["api"]?.properties?.group).toBe("Application Layer");
+    expect(model.boundaries["api"]).toBeUndefined();
+  });
+
+  it("reopen body-form group merges into existing container properties", () => {
+    const src = `workspace {
+      model {
+        api = container "API"
+        api {
+          group "Application Layer"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.elements["api"]?.properties?.group).toBe("Application Layer");
+    expect(model.boundaries["api"]).toBeUndefined();
+  });
+
+  it("reopen body-form group merges into existing boundary properties", () => {
+    const src = `workspace {
+      model {
+        sys = softwareSystem "S" {
+          api = container "API"
+        }
+        sys {
+          group "Platform"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.boundaries["sys"]?.properties?.group).toBe("Platform");
+    expect(model.boundaries["sys"]?.elementNames).toEqual(["api"]);
+  });
+
   it("preserves other properties alongside group", () => {
     const src = `workspace {
       model {
