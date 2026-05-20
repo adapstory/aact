@@ -638,14 +638,14 @@ describe("renderCheckText", () => {
       command: "check",
       exitCode: 1,
       data: {
-        mode: "check",
+        mode: "check" as const,
         violations: [
           {
             rule: "acl",
             target: "svc",
             targetKind: "element" as const,
             message: "msg",
-            severity: "error",
+            severity: "error" as const,
           },
         ],
         suggestedFixes: [],

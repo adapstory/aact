@@ -46,13 +46,17 @@ const splitGitRef = (arg: string): { ref: string; path: string } => {
   return { ref: arg.slice(0, idx), path: arg.slice(idx + 1) };
 };
 
-const readGitRefBytes = (ref: string, path: string): string => {
+const readGitRefBytes = (ref: string, path: string, cwd?: string): string => {
   try {
     return execFileSync(
       // eslint-disable-next-line sonarjs/no-os-command-from-path -- git is universally PATH-installed; aact is itself a CLI users invoke from a shell.
       "git",
       ["show", `${ref}:${path}`],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        ...(cwd ? { cwd } : {}),
+      },
     );
   } catch (error) {
     throw new ToolError(
@@ -105,6 +109,14 @@ export interface LoadBaselineInput {
   readonly formatOverride?: string;
   /** Label for diagnostics. "baseline" or "current". */
   readonly sideLabel: string;
+  /**
+   * Working directory for git-ref resolution. Falls back to the calling
+   * process's cwd when omitted — that's what CLI invocations want. Tests
+   * pass an explicit value so they don't have to `process.chdir()` (which
+   * is forbidden inside vitest's worker_threads pool, blocking mutation
+   * runs).
+   */
+  readonly cwd?: string;
 }
 
 export interface LoadBaselineResult {
@@ -116,7 +128,7 @@ export interface LoadBaselineResult {
 export const loadBaseline = async (
   input: LoadBaselineInput,
 ): Promise<LoadBaselineResult> => {
-  const { arg, formatOverride, sideLabel } = input;
+  const { arg, formatOverride, sideLabel, cwd } = input;
 
   // Resolve format hint FIRST — stdin without an explicit
   // `--<side>-format` would otherwise hang waiting for fd 0 to
@@ -174,7 +186,11 @@ export const loadBaseline = async (
       break;
     }
     case "git": {
-      rawContent = readGitRefBytes(pathForContent.ref, pathForContent.path);
+      rawContent = readGitRefBytes(
+        pathForContent.ref,
+        pathForContent.path,
+        cwd,
+      );
       break;
     }
     case "file": {

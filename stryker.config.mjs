@@ -37,15 +37,29 @@ export default {
   // gives an honest score.
   coverageAnalysis: "all",
 
-  // Mutation scope покрывает весь user-facing data path: load source →
-  // build/validate model → check/fix/analyze. Regression в любом из этих
-  // звеньев ломает user files (fix), downstream tooling (generate),
-  // analysis (analyze) или silently-misses violations (rules / model).
+  // Mutation scope покрывает user-facing data path и публичный output
+  // contract: load → build/validate model → check/fix/analyze/diff →
+  // envelope/SARIF emission. Regression в любом звене ломает user
+  // files (fix), downstream tooling (generate / envelope shape),
+  // analysis (analyze), diff baseline (diff) или silently-misses
+  // violations (rules / model).
+  //
+  // Не покрыто намеренно: src/cli/commands/*.ts (orchestration с
+  // citty arg descriptions — StringLiteral mutations на help-text
+  // тонут в noise), src/cli/run.ts, src/cli/loadConfig.ts,
+  // src/cli/loadModel.ts, src/cli/output/{humanReporter,jsonReporter,
+  // toolError}.ts (formatting layer, тоже string-heavy).
   mutate: [
     "src/rules/**/*.ts",
     "src/formats/**/*.ts",
     "src/model/**/*.ts",
+    "src/diff/**/*.ts",
     "src/analyze.ts",
+    "src/config.ts",
+    "src/cli/output/envelope.ts",
+    "src/cli/output/sarifReporter.ts",
+    "src/cli/output/hyperlinks.ts",
+    "src/cli/output/resolveMode.ts",
     "!src/**/*.test.ts",
     "!src/**/index.ts",
     "!src/**/types.ts",

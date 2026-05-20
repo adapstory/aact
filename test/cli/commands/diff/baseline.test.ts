@@ -215,18 +215,13 @@ describe("loadBaseline — git ref input", () => {
         cwd: repo,
         shell: "/bin/sh",
       });
-      const prevCwd = process.cwd();
-      process.chdir(repo);
-      try {
-        const result = await loadBaseline({
-          arg: "HEAD:arch.puml",
-          sideLabel: "baseline",
-        });
-        expect(result.side.format).toBe("plantuml");
-        expect(Object.keys(result.model.elements)).toContain("svc");
-      } finally {
-        process.chdir(prevCwd);
-      }
+      const result = await loadBaseline({
+        arg: "HEAD:arch.puml",
+        sideLabel: "baseline",
+        cwd: repo,
+      });
+      expect(result.side.format).toBe("plantuml");
+      expect(Object.keys(result.model.elements)).toContain("svc");
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
