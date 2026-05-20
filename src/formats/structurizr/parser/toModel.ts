@@ -90,13 +90,23 @@ export const toModel = (workspace: WorkspaceNode): LoadResult => {
   const built = buildModel({
     elements: containers,
     boundaries,
-    rootBoundaryNames: boundaries.map((b) => b.name),
+    rootBoundaryNames: findRootBoundaryNames(boundaries),
     workspace: workspaceMetadata(workspace),
   });
   return {
     model: built.model,
     issues: [...parserIssues, ...built.issues],
   };
+};
+
+const findRootBoundaryNames = (boundaries: readonly Boundary[]): string[] => {
+  const nested = new Set<string>();
+  for (const boundary of boundaries) {
+    for (const child of boundary.boundaryNames) {
+      nested.add(child);
+    }
+  }
+  return boundaries.map((b) => b.name).filter((name) => !nested.has(name));
 };
 
 /**

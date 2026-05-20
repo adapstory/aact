@@ -42,6 +42,30 @@ describe("Structurizr parser pipeline (CST → AST → Model)", () => {
     expect(model.elements["api"]?.technology).toBe("Node.js");
   });
 
+  it("does not register nested container boundaries as root boundaries", () => {
+    const src = `workspace {
+      model {
+        platform = softwareSystem "Platform" {
+          edge = container "Edge" {
+            edgeApi = container "Edge API"
+          }
+          projects = container "Projects" {
+            projectsApi = container "Projects API"
+          }
+        }
+      }
+    }`;
+    const { model, parseErrors } = parseSource(src, "test.dsl");
+    expect(parseErrors).toEqual([]);
+    expect(model.rootBoundaryNames).toEqual(["platform"]);
+    expect(model.boundaries["platform"]?.boundaryNames).toEqual([
+      "edge",
+      "projects",
+    ]);
+    expect(model.boundaries["edge"]?.elementNames).toEqual(["edgeApi"]);
+    expect(model.boundaries["projects"]?.elementNames).toEqual(["projectsApi"]);
+  });
+
   it("resolves relationships using `id = element` assignments", () => {
     const src = `workspace {
       model {
