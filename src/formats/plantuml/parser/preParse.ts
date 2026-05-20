@@ -660,7 +660,13 @@ const unwrapArg = (raw: string): string => {
       const parsed = JSON.parse(target) as unknown;
       if (typeof parsed === "string") return parsed;
     } catch {
-      // fall through
+      // JSON.parse rejects literal control characters inside a
+      // string literal (raw tabs, newlines), even though the PUML
+      // input might carry them. Fall back to a lenient quote-strip
+      // so those values still land on Model.properties — the
+      // whitespace-only-key drop below catches the genuinely
+      // empty cases either way.
+      return target.slice(1, -1);
     }
   }
   return target;
@@ -676,7 +682,12 @@ const buildPropertiesObject = (
   const out: Record<string, string> = {};
   for (const row of rows) {
     const key = row[0];
-    if (!key) continue;
+    // Skip rows whose key is empty or whitespace-only. Upstream
+    // fixtures (`TestPropertyMissingColumns.puml`) use ` ` strings
+    // as column placeholders — keeping them on Model.properties
+    // would let " " (and "  ", and "\t") survive as semantically
+    // meaningless keys.
+    if (!key || key.trim() === "") continue;
     out[key] = row[1] ?? "";
   }
   return out;

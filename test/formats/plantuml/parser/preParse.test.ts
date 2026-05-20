@@ -258,6 +258,24 @@ describe("PUML preParse — extractAttachedProperties", () => {
     expect(map.get(5)).toEqual({ Value1: "", Value2: "" });
   });
 
+  it("drops whitespace-only keys (column placeholders) from Model.properties", () => {
+    // Upstream `TestPropertyMissingColumns.puml` uses bare-string
+    // " " as a column placeholder. Architecturally these rows
+    // carry no key=value pair — surfacing them on Model would
+    // mean a `" "` (or `"  "`) key with no semantic content.
+    const src = [
+      "@startuml", //                                       1
+      'AddProperty("region", "us-east-1")', //              2 ← keeps
+      'AddProperty(" ", " ", $col3="col3")', //             3 ← drop (whitespace key)
+      'AddProperty("\t", "tab-only")', //                   4 ← drop (whitespace key)
+      'AddProperty("real", "value")', //                    5 ← keeps
+      'Container(api, "API")', //                           6 ← target
+      "@enduml", //                                         7
+    ].join("\n");
+    const props = extractAttachedProperties(src).get(6);
+    expect(props).toEqual({ region: "us-east-1", real: "value" });
+  });
+
   it('unwraps named-arg form `$colN="value"` used by upstream fixtures', () => {
     // Mirrors `.parser-refs/C4-PlantUML/percy/TestPropertyMissingColumns.puml`.
     // Without the named-arg strip, the row key would land as the
