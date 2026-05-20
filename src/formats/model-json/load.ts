@@ -201,9 +201,11 @@ export const load = async (path: string): Promise<LoadResult> => {
     ? (raw.rootBoundaryNames as readonly string[])
     : [];
 
-  // buildModel runs validateModel internally — calling it again would
-  // duplicate dangling-relation / boundary-cycle issues. preIssues
-  // carries the envelope's data.issues through unchanged.
+  // buildModel runs validateModel internally — calling it again
+  // would duplicate dangling-relation / boundary-cycle / unknown-kind
+  // / etc. preIssues here carries only the loader-only slice of
+  // envelope.data.issues (see LOADER_ONLY_ISSUE_KINDS); everything
+  // else gets recomputed from the deserialised Model.
   return buildModel({
     elements: elementsArr,
     boundaries: boundariesArr,
