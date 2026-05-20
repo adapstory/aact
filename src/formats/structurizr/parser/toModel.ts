@@ -423,6 +423,28 @@ const withGroupProperty = <T extends Element | Boundary>(
   properties: { ...el.properties, group: groupName },
 });
 
+/**
+ * Walk an `ElementNode` (or anything in a children list) and return
+ * the concrete element / boundary nodes that should appear on the
+ * enclosing boundary's `elementNames` / `boundaryNames`. For a group
+ * this means flattening nested members; for an actual element it
+ * yields the node itself. Relationships are filtered upstream and
+ * never reach this helper.
+ */
+const flattenGroupTargets = (
+  node: ElementNode | RelationshipNode,
+): readonly Extract<ElementNode, { name: { value: string } }>[] => {
+  if (node.kind === "relationship") return [];
+  if (node.kind !== "group") {
+    return [node];
+  }
+  const out: ReturnType<typeof flattenGroupTargets>[number][] = [];
+  for (const member of node.members) {
+    out.push(...flattenGroupTargets(member));
+  }
+  return out;
+};
+
 const handleBoundary = (
   element: Extract<ElementNode, { kind: "softwareSystem" | "container" }>,
   children: readonly (ElementNode | RelationshipNode)[],
@@ -448,16 +470,23 @@ const handleBoundary = (
       parserIssues,
       groupCtx,
     );
-    // The nested child's Model key is its own DSL identifier
-    // (assignedIdentifier if present, else its display name). We
-    // resolve through identifierMap which already stores that mapping.
-    const childLookup = child.assignedIdentifier?.name ?? child.name.value;
-    const nestedName =
-      identifierMap.get(childLookup.toLowerCase()) ?? childLookup;
-    if (boundaries.some((b) => b.name === nestedName)) {
-      childBoundaryNames.push(nestedName);
-    } else {
-      childContainerNames.push(nestedName);
+    // `group "Name" { … }` is a logical grouping, not a Model entity —
+    // its members already landed in `containers` / `boundaries` via
+    // `collectModelChild` above. Pushing the group's display name
+    // onto `elementNames` would create a dangling reference that
+    // `validateModel` correctly flags as `elementInBoundaryNotInModel`.
+    // Flatten group members recursively instead so the boundary's
+    // `elementNames` / `boundaryNames` describe what's actually in
+    // the Model.
+    for (const real of flattenGroupTargets(child)) {
+      const childLookup = real.assignedIdentifier?.name ?? real.name.value;
+      const nestedName =
+        identifierMap.get(childLookup.toLowerCase()) ?? childLookup;
+      if (boundaries.some((b) => b.name === nestedName)) {
+        childBoundaryNames.push(nestedName);
+      } else {
+        childContainerNames.push(nestedName);
+      }
     }
   }
   for (const child of children) {
@@ -633,6 +662,19 @@ const handleElement = (
   parserIssues: ModelIssue[],
   groupCtx: GroupContext,
 ): void => {
+  if (element.kind === "group") {
+    handleGroup(
+      element,
+      containers,
+      boundaries,
+      identifierMap,
+      parentIdentifierPath,
+      parserIssues,
+      groupCtx,
+    );
+    return;
+  }
+
   const displayName = element.name.value;
   // Container.name is the DSL identifier (the short id authors write
   // in source — `orders_crud = container "Orders CRUD"` gives name
@@ -674,19 +716,6 @@ const handleElement = (
   // key keeps backwards compatibility with un-prefixed references.
   if (selfIdentifierPath !== lookupKey) {
     identifierMap.set(selfIdentifierPath.toLowerCase(), lookupKey);
-  }
-
-  if (element.kind === "group") {
-    handleGroup(
-      element,
-      containers,
-      boundaries,
-      identifierMap,
-      parentIdentifierPath,
-      parserIssues,
-      groupCtx,
-    );
-    return;
   }
 
   const children = elementChildren(element);
