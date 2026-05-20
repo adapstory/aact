@@ -289,6 +289,90 @@ describe("aact model", () => {
   });
 });
 
+describe("aact diff", () => {
+  const SIMPLE_PUML = `@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+Container(svc, "Service")
+@enduml`;
+
+  const SIMPLE_PUML_PLUS = `@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+Container(svc, "Service")
+Container(extra, "Extra")
+@enduml`;
+
+  it("exits 0 when models are identical", async () => {
+    await fs.writeFile(path.join(workDir, "a.puml"), SIMPLE_PUML);
+    const result = await runCli(["diff", "a.puml", "a.puml"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("No structural changes");
+  });
+
+  it("exits 1 and shows added element when models differ structurally", async () => {
+    await fs.writeFile(path.join(workDir, "base.puml"), SIMPLE_PUML);
+    await fs.writeFile(path.join(workDir, "curr.puml"), SIMPLE_PUML_PLUS);
+    const result = await runCli(["diff", "base.puml", "curr.puml"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("extra");
+    expect(result.stdout).toContain("Element");
+  });
+
+  it("--json emits a v1 envelope with DiffData shape", async () => {
+    await fs.writeFile(path.join(workDir, "base.puml"), SIMPLE_PUML);
+    await fs.writeFile(path.join(workDir, "curr.puml"), SIMPLE_PUML_PLUS);
+    const result = await runCli(["diff", "base.puml", "curr.puml", "--json"]);
+    expect(result.exitCode).toBe(1);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const data = envelope.data as Record<string, unknown>;
+    expect(data).toHaveProperty("summary");
+    expect(data).toHaveProperty("changes");
+    expect(data).toHaveProperty("baseline");
+    expect(data).toHaveProperty("current");
+    const summary = data.summary as Record<string, unknown>;
+    expect(summary).toHaveProperty("headline");
+    expect(summary).toHaveProperty("bySeverity");
+  });
+
+  it("falls back to aact.config.ts source when current is omitted", async () => {
+    await runCli(["init"]);
+    // Use init's architecture.puml as baseline; current is implicit
+    // from config (same file → no diff).
+    const baselinePath = path.join(workDir, "architecture.puml");
+    const result = await runCli(["diff", baselinePath]);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("--json envelope.meta.configPath reflects resolved aact.config.ts when current is implicit", async () => {
+    await runCli(["init"]);
+    const baselinePath = path.join(workDir, "architecture.puml");
+    const result = await runCli(["diff", baselinePath, "--json"]);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const meta = envelope.meta as Record<string, unknown>;
+    expect(meta.configPath).toMatch(/aact\.config\.ts$/);
+  });
+
+  it("exits 2 (tool error) when baseline file does not exist", async () => {
+    const result = await runCli(["diff", "no-such-file.puml", "x.puml"]);
+    expect(result.exitCode).toBe(2);
+  });
+
+  it("--with-patch includes RFC 6902 patch in the envelope", async () => {
+    await fs.writeFile(path.join(workDir, "base.puml"), SIMPLE_PUML);
+    await fs.writeFile(path.join(workDir, "curr.puml"), SIMPLE_PUML_PLUS);
+    const result = await runCli([
+      "diff",
+      "base.puml",
+      "curr.puml",
+      "--json",
+      "--with-patch",
+    ]);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const data = envelope.data as Record<string, unknown>;
+    expect(data).toHaveProperty("patch");
+    expect(Array.isArray(data.patch)).toBe(true);
+  });
+});
+
 describe("aact check --fix demo loop", () => {
   it("init → check reports violation → fix applies → re-check is clean", async () => {
     await runCli(["init"]);

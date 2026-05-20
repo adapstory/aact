@@ -31,6 +31,7 @@ export interface RelationSpec {
   readonly tags?: readonly string[];
   readonly order?: number;
   readonly link?: string;
+  readonly properties?: Readonly<Record<string, string>>;
   /** Lets rule tests pin precise-anchor behavior without going through a
    * full parser pass. Loaders populate this in production; here we inject
    * a fixture location and assert the rule echoed it back on the
@@ -84,6 +85,7 @@ const makeElement = (spec: ElementSpec): Element => ({
     technology: r.technology,
     tags: r.tags ?? [],
     order: r.order,
+    properties: r.properties,
     link: r.link,
     sourceLocation: r.sourceLocation ?? synthRange(),
   })),

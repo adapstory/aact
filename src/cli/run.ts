@@ -66,7 +66,7 @@ export interface ConfigCommandOpts<
   ) => Promise<ExecuteResult<TData>>;
 }
 
-const readJsonFlag = (args: unknown): boolean =>
+export const readJsonFlag = (args: unknown): boolean =>
   typeof args === "object" &&
   args !== null &&
   (args as Record<string, unknown>).json === true;
@@ -100,7 +100,7 @@ const pickReporter = <TData>(
   }
 };
 
-const exitWith = (code: ExitCode): never => {
+export const exitWith = (code: ExitCode): never => {
   // eslint-disable-next-line n/no-process-exit
   process.exit(code);
 };

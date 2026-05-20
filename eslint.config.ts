@@ -104,6 +104,7 @@ export default tseslint.config(
         },
         { type: "rule", pattern: "src/rules" },
         { type: "analyze", pattern: "src/analyze.ts", mode: "file" },
+        { type: "diff", pattern: "src/diff" },
         { type: "cli", pattern: "src/cli" },
         { type: "config", pattern: "src/config.ts", mode: "file" },
         { type: "index", pattern: "src/index.ts", mode: "file" },
@@ -144,6 +145,13 @@ export default tseslint.config(
               from: { type: "analyze" },
               allow: { to: { type: ["model", "rule"] } },
             },
+            // diff — pure structural diff engine. Reads Model
+            // (and saved Model JSON via format registry); does
+            // not depend on rules / analyze / cli.
+            {
+              from: { type: "diff" },
+              allow: { to: { type: ["model", "format", "format-core"] } },
+            },
             // cli — может всё кроме index'а
             {
               from: { type: "cli" },
@@ -156,6 +164,7 @@ export default tseslint.config(
                     "format-shared",
                     "rule",
                     "analyze",
+                    "diff",
                     "config",
                   ],
                 },
@@ -177,6 +186,7 @@ export default tseslint.config(
                     "format-core",
                     "rule",
                     "analyze",
+                    "diff",
                     "config",
                     "cli",
                   ],

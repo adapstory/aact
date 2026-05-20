@@ -8,6 +8,51 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`aact diff <baseline> [<current>]` command.** Structural diff
+  between two C4 architecture models — designed for PR review:
+  agents and humans see what changed _architecturally_, not what
+  bytes shifted in the source file. Three input forms for each
+  side: file path, git ref (`main:architecture.puml`), or `-`
+  (stdin). `current` defaults to `aact.config.ts → source`. The
+  `.aact.json` format accepts both the raw `Model` shape and the
+  full `CliEnvelope<ModelData>` shape — `aact model --json >
+snap.json && aact diff snap.json` works out of the box.
+
+  Output across modes:
+  - **Text**: glyph-coded change list (`+` add, `-` remove,
+    `~` modify), grouped by entity. Cosmetic-only changes collapse
+    into a single `+N cosmetic changes` summary so PR review
+    output stays readable.
+  - **`--json`**: `CliEnvelope<DiffData>` with `summary.headline`
+    (one-line reasoning seed), `summary.bySeverity` (structural /
+    semantic / cosmetic split), and `changes[]` sorted by
+    severity → action precedence → address. Domain-grouped per
+    entity (`element` / `boundary` / `relation` / `workspace`),
+    with per-field deltas inside each change.
+  - **`--with-patch`**: opt-in RFC 6902 patch array against the
+    normalized Model JSON. For tooling that wants to replay the
+    delta; off by default to keep the agent-facing payload lean.
+  - **No `--sarif`** — diff is a review artifact, not a static
+    analysis finding. SARIF would distort the `result.baselineState`
+    semantics; agents and CI use `--json` instead.
+
+  Rename detection: same-kind elements/boundaries with similarity
+  ≥0.7 (label edit-distance + relations Jaccard) collapse into
+  `action: "renamed"` with a `confidence` score so agents can
+  gate on heuristic strength. Relation diff is rename-aware —
+  edges touching renamed elements survive as matched
+  (no spurious add+remove pair). Tunable via `--rename-threshold
+<0..1>` and `--no-rename-detection`.
+
+  Relation pair-collapse: same `(from, to)` removed+added with
+  different `technology` surfaces as a single `modified` change
+  with `field: "technology"` rather than noisy add+remove
+  bookkeeping.
+
+  Exit codes: `0` no diff (or cosmetic-only without `--strict`),
+  `1` structural / semantic diff (or cosmetic with `--strict`),
+  `2` tool error (baseline missing, parse failure).
+
 - **`aact rule explain <name>` command + `rationale` / `examples` /
   `adrPath` on `RuleDefinition`.** `aact rule list` shows the
   one-line description of each rule; `explain` shows the full

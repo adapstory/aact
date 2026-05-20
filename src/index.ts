@@ -6,6 +6,23 @@
 
 export * from "./analyze";
 export * from "./config";
+export {
+  type BoundaryChange,
+  type Change,
+  type ChangeAction,
+  type ChangeSeverity,
+  computeDiff,
+  type DiffData,
+  type DiffOptions,
+  type DiffSide,
+  type DiffSummary,
+  type ElementChange,
+  type FieldChange,
+  type FieldKind,
+  type JsonPatchOp,
+  type RelationChange,
+  type WorkspaceChange,
+} from "./diff";
 export { knownFormatNames, loadFormat } from "./formats/registry";
 export {
   canFix,
