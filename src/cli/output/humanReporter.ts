@@ -18,18 +18,30 @@ export class HumanReporter<TData = unknown> implements Reporter<TData> {
   constructor(private readonly renderer: Renderer<TData>) {}
 
   emit(result: CommandResult<TData>): void {
+    // Tool-level failures (exit 2) carry a null data payload that the
+    // command-specific renderer wouldn't know how to handle, and the
+    // shared error line follows the Unix convention of going to
+    // stderr — so a piped consumer (`aact check | jq`) still sees
+    // failures even when the success path was supposed to drive
+    // stdout.
+    //
+    // renderErrorEnvelope consumes diagnostics[0] as the body of the
+    // `✗ <command>: <message>` line. Re-emitting that same diagnostic
+    // via renderDiagnostics produces the duplicate-message pair we
+    // used to ship — drop the first entry on error envelopes so only
+    // additional context lines remain. JSON / SARIF outputs are
+    // untouched: the full diagnostics array is the public contract.
+    if (result.envelope.exitCode === 2) {
+      renderErrorEnvelope(result.envelope, process.stderr);
+      const tail = result.envelope.diagnostics.slice(1);
+      if (tail.length > 0) renderDiagnostics(tail, process.stderr);
+      return;
+    }
+
     const sink: NodeJS.WritableStream = result.stdoutClaimed
       ? process.stderr
       : process.stdout;
-
-    // Tool-level failures (exit 2) carry a null data payload that the
-    // command-specific renderer wouldn't know how to handle. Use the
-    // shared error renderer instead.
-    if (result.envelope.exitCode === 2) {
-      renderErrorEnvelope(result.envelope, sink);
-    } else {
-      this.renderer(result.envelope, sink);
-    }
+    this.renderer(result.envelope, sink);
 
     if (result.envelope.diagnostics.length > 0) {
       renderDiagnostics(result.envelope.diagnostics, process.stderr);
