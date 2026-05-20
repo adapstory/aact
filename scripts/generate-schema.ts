@@ -53,5 +53,4 @@ const json = JSON.stringify(schema, undefined, 2) + "\n";
 writeFileSync(outputPath, json, "utf8");
 
 // One-shot build script: direct console output is the point.
- 
 console.log(`Wrote ${path.relative(repoRoot, outputPath)}`);
