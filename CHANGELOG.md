@@ -6,6 +6,96 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.18 — 2026-05-21
+
+Parser corpus consolidation. PUML `SetPropertyHeader` / `AddProperty`
+rows are now preserved on `Model.properties` with a round-trip
+through `aact generate`. Structurizr DSL `group` blocks stop
+contaminating the identifier namespace, boundary `elementNames`, and
+container-to-boundary classification — three separate bugs the
+parallel `aact-architect` agent surfaced on real workspaces. CI
+gains a user-smoke workflow that walks every public CLI command on
+a fresh project so user-facing regressions land in red before they
+land in beta.
+
+### Added
+
+- **PUML `AddProperty` rows preserved on Model.** New
+  `extractAttachedProperties` pre-lex pass walks the source for
+  `AddProperty(...)` lines preceding any in-scope macro
+  (Container / Person / System / Boundary / Rel / BiRel /
+  RelIndex variants) and returns a 1-based-line-keyed map. toModel
+  attaches them to `Element.properties` / `Relation.properties` /
+  `Boundary.properties` by `sourceLocation.start.line` lookup.
+  `generate` emits one `AddProperty("k", "v")` per entry ahead of
+  each element / relation macro so the round-trip survives.
+  `SetPropertyHeader` and `WithoutPropertyHeader` are render-time
+  protocol — they reset the pending buffer but do not surface on
+  `Model.properties`.
+
+  Edge cases covered:
+  - **Named-arg form** `AddProperty($col1="value")` from upstream
+    `TestPropertyMissingColumns.puml` — the `$colN=` prefix is
+    stripped before the value lands on the key/value pair.
+  - **Escape-safe round-trip** — `unwrapArg` uses `JSON.parse`,
+    `renderPropertyLines` uses `JSON.stringify`, so keys / values
+    containing `"` or `\` survive parse → generate → re-parse
+    unchanged.
+  - **Whitespace-only keys dropped** — upstream column-placeholder
+    rows (`AddProperty(" ", " ", ...)`) carry no architectural
+    information and would surface as meaningless `" "` keys.
+  - **`user-smoke` CI workflow** walks `init` → `check` → `model
+--json` → `analyze --json` → `diff` → `generate --format
+model-json` (with `$schema` round-trip) → `rule list` / `rule
+explain` (asserts the live ADR blob URL, not the dead README
+    anchor) → `check --fix` → `check --sarif` → unknown command
+    on a fresh `$RUNNER_TEMP/aact-smoke` project. Catches the
+    "looked green in vitest but the CLI surface broke" bug class.
+
+### Fixed
+
+- **Structurizr `group` no longer pollutes the parent boundary.**
+  `softwareSystem "S" { group "Backend" { api = container "API" } }`
+  used to push the string `"Backend"` onto the boundary's
+  `elementNames`, leaving a dangling reference that
+  `validateModel` flagged as `elementInBoundaryNotInModel`. The
+  resulting empty boundary read `cohesion = 0` and made every
+  group-using model look broken. `flattenGroupTargets` now walks
+  group nesting and yields concrete element / boundary nodes; the
+  boundary's `elementNames` and `boundaryNames` describe what's
+  actually in the Model.
+- **Group names no longer claim identifier-map slots.**
+  `handleElement` dispatches into `handleGroup` _before_ the
+  identifier registration block, so a group's display name never
+  competes with element identifiers. Two groups with the same
+  name (`group "Backend" { ... } group "Backend" { ... }`) stop
+  emitting a phantom `duplicate-identifier`; an element identifier
+  that collides with an outer group name (`Payments = container
+"Payments Service"` next to `group "Payments"`) loads cleanly.
+- **Body-form `group "Layer"` is a property, not a boundary.**
+  `api = container "API" { group "Application Layer" }` is the
+  reference parser's body-form syntax: a bare `group` with no
+  `{ }` block sets `properties.group` on the enclosing element.
+  Previously the empty-members group was treated as a structural
+  child and promoted the container to a Boundary. New
+  `isGroupPropertyStatement` predicate excludes it from the
+  structural-child set; the property surfaces, the boundary
+  doesn't.
+- **`pnpm pack` outside a git checkout no longer prints a husky
+  warning.** The previous `husky || true` only swallowed husky's
+  non-zero exit; its stderr "fatal: not a git repository" still
+  leaked into sandboxes and publint smoke checks. Gated on
+  `test -d .git` so dev checkouts still install hooks and
+  consumer extractions stay silent.
+
+### Tooling
+
+- **CI `pnpm test`** now runs all 1300+ unit tests including the
+  new `extractAttachedProperties` and `groupProperty` suites.
+- **CI verifies `pnpm schema:check`, `pnpm knip`, `pnpm lint`,
+  `pnpm typecheck`** all clean — no warnings, no errors on the v3
+  branch.
+
 ## v3.0.0-beta.17 — 2026-05-20
 
 UX polish and parser corpus coverage release. Every text-mode anchor
