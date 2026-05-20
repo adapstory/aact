@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
-import type { Boundary, Element, Model, ModelIssue } from "../../model";
-import { buildModel, validateModel } from "../../model";
+import type { Boundary, Element, ModelIssue } from "../../model";
+import { buildModel } from "../../model";
 import type { LoadResult } from "../types";
 
 /**
@@ -19,6 +19,9 @@ import type { LoadResult } from "../types";
  *     emits. Lets users redirect that command's output as a
  *     diff baseline / `aact check` source without re-shaping:
  *     `aact model --json > snap.aact.json && aact check`.
+ *     Envelope's `data.issues` is preserved verbatim as `preIssues`
+ *     so loader-specific diagnostics from the original PUML/DSL
+ *     parse survive the JSON snapshot round-trip.
  *
  *  3. **Raw `Model`** — `{ elements, boundaries, rootBoundaryNames,
  *     workspace? }`. Hand-authored compatibility shape. The most
@@ -28,6 +31,14 @@ import type { LoadResult } from "../types";
  * canonical first (`schemaVersion` + `model`), then envelope
  * (`data.model`), then raw (`elements` + `boundaries`). First
  * matching shape wins.
+ *
+ * **Validation pipeline.** `buildModel` already runs `validateModel`
+ * internally (`src/model/build.ts:76`) — calling it again here would
+ * double-emit dangling-relation / boundary-cycle issues. So we hand
+ * `data.issues` (envelope only) through `preIssues` and let
+ * `buildModel` do its thing; the result is exactly the same issue
+ * set you would have gotten if the original PUML/DSL load had
+ * happened in this process.
  */
 
 const SUPPORTED_SCHEMA_VERSIONS = new Set([1]);
@@ -39,13 +50,21 @@ interface RawModelInput {
   workspace?: unknown;
 }
 
+interface ExtractedShape {
+  readonly raw: RawModelInput;
+  /** Loader-side issues carried over from the source format. Only
+   *  envelope shapes set this — canonical & raw have nowhere to
+   *  put pre-issues. */
+  readonly preIssues: readonly ModelIssue[];
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 const hasRawModelKeys = (v: Record<string, unknown>): boolean =>
   "elements" in v && "boundaries" in v && "rootBoundaryNames" in v;
 
-const extractRawModel = (parsed: unknown, source: string): RawModelInput => {
+const extractShape = (parsed: unknown, source: string): ExtractedShape => {
   if (!isObject(parsed)) {
     throw new SyntaxError(
       `${source}: top-level JSON must be an object, got ${typeof parsed}`,
@@ -70,7 +89,10 @@ const extractRawModel = (parsed: unknown, source: string): RawModelInput => {
           `"elements" / "boundaries" / "rootBoundaryNames"`,
       );
     }
-    return parsed.model as unknown as RawModelInput;
+    return {
+      raw: parsed.model as unknown as RawModelInput,
+      preIssues: [],
+    };
   }
 
   // Shape 2 — CliEnvelope<ModelData> from `aact model --json`
@@ -86,12 +108,22 @@ const extractRawModel = (parsed: unknown, source: string): RawModelInput => {
         `${source}: envelope.data.model is missing structural keys`,
       );
     }
-    return inner as unknown as RawModelInput;
+    const rawIssues = (parsed.data).issues;
+    const preIssues: readonly ModelIssue[] = Array.isArray(rawIssues)
+      ? (rawIssues as ModelIssue[])
+      : [];
+    return {
+      raw: inner as unknown as RawModelInput,
+      preIssues,
+    };
   }
 
   // Shape 3 — raw Model (hand-authored compat)
   if (hasRawModelKeys(parsed)) {
-    return parsed as unknown as RawModelInput;
+    return {
+      raw: parsed as unknown as RawModelInput,
+      preIssues: [],
+    };
   }
 
   throw new SyntaxError(
@@ -115,12 +147,12 @@ export const load = async (path: string): Promise<LoadResult> => {
     );
   }
 
-  const raw = extractRawModel(parsed, path);
+  const { raw, preIssues } = extractShape(parsed, path);
 
   // Model in JSON form has `elements` / `boundaries` as objects keyed
   // by name (matches the `Readonly<Record<string, …>>` runtime shape).
   // `buildModel` expects arrays — flatten before calling. Sorting by
-  // name happens inside buildModel itself, so we don't need to.
+  // name happens inside buildModel itself.
   const elementsArr: readonly Element[] = isObject(raw.elements)
     ? (Object.values(raw.elements) as Element[])
     : [];
@@ -131,21 +163,14 @@ export const load = async (path: string): Promise<LoadResult> => {
     ? (raw.rootBoundaryNames as readonly string[])
     : [];
 
-  const built = buildModel({
+  // buildModel runs validateModel internally — calling it again would
+  // duplicate dangling-relation / boundary-cycle issues. preIssues
+  // carries the envelope's data.issues through unchanged.
+  return buildModel({
     elements: elementsArr,
     boundaries: boundariesArr,
     rootBoundaryNames: rootNames,
     ...(raw.workspace ? { workspace: raw.workspace } : {}),
+    preIssues,
   });
-  const validationIssues: readonly ModelIssue[] = validateModel(built.model);
-  const allIssues: readonly ModelIssue[] = [
-    ...built.issues,
-    ...validationIssues,
-  ];
-
-  const result: { model: Model; issues: readonly ModelIssue[] } = {
-    model: built.model,
-    issues: allIssues,
-  };
-  return result;
 };

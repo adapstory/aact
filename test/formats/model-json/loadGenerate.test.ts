@@ -161,6 +161,95 @@ describe("modelJsonFormat.load — raw Model compat shape", () => {
   });
 });
 
+describe("modelJsonFormat.load — issue preservation", () => {
+  it("preserves envelope.data.issues so loader-side diagnostics survive the snapshot round-trip", async () => {
+    // Original PUML had a dangling relation → `aact model --json` captured
+    // the issue in envelope.data.issues. Loading the snapshot must keep it.
+    const envelope = {
+      schemaVersion: 1,
+      command: "model",
+      ok: true,
+      exitCode: 0,
+      data: {
+        model: {
+          elements: {
+            svc: {
+              name: "svc",
+              label: "svc",
+              kind: "Container",
+              external: false,
+              description: "",
+              tags: [],
+              relations: [],
+            },
+          },
+          boundaries: {},
+          rootBoundaryNames: [],
+        },
+        issues: [
+          {
+            kind: "unknown-kind",
+            element: "weird",
+            raw: "Mystery",
+          },
+        ],
+      },
+      diagnostics: [],
+      meta: {
+        aactVersion: "3.0.0-test",
+        durationMs: 1,
+        configPath: null,
+        source: null,
+      },
+    };
+    const file = writeTmp(JSON.stringify(envelope));
+    try {
+      const result = await modelJsonFormat.load!(file);
+      expect(
+        result.issues.find(
+          (i) => i.kind === "unknown-kind" && i.element === "weird",
+        ),
+      ).toBeDefined();
+    } finally {
+      cleanupParent(file);
+    }
+  });
+
+  it("does NOT duplicate dangling-relation issues from double-validation", async () => {
+    // buildModel runs validateModel internally — calling it again from
+    // the loader would surface the same dangling-relation twice. This
+    // pins the no-double-call contract.
+    const payload = {
+      schemaVersion: 1,
+      model: {
+        elements: {
+          svc: {
+            name: "svc",
+            label: "svc",
+            kind: "Container",
+            external: false,
+            description: "",
+            tags: [],
+            relations: [{ to: "ghost", tags: [] }],
+          },
+        },
+        boundaries: {},
+        rootBoundaryNames: [],
+      },
+    };
+    const file = writeTmp(JSON.stringify(payload));
+    try {
+      const result = await modelJsonFormat.load!(file);
+      const danglingCount = result.issues.filter(
+        (i) => i.kind === "dangling-relation",
+      ).length;
+      expect(danglingCount).toBe(1);
+    } finally {
+      cleanupParent(file);
+    }
+  });
+});
+
 describe("modelJsonFormat.load — error paths", () => {
   it("throws SyntaxError for malformed JSON", async () => {
     const file = writeTmp("not json {");
