@@ -1,5 +1,5 @@
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { Edge, Node } from "@xyflow/svelte";
+import { MarkerType, type Edge, type Node } from "@xyflow/svelte";
 
 import type { Boundary, Element, Model } from "./types.ts";
 
@@ -174,6 +174,17 @@ export const layoutScope = async (
       label: r.label,
       type: "default",
       animated: false,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 18,
+        height: 18,
+        color: "#64748b",
+      },
+      style: "stroke: #64748b; stroke-width: 1.5;",
+      labelStyle: "fill: #f8fafc; font-weight: 600; font-size: 11px;",
+      labelBgStyle: "fill: #0f172a; stroke: #334155; stroke-width: 1; rx: 4;",
+      labelBgPadding: [6, 4],
+      labelBgBorderRadius: 4,
     };
   });
 
@@ -524,6 +535,17 @@ const collectVisibleEdges = (
             : undefined,
         type: "default",
         animated: false,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 18,
+          height: 18,
+          color: "#64748b",
+        },
+        style: "stroke: #64748b; stroke-width: 1.5;",
+        labelStyle: "fill: #f8fafc; font-weight: 600; font-size: 11px;",
+        labelBgStyle: "fill: #0f172a; stroke: #334155; stroke-width: 1; rx: 4;",
+        labelBgPadding: [6, 4],
+        labelBgBorderRadius: 4,
       });
     }
   }

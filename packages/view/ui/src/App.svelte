@@ -7,6 +7,7 @@
     Background,
     Controls,
     MiniMap,
+    MarkerType,
     type Node,
     type Edge,
   } from "@xyflow/svelte";
@@ -209,17 +210,27 @@
 
   // Dim edges that aren't incident to the hovered node so the user
   // can trace a single dependency through a crowded canvas. Empty
-  // hover → identity (no dimming).
+  // hover → identity (no dimming). Re-write the markerEnd color
+  // explicitly because SVG markers don't inherit `stroke` from the
+  // referencing path.
   const decoratedEdges = $derived<Edge[]>(
     hoveredNodeId
       ? edges.map((e) => {
-          const incident = e.source === hoveredNodeId || e.target === hoveredNodeId;
+          const incident =
+            e.source === hoveredNodeId || e.target === hoveredNodeId;
+          const color = incident ? "#38bdf8" : "#475569";
           return {
             ...e,
             animated: incident,
             style: incident
-              ? "stroke: #38bdf8; stroke-width: 2;"
-              : "opacity: 0.18;",
+              ? "stroke: #38bdf8; stroke-width: 2.2; opacity: 1;"
+              : "stroke: #475569; stroke-width: 1; opacity: 0.2;",
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 18,
+              height: 18,
+              color,
+            },
           };
         })
       : edges,
@@ -813,15 +824,18 @@
     background-color: #0b1220;
   }
   :global(.svelte-flow__edge-path) {
-    stroke: #475569;
+    stroke: #64748b;
     stroke-width: 1.5;
   }
   :global(.svelte-flow__edge-text) {
-    fill: #cbd5e1;
+    fill: #f8fafc;
     font-size: 11px;
+    font-weight: 600;
   }
   :global(.svelte-flow__edge-textbg) {
-    fill: #0b1220;
+    fill: #0f172a;
+    stroke: #334155;
+    stroke-width: 1;
   }
   :global(.svelte-flow__controls) {
     background: #0f172a;
