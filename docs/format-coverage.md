@@ -27,32 +27,32 @@ chevrotain — общая инфраструктура.
 
 ## Boundary
 
-| Field            | PUML load                                                                       | PUML generate | Structurizr load                                                        |
-| ---------------- | ------------------------------------------------------------------------------- | ------------- | ----------------------------------------------------------------------- |
-| `name`           | ✓ alias                                                                         | ✓             | ✓ dslId                                                                 |
-| `label`          | ✓                                                                               | ✓             | ✓ `name` field                                                          |
-| `kind`           | ✓ `Boundary` / `System_Boundary` / `Container_Boundary` / `Enterprise_Boundary` | ✓ reverse map | hardcoded `"System"` (internal system → Boundary)                       |
-| `description`    | ✓ positional / `$descr=`                                                        | ⚠ gap         | ✓ `description`                                                         |
-| `tags`           | ✓                                                                               | ✓             | ✓ CSV                                                                   |
-| `elementNames`   | ✓ via children scan                                                             | ✓             | ✓ s.containers                                                          |
-| `boundaryNames`  | ✓ nested boundaries                                                             | ✓             | always `[]` — Structurizr не nests softwareSystem inside softwareSystem |
-| `link`           | ✓                                                                               | ✓ `$link=`    | ✓ `url`                                                                 |
-| `properties`     | ⚠ `gap`                                                                         | ⚠ gap         | ✓ user + group + perspectives                                           |
-| `sourceLocation` | ✓ spans `{` … `}` block                                                         | —             | ✓ spans the body block                                                  |
+| Field            | PUML load                                                                       | PUML generate                            | Structurizr load                                                        |
+| ---------------- | ------------------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
+| `name`           | ✓ alias                                                                         | ✓                                        | ✓ dslId                                                                 |
+| `label`          | ✓                                                                               | ✓                                        | ✓ `name` field                                                          |
+| `kind`           | ✓ `Boundary` / `System_Boundary` / `Container_Boundary` / `Enterprise_Boundary` | ✓ reverse map                            | hardcoded `"System"` (internal system → Boundary)                       |
+| `description`    | ✓ positional / `$descr=`                                                        | ⚠ gap                                    | ✓ `description`                                                         |
+| `tags`           | ✓                                                                               | ✓                                        | ✓ CSV                                                                   |
+| `elementNames`   | ✓ via children scan                                                             | ✓                                        | ✓ s.containers                                                          |
+| `boundaryNames`  | ✓ nested boundaries                                                             | ✓                                        | always `[]` — Structurizr не nests softwareSystem inside softwareSystem |
+| `link`           | ✓                                                                               | ✓ `$link=`                               | ✓ `url`                                                                 |
+| `properties`     | ✓ `AddProperty` rows attached by preParse line scan                             | ✓ emits `AddProperty` lines before macro | ✓ user + group + perspectives                                           |
+| `sourceLocation` | ✓ spans `{` … `}` block                                                         | —                                        | ✓ spans the body block                                                  |
 
 ## Relation
 
-| Field            | PUML load                                              | PUML generate                 | Structurizr load                                                           |
-| ---------------- | ------------------------------------------------------ | ----------------------------- | -------------------------------------------------------------------------- |
-| `to`             | ✓                                                      | ✓                             | ✓ targetName via idToName                                                  |
-| `description`    | ✓ `label`                                              | ✓ positional 3                | ✓ `description`                                                            |
-| `technology`     | ✓ `techn`                                              | ✓ positional 4                | ✓ `technology`                                                             |
-| `tags`           | ✓ `$tags=` или positional 7                            | ✓ `$tags=`                    | ✓ CSV + `async` для async interactionStyle                                 |
-| `sprite`         | ✓ `$sprite=` или positional 6                          | ✓ `$sprite=`                  | —                                                                          |
-| `order`          | ✓ `RelIndex*` first positional или `$index=` named arg | ✓ — (default order preserved) | ⚠ `gap` — Structurizr step order живёт в `views[].dynamic`, не на relation |
-| `link`           | ✓ `$link=` или positional 8                            | ✓ `$link=`                    | ✓ `url`                                                                    |
-| `properties`     | ⚠ `gap`                                                | ⚠ gap                         | ✓ user + perspectives prefix                                               |
-| `sourceLocation` | ✓ points at the `Rel(…)` call                          | —                             | ✓ points at the relationship statement                                     |
+| Field            | PUML load                                              | PUML generate                            | Structurizr load                                                           |
+| ---------------- | ------------------------------------------------------ | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `to`             | ✓                                                      | ✓                                        | ✓ targetName via idToName                                                  |
+| `description`    | ✓ `label`                                              | ✓ positional 3                           | ✓ `description`                                                            |
+| `technology`     | ✓ `techn`                                              | ✓ positional 4                           | ✓ `technology`                                                             |
+| `tags`           | ✓ `$tags=` или positional 7                            | ✓ `$tags=`                               | ✓ CSV + `async` для async interactionStyle                                 |
+| `sprite`         | ✓ `$sprite=` или positional 6                          | ✓ `$sprite=`                             | —                                                                          |
+| `order`          | ✓ `RelIndex*` first positional или `$index=` named arg | ✓ — (default order preserved)            | ⚠ `gap` — Structurizr step order живёт в `views[].dynamic`, не на relation |
+| `link`           | ✓ `$link=` или positional 8                            | ✓ `$link=`                               | ✓ `url`                                                                    |
+| `properties`     | ✓ `AddProperty` rows attached by preParse line scan    | ✓ emits `AddProperty` lines before macro | ✓ user + perspectives prefix                                               |
+| `sourceLocation` | ✓ points at the `Rel(…)` call                          | —                                        | ✓ points at the relationship statement                                     |
 
 ## Workspace metadata (Structurizr-only)
 
