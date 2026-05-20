@@ -148,14 +148,28 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::aact check --sarif — GitHub Code Scanning shape"
-          # Re-seed a violation so SARIF has results to render.
-          node "$AACT" init --force > /dev/null 2>&1 || true
+          # Re-seed a violation directly. `aact init` has no --force
+          # so we can't ask it to re-run on top of the just-fixed file;
+          # overwrite the source with a tiny known-violating PUML.
+          cat > architecture.puml <<'PUML'
+          @startuml
+          !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+          Container(orders, "Orders")
+          ContainerDb(orders_db, "Orders DB", "PostgreSQL")
+          Rel(orders, orders_db, "reads/writes")
+          @enduml
+          PUML
           set +e
           node "$AACT" check --sarif > check.sarif
           set -e
+          # `aact check` exits 1 on the seeded crud violation; SARIF is
+          # still produced on stdout. Assert structural shape and that
+          # at least one result landed.
           jq -e '.version == "2.1.0"' check.sarif > /dev/null
           jq -e '."$schema" | contains("sarif")' check.sarif > /dev/null
           jq -e '.runs[0].tool.driver.name == "aact"' check.sarif > /dev/null
+          jq -e '.runs[0].results | length > 0' check.sarif > /dev/null \
+            || { echo "::error::SARIF produced no results — re-seed did not stick"; head check.sarif; exit 1; }
           echo "::endgroup::"
 
           echo "::group::aact bogus — unknown command path"

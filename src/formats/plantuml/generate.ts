@@ -36,7 +36,15 @@ const renderPropertyLines = (
   properties: Element["properties"] | undefined,
 ): readonly string[] =>
   properties
-    ? Object.entries(properties).map(([k, v]) => `AddProperty("${k}", "${v}")`)
+    ? // `JSON.stringify` wraps in double quotes AND escapes any
+      // embedded `"` / `\` / control characters per JSON rules. The
+      // preParse extractor uses the symmetric `JSON.parse`, so a
+      // property whose value contains a quote round-trips through
+      // generate → parse unchanged. Bare template literals
+      // (`"${v}"`) would silently break on the first quote.
+      Object.entries(properties).map(
+        ([k, v]) => `AddProperty(${JSON.stringify(k)}, ${JSON.stringify(v)})`,
+      )
     : [];
 
 const renderElement = (element: Element): string => {

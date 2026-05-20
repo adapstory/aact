@@ -596,8 +596,6 @@ const IN_SCOPE_MACRO_RE = new RegExp(
 const ADD_PROPERTY_RE = /^[ \t]*AddProperty\s*\((.*?)\)\s*$/;
 const SET_PROPERTY_HEADER_RE = /^[ \t]*SetPropertyHeader\s*\((.*?)\)\s*$/;
 const WITHOUT_PROPERTY_HEADER_RE = /^[ \t]*WithoutPropertyHeader\s*\(\s*\)/;
-const STRING_LITERAL_RE = /^"((?:[^"\\]|\\.)*)"$/;
-
 const splitTopLevelArgs = (raw: string): string[] => {
   const out: string[] = [];
   let depth = 0;
@@ -635,9 +633,37 @@ const splitTopLevelArgs = (raw: string): string[] => {
   return out;
 };
 
+// C4-PlantUML stdlib `AddProperty` accepts either positional values or
+// named-arg form `$colN="value"`. The named-arg form is heavily used
+// by the upstream `TestPropertyMissingColumns.puml` fixture — without
+// stripping the `$colN=` prefix the named-arg literal would land on
+// `Model.properties` as a synthetic key like `$col1="col1"`.
+//
+// Input is one `AddProperty(...)` arg string (already top-level split)
+// — bounded by a single source line, so the trailing `(.*)$` cannot
+// trigger pathological backtracking.
+// eslint-disable-next-line sonarjs/slow-regex
+const NAMED_ARG_RE = /^\$[A-Za-z_]\w*\s*=\s*(.*)$/;
+
 const unwrapArg = (raw: string): string => {
-  const m = STRING_LITERAL_RE.exec(raw);
-  return m ? m[1].replaceAll(/\\(.)/g, "$1") : raw;
+  const named = NAMED_ARG_RE.exec(raw);
+  const target = (named ? named[1] : raw).trim();
+  // `JSON.parse` handles the full set of stdlib escape sequences
+  // (`\"`, `\\`, `\n`, …) symmetrically with `JSON.stringify` in the
+  // generator, so the round-trip through `aact generate` preserves
+  // backslashes and quotes verbatim. Malformed literals (a bare
+  // identifier, an unterminated string) fall through as verbatim
+  // text — the parser shouldn't crash on a property whose value
+  // shape we don't recognise.
+  if (target.startsWith('"') && target.endsWith('"') && target.length >= 2) {
+    try {
+      const parsed = JSON.parse(target) as unknown;
+      if (typeof parsed === "string") return parsed;
+    } catch {
+      // fall through
+    }
+  }
+  return target;
 };
 
 interface PendingProps {

@@ -257,4 +257,46 @@ describe("PUML preParse — extractAttachedProperties", () => {
     const map = extractAttachedProperties(src);
     expect(map.get(5)).toEqual({ Value1: "", Value2: "" });
   });
+
+  it('unwraps named-arg form `$colN="value"` used by upstream fixtures', () => {
+    // Mirrors `.parser-refs/C4-PlantUML/percy/TestPropertyMissingColumns.puml`.
+    // Without the named-arg strip, the row key would land as the
+    // literal text `$col1="col1"` — a synthetic key the user never
+    // wrote.
+    const src = [
+      "@startuml", //                                       1
+      'SetPropertyHeader("", $col2Name="2")', //            2
+      'AddProperty($col1="col1")', //                       3
+      'AddProperty("", $col2="col2")', //                   4
+      'Container(c, "Container")', //                       5 ← target
+      "@enduml", //                                         6
+    ].join("\n");
+    const map = extractAttachedProperties(src);
+    const props = map.get(5);
+    expect(props).toBeDefined();
+    // Row 1: `$col1="col1"` → key="col1", value=""
+    // Row 2: `"", $col2="col2"` → empty key, skipped by buildPropertiesObject
+    //        (Model.properties has no use for a row whose key is "").
+    expect(props).toEqual({ col1: "" });
+  });
+
+  it("unescapes JSON-style sequences in property values", () => {
+    // Backslash-quote sequences must survive intact so the value the
+    // user typed lands on Model.properties verbatim. The fixture is
+    // assembled via `String.raw` so backslashes in the embedded
+    // PUML literals appear once, not double-escaped through the JS
+    // string layer.
+    const src = [
+      "@startuml", //                                                          1
+      String.raw`AddProperty("path", "C:\\Users\\me")`, //                     2
+      String.raw`AddProperty("quote", "she said \"hi\"")`, //                  3
+      `Container(api, "API")`, //                                              4 ← target
+      "@enduml", //                                                            5
+    ].join("\n");
+    const map = extractAttachedProperties(src);
+    expect(map.get(4)).toEqual({
+      path: String.raw`C:\Users\me`,
+      quote: `she said "hi"`,
+    });
+  });
 });
