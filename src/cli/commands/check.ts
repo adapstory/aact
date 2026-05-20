@@ -21,6 +21,7 @@ import type {
 import { issueToDiagnostic, loadModel } from "../loadModel";
 import type { Diagnostic, ExitCode, Renderer } from "../output";
 import {
+  formatDisplayPath,
   formatLocationDisplay,
   linkSourceLocation,
 } from "../output/hyperlinks";
@@ -347,7 +348,11 @@ const applyFixes = async (
     const skippedLoc = editLocation(c.skipped);
     return {
       kind: "fix.editConflict",
-      message: `Skipped overlapping fix edit: kept ${c.conflictsWith.kind} at ${formatLocation(keptLoc)}, dropped ${c.skipped.kind} at ${formatLocation(skippedLoc)}. Re-run \`aact check --fix\` after reviewing the partial result.`,
+      // User-facing message uses display paths (relative to cwd
+      // when possible). The `context` record keeps absolute
+      // `formatLocation` strings so JSON / SARIF consumers can
+      // round-trip back to the file system without guessing cwd.
+      message: `Skipped overlapping fix edit: kept ${c.conflictsWith.kind} at ${formatLocationDisplay(keptLoc)}, dropped ${c.skipped.kind} at ${formatLocationDisplay(skippedLoc)}. Re-run \`aact check --fix\` after reviewing the partial result.`,
       severity: "warning",
       context: {
         kept: c.conflictsWith.kind,
@@ -602,13 +607,15 @@ const renderEdit = (edit: SourceEdit, sink: NodeJS.WritableStream): void => {
     case "remove": {
       sink.write(
         colors.dim(
-          `    - remove ${formatLocation(edit.range)} (${editByteSpan(edit.range)} bytes)\n`,
+          `    - remove ${formatLocationDisplay(edit.range)} (${editByteSpan(edit.range)} bytes)\n`,
         ),
       );
       break;
     }
     case "replace": {
-      sink.write(colors.dim(`    ~ replace ${formatLocation(edit.range)}\n`));
+      sink.write(
+        colors.dim(`    ~ replace ${formatLocationDisplay(edit.range)}\n`),
+      );
       sink.write(
         colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
       );
@@ -616,7 +623,9 @@ const renderEdit = (edit: SourceEdit, sink: NodeJS.WritableStream): void => {
     }
     case "insert-after": {
       sink.write(
-        colors.dim(`    + insert after ${formatLocation(edit.anchor)}\n`),
+        colors.dim(
+          `    + insert after ${formatLocationDisplay(edit.anchor)}\n`,
+        ),
       );
       sink.write(
         colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
@@ -625,7 +634,9 @@ const renderEdit = (edit: SourceEdit, sink: NodeJS.WritableStream): void => {
     }
     case "insert-before": {
       sink.write(
-        colors.dim(`    + insert before ${formatLocation(edit.anchor)}\n`),
+        colors.dim(
+          `    + insert before ${formatLocationDisplay(edit.anchor)}\n`,
+        ),
       );
       sink.write(
         colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
@@ -692,7 +703,7 @@ export const renderCheckText = (
         : "";
     sink.write(
       colors.green(
-        `✔ Applied ${data.fixesApplied.count} fix(es), wrote ${data.fixesApplied.writePath}${tail}\n`,
+        `✔ Applied ${data.fixesApplied.count} fix(es), wrote ${formatDisplayPath(data.fixesApplied.writePath)}${tail}\n`,
       ),
     );
   }
