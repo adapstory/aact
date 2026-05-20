@@ -218,17 +218,17 @@
       ? edges.map((e) => {
           const incident =
             e.source === hoveredNodeId || e.target === hoveredNodeId;
-          const color = incident ? "#38bdf8" : "#475569";
+          const color = incident ? "#38bdf8" : "#64748b";
           return {
             ...e,
             animated: incident,
             style: incident
-              ? "stroke: #38bdf8; stroke-width: 2.2; opacity: 1;"
-              : "stroke: #475569; stroke-width: 1; opacity: 0.2;",
+              ? "stroke: #38bdf8; stroke-width: 2.4; opacity: 1;"
+              : "stroke: #64748b; stroke-width: 1.2; opacity: 0.35;",
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              width: 18,
-              height: 18,
+              width: 20,
+              height: 20,
               color,
             },
           };
@@ -819,23 +819,40 @@
   }
   :global(.svelte-flow) {
     background: #0b1220;
+    /* xyflow exposes edge styling via CSS variables. Setting them
+       here overrides the pale-grey defaults baked into
+       @xyflow/svelte/dist/style.css regardless of which template
+       (default / smoothstep / straight) renders the edge. */
+    --xy-edge-stroke-default: #94a3b8;
+    --xy-edge-stroke-selected-default: #38bdf8;
+    --xy-edge-stroke-width-default: 1.8;
+    --xy-connectionline-stroke-default: #38bdf8;
   }
   :global(.svelte-flow__background) {
     background-color: #0b1220;
   }
   :global(.svelte-flow__edge-path) {
-    stroke: #64748b;
-    stroke-width: 1.5;
+    stroke: #94a3b8;
+    stroke-width: 1.8;
+  }
+  :global(.svelte-flow__edge.selected .svelte-flow__edge-path) {
+    stroke: #38bdf8;
+    stroke-width: 2.4;
   }
   :global(.svelte-flow__edge-text) {
     fill: #f8fafc;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
   }
   :global(.svelte-flow__edge-textbg) {
-    fill: #0f172a;
-    stroke: #334155;
+    fill: #1e293b;
+    stroke: #475569;
     stroke-width: 1;
+  }
+  :global(.svelte-flow__arrowhead polyline),
+  :global(.svelte-flow__arrowhead path) {
+    fill: #94a3b8;
+    stroke: #94a3b8;
   }
   :global(.svelte-flow__controls) {
     background: #0f172a;
