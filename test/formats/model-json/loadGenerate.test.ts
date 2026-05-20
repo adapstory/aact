@@ -161,22 +161,24 @@ describe("modelJsonFormat.load — raw Model compat shape", () => {
   });
 });
 
-describe("modelJsonFormat.load — issue preservation", () => {
-  it("preserves envelope.data.issues so loader-side diagnostics survive the snapshot round-trip", async () => {
-    // Original PUML had a dangling relation → `aact model --json` captured
-    // the issue in envelope.data.issues. Loading the snapshot must keep it.
+describe("modelJsonFormat.load — issue de-duplication", () => {
+  it("does NOT duplicate unknown-kind when both envelope.data.issues AND model contain a bad kind", async () => {
+    // The trap: envelope says `unknown-kind` for `weird`, and the
+    // serialised model still carries `weird.kind = "Mystery"`.
+    // validateModel recomputes unknown-kind from element.kind on
+    // load — if we also replayed it from envelope.preIssues we'd
+    // get TWO identical entries. Filter ensures exactly one.
     const envelope = {
       schemaVersion: 1,
       command: "model",
-      ok: true,
-      exitCode: 0,
       data: {
         model: {
           elements: {
-            svc: {
-              name: "svc",
-              label: "svc",
-              kind: "Container",
+            weird: {
+              name: "weird",
+              label: "Weird",
+              // ElementKind enum is TS-only; JSON survives any string.
+              kind: "Mystery",
               external: false,
               description: "",
               tags: [],
@@ -186,42 +188,24 @@ describe("modelJsonFormat.load — issue preservation", () => {
           boundaries: {},
           rootBoundaryNames: [],
         },
-        issues: [
-          {
-            kind: "unknown-kind",
-            element: "weird",
-            raw: "Mystery",
-          },
-        ],
-      },
-      diagnostics: [],
-      meta: {
-        aactVersion: "3.0.0-test",
-        durationMs: 1,
-        configPath: null,
-        source: null,
+        issues: [{ kind: "unknown-kind", element: "weird", raw: "Mystery" }],
       },
     };
     const file = writeTmp(JSON.stringify(envelope));
     try {
       const result = await modelJsonFormat.load!(file);
-      expect(
-        result.issues.find(
-          (i) => i.kind === "unknown-kind" && i.element === "weird",
-        ),
-      ).toBeDefined();
+      const unknownKind = result.issues.filter(
+        (i) => i.kind === "unknown-kind" && i.element === "weird",
+      );
+      expect(unknownKind).toHaveLength(1);
     } finally {
       cleanupParent(file);
     }
   });
 
-  it("filters envelope.data.issues to loader-only kinds — recomputable kinds get recomputed once", async () => {
-    // Real-world: snapshot envelope has BOTH a loader-only issue
-    // (unknown-kind from the original PUML parse) AND a graph-property
-    // issue (dangling-relation). The graph property exists in the
-    // serialised model too, so validateModel will surface it again
-    // during load. We must NOT double-count: filter the envelope's
-    // recomputable kinds, keep only loader-only ones.
+  it("does NOT duplicate dangling-relation when present on both sides", async () => {
+    // Same trap, different kind. validateModel recomputes
+    // dangling-relation from the deserialised model.
     const envelope = {
       schemaVersion: 1,
       command: "model",
@@ -241,10 +225,7 @@ describe("modelJsonFormat.load — issue preservation", () => {
           boundaries: {},
           rootBoundaryNames: [],
         },
-        issues: [
-          { kind: "unknown-kind", element: "weird", raw: "Mystery" },
-          { kind: "dangling-relation", from: "svc", to: "ghost" },
-        ],
+        issues: [{ kind: "dangling-relation", from: "svc", to: "ghost" }],
       },
     };
     const file = writeTmp(JSON.stringify(envelope));
@@ -253,12 +234,46 @@ describe("modelJsonFormat.load — issue preservation", () => {
       const dangling = result.issues.filter(
         (i) => i.kind === "dangling-relation",
       );
-      const unknownKind = result.issues.filter(
-        (i) => i.kind === "unknown-kind",
-      );
-      // Exactly one of each — no duplicates from preIssues replay.
       expect(dangling).toHaveLength(1);
-      expect(unknownKind).toHaveLength(1);
+    } finally {
+      cleanupParent(file);
+    }
+  });
+
+  it("preserves duplicate-identifier from envelope (the only loader-only kind)", async () => {
+    // duplicate-identifier is Structurizr-DSL-specific and the
+    // post-build Model has no trace of the original collision —
+    // it's the one issue kind that genuinely cannot be recomputed
+    // by validateModel. This is the kind LOADER_ONLY_ISSUE_KINDS
+    // pipes through.
+    const envelope = {
+      schemaVersion: 1,
+      command: "model",
+      data: {
+        model: {
+          elements: {
+            svc: {
+              name: "svc",
+              label: "svc",
+              kind: "Container",
+              external: false,
+              description: "",
+              tags: [],
+              relations: [],
+            },
+          },
+          boundaries: {},
+          rootBoundaryNames: [],
+        },
+        issues: [{ kind: "duplicate-identifier", identifier: "api" }],
+      },
+    };
+    const file = writeTmp(JSON.stringify(envelope));
+    try {
+      const result = await modelJsonFormat.load!(file);
+      expect(
+        result.issues.find((i) => i.kind === "duplicate-identifier"),
+      ).toBeDefined();
     } finally {
       cleanupParent(file);
     }

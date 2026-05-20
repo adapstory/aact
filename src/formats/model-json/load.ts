@@ -19,9 +19,10 @@ import type { LoadResult } from "../types";
  *     emits. Lets users redirect that command's output as a
  *     diff baseline / `aact check` source without re-shaping:
  *     `aact model --json > snap.aact.json && aact check`.
- *     Envelope's `data.issues` is preserved verbatim as `preIssues`
- *     so loader-specific diagnostics from the original PUML/DSL
- *     parse survive the JSON snapshot round-trip.
+ *     Envelope's `data.issues` is **filtered** to loader-only
+ *     kinds (see `LOADER_ONLY_ISSUE_KINDS` below) — graph-property
+ *     diagnostics get recomputed from the Model by validateModel,
+ *     replaying them from the envelope would double-emit.
  *
  *  3. **Raw `Model`** — `{ elements, boundaries, rootBoundaryNames,
  *     workspace? }`. Hand-authored compatibility shape. The most
@@ -33,41 +34,45 @@ import type { LoadResult } from "../types";
  * matching shape wins.
  *
  * **Validation pipeline.** `buildModel` already runs `validateModel`
- * internally (`src/model/build.ts:76`) — calling it again here would
- * double-emit dangling-relation / boundary-cycle issues. So we hand
- * `data.issues` (envelope only) through `preIssues` and let
- * `buildModel` do its thing; the result is exactly the same issue
- * set you would have gotten if the original PUML/DSL load had
- * happened in this process.
+ * internally (`src/model/build.ts:76`). The loader runs no second
+ * validation pass. Envelope's `data.issues` flow through
+ * `preIssues` *after* filtering to LOADER_ONLY_ISSUE_KINDS, so the
+ * union (preIssues ∪ validateModel) on the result is exactly the
+ * issue set the original PUML/DSL load would have produced — with
+ * no duplicates for graph-property kinds.
  */
 
 const SUPPORTED_SCHEMA_VERSIONS = new Set([1]);
 
 /**
- * Loader-only `ModelIssue` kinds — ones that `validateModel` cannot
- * reconstruct from the post-build Model alone. Surfacing these
- * pre-issues is the loader's job; everything else gets recomputed
- * inside `buildModel` (via `validateModel`).
+ * Loader-only `ModelIssue` kinds — issues that `validateModel`
+ * truly cannot reconstruct from the post-build Model. Replaying
+ * recomputable kinds via `preIssues` would just double-emit
+ * because `buildModel` runs `validateModel` again.
  *
- *   - `unknown-kind` — Structurizr / PUML stdlib macro check at parse
- *     time; once normalised into `Element.kind` (typed enum) the
- *     evidence of "you wrote `Componnent`" is gone.
- *   - `duplicate-identifier` — Structurizr DSL-specific (two distinct
- *     elements share the same `dsl.identifier`); after normalisation
- *     they end up with different `name`s and validateModel can't
- *     see the original collision.
+ * The only safe candidate is **`duplicate-identifier`**: it's
+ * Structurizr DSL-specific (two `name = container "X"` statements
+ * collide at parse time) and the post-build Model carries no
+ * trace — duplicate identifiers normalise to distinct `name`s and
+ * the collision is gone. Nothing else makes the cut:
  *
- * All other kinds — dangling-relation, boundary-cycle, self-relation,
- * element-in-boundary-not-in-model, boundary-not-in-model — are
- * pure graph properties. `validateModel` (run inside `buildModel`)
- * recomputes them from the same Model, so passing them through
- * preIssues would double-emit. duplicate-element-name /
- * duplicate-boundary-name are surfaced by `buildModel` itself when
- * the Record write would collide; they also fall in the
- * "recomputable" bucket and must not be replayed.
+ *   - `unknown-kind` — looks loader-only, but JSON serialisation
+ *     does *not* validate the `Element.kind` enum, so a
+ *     `"Mystery"` value survives the round-trip on the Model and
+ *     validateModel re-emits the issue. Replaying from envelope
+ *     would double it.
+ *   - `dangling-relation`, `boundary-cycle`, `self-relation`,
+ *     `element-in-boundary-not-in-model`, `boundary-not-in-model` —
+ *     pure graph properties; validateModel recomputes from the
+ *     deserialised Model.
+ *   - `duplicate-element-name`, `duplicate-boundary-name` — surfaced
+ *     by buildModel itself when the Record write would collide.
+ *     Records in JSON can't carry duplicate keys (JSON.parse keeps
+ *     the last write), so by the time the loader sees the data the
+ *     collision is impossible to detect — but it also can't be
+ *     replayed from envelope without lying about the model state.
  */
 const LOADER_ONLY_ISSUE_KINDS = new Set<ModelIssue["kind"]>([
-  "unknown-kind",
   "duplicate-identifier",
 ]);
 
