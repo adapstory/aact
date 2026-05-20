@@ -215,6 +215,55 @@ describe("modelJsonFormat.load — issue preservation", () => {
     }
   });
 
+  it("filters envelope.data.issues to loader-only kinds — recomputable kinds get recomputed once", async () => {
+    // Real-world: snapshot envelope has BOTH a loader-only issue
+    // (unknown-kind from the original PUML parse) AND a graph-property
+    // issue (dangling-relation). The graph property exists in the
+    // serialised model too, so validateModel will surface it again
+    // during load. We must NOT double-count: filter the envelope's
+    // recomputable kinds, keep only loader-only ones.
+    const envelope = {
+      schemaVersion: 1,
+      command: "model",
+      data: {
+        model: {
+          elements: {
+            svc: {
+              name: "svc",
+              label: "svc",
+              kind: "Container",
+              external: false,
+              description: "",
+              tags: [],
+              relations: [{ to: "ghost", tags: [] }],
+            },
+          },
+          boundaries: {},
+          rootBoundaryNames: [],
+        },
+        issues: [
+          { kind: "unknown-kind", element: "weird", raw: "Mystery" },
+          { kind: "dangling-relation", from: "svc", to: "ghost" },
+        ],
+      },
+    };
+    const file = writeTmp(JSON.stringify(envelope));
+    try {
+      const result = await modelJsonFormat.load!(file);
+      const dangling = result.issues.filter(
+        (i) => i.kind === "dangling-relation",
+      );
+      const unknownKind = result.issues.filter(
+        (i) => i.kind === "unknown-kind",
+      );
+      // Exactly one of each — no duplicates from preIssues replay.
+      expect(dangling).toHaveLength(1);
+      expect(unknownKind).toHaveLength(1);
+    } finally {
+      cleanupParent(file);
+    }
+  });
+
   it("does NOT duplicate dangling-relation issues from double-validation", async () => {
     // buildModel runs validateModel internally — calling it again from
     // the loader would surface the same dangling-relation twice. This

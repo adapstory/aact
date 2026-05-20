@@ -43,6 +43,39 @@ import type { LoadResult } from "../types";
 
 const SUPPORTED_SCHEMA_VERSIONS = new Set([1]);
 
+/**
+ * Loader-only `ModelIssue` kinds — ones that `validateModel` cannot
+ * reconstruct from the post-build Model alone. Surfacing these
+ * pre-issues is the loader's job; everything else gets recomputed
+ * inside `buildModel` (via `validateModel`).
+ *
+ *   - `unknown-kind` — Structurizr / PUML stdlib macro check at parse
+ *     time; once normalised into `Element.kind` (typed enum) the
+ *     evidence of "you wrote `Componnent`" is gone.
+ *   - `duplicate-identifier` — Structurizr DSL-specific (two distinct
+ *     elements share the same `dsl.identifier`); after normalisation
+ *     they end up with different `name`s and validateModel can't
+ *     see the original collision.
+ *
+ * All other kinds — dangling-relation, boundary-cycle, self-relation,
+ * element-in-boundary-not-in-model, boundary-not-in-model — are
+ * pure graph properties. `validateModel` (run inside `buildModel`)
+ * recomputes them from the same Model, so passing them through
+ * preIssues would double-emit. duplicate-element-name /
+ * duplicate-boundary-name are surfaced by `buildModel` itself when
+ * the Record write would collide; they also fall in the
+ * "recomputable" bucket and must not be replayed.
+ */
+const LOADER_ONLY_ISSUE_KINDS = new Set<ModelIssue["kind"]>([
+  "unknown-kind",
+  "duplicate-identifier",
+]);
+
+const filterLoaderOnlyIssues = (
+  issues: readonly ModelIssue[],
+): readonly ModelIssue[] =>
+  issues.filter((i) => LOADER_ONLY_ISSUE_KINDS.has(i.kind));
+
 interface RawModelInput {
   elements: unknown;
   boundaries: unknown;
@@ -108,9 +141,9 @@ const extractShape = (parsed: unknown, source: string): ExtractedShape => {
         `${source}: envelope.data.model is missing structural keys`,
       );
     }
-    const rawIssues = (parsed.data).issues;
+    const rawIssues = parsed.data.issues;
     const preIssues: readonly ModelIssue[] = Array.isArray(rawIssues)
-      ? (rawIssues as ModelIssue[])
+      ? filterLoaderOnlyIssues(rawIssues as ModelIssue[])
       : [];
     return {
       raw: inner as unknown as RawModelInput,
