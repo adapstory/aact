@@ -83,11 +83,34 @@ export interface PreParseIssue {
   readonly range: SourceLocation;
 }
 
+/**
+ * Key=value pairs attached to a C4 macro call via the
+ * `SetPropertyHeader` / `AddProperty` / `WithoutPropertyHeader`
+ * stdlib protocol. Indexed by the **1-based line number** of the
+ * target macro (Container / Person / System / Rel / etc.) so the
+ * AST → Model lowering can attach them once `sourceLocation` is
+ * known.
+ *
+ * `key` and `value` come straight from the `AddProperty` positional
+ * literals — quotes stripped, whitespace preserved. Single-column
+ * `AddProperty("foo")` lands as `{ "foo": "" }` so the round-trip
+ * back through `generate` keeps the order; the consumer is free to
+ * treat empty-string values as flags.
+ */
+export type AttachedPropertiesByLine = ReadonlyMap<
+  number,
+  Readonly<Record<string, string>>
+>;
+
 export interface PreParseResult {
   /** Source text after all strip passes — same length as input (UTF-16 code units). */
   readonly text: string;
   /** Info-level notes raised by the passes. */
   readonly issues: readonly PreParseIssue[];
+  /** Key=value rows from `SetPropertyHeader` / `AddProperty`
+   *  protocol, keyed by the target macro's 1-based line. Empty when
+   *  the source uses no property table. */
+  readonly attachedProperties: AttachedPropertiesByLine;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -463,21 +486,241 @@ export const keepFirstDiagram = (
   };
 };
 
+// ── Pass 3.5: extract attached properties ──────────────────────────
+
+/**
+ * C4-PlantUML stdlib lets the user prefix any element / relation
+ * macro with a property table:
+ *
+ *     SetPropertyHeader("Property", "Value")    ' optional; defaults shown
+ *     AddProperty("region", "us-east-1")
+ *     AddProperty("tier",   "premium")
+ *     Container(api, "API", "Node")
+ *
+ * The properties attach to the **next in-scope macro call** and then
+ * reset. `WithoutPropertyHeader()` flags "no header row on render"
+ * but doesn't change the key=value semantics we keep on Model — we
+ * surface only the user-typed AddProperty entries.
+ *
+ * Scan order: preProcessor + line comments already gone, but the
+ * macro lines themselves are still here. We walk lines, accumulate
+ * pending rows, attach on the first macro line that opens an
+ * in-scope C4 family call, then reset. Deployment-block macros
+ * (`Deployment_Node*`) are not in our scope — properties stacked
+ * for them get dropped together with the block during
+ * `stripDeploymentBlocks`.
+ *
+ * Returns a 1-based-line-keyed map. The downstream lowering
+ * (`toModel`) looks up `element.sourceLocation.start.line` /
+ * `relation.sourceLocation.start.line` against this map.
+ */
+
+const IN_SCOPE_MACRO_PREFIXES: readonly string[] = [
+  // Element keywords.
+  "Container",
+  "ContainerDb",
+  "ContainerQueue",
+  "Container_Ext",
+  "ContainerDb_Ext",
+  "ContainerQueue_Ext",
+  "Component",
+  "ComponentDb",
+  "ComponentQueue",
+  "Component_Ext",
+  "ComponentDb_Ext",
+  "ComponentQueue_Ext",
+  "System",
+  "SystemDb",
+  "SystemQueue",
+  "System_Ext",
+  "SystemDb_Ext",
+  "SystemQueue_Ext",
+  "Person",
+  "Person_Ext",
+  // Boundaries.
+  "Boundary",
+  "System_Boundary",
+  "Container_Boundary",
+  "Enterprise_Boundary",
+  // Relation family — list explicit variants; the regex orders by
+  // length so `RelIndex_Back_Neighbor` wins over `Rel`.
+  "RelIndex_Back_Neighbor",
+  "RelIndex_Neighbor",
+  "RelIndex_Back",
+  "RelIndex_Down",
+  "RelIndex_Up",
+  "RelIndex_Left",
+  "RelIndex_Right",
+  "RelIndex_Down_Long",
+  "RelIndex_Up_Long",
+  "RelIndex_Left_Long",
+  "RelIndex_Right_Long",
+  "RelIndex",
+  "BiRel_Neighbor",
+  "BiRel_Down",
+  "BiRel_Up",
+  "BiRel_Left",
+  "BiRel_Right",
+  "BiRel_Down_Long",
+  "BiRel_Up_Long",
+  "BiRel_Left_Long",
+  "BiRel_Right_Long",
+  "BiRel",
+  "Rel_Back_Neighbor",
+  "Rel_Neighbor",
+  "Rel_Back_Down",
+  "Rel_Back_Up",
+  "Rel_Back_Left",
+  "Rel_Back_Right",
+  "Rel_Back",
+  "Rel_Down_Long",
+  "Rel_Up_Long",
+  "Rel_Left_Long",
+  "Rel_Right_Long",
+  "Rel_Down",
+  "Rel_Up",
+  "Rel_Left",
+  "Rel_Right",
+  "Rel",
+];
+
+const IN_SCOPE_MACRO_RE = new RegExp(
+  String.raw`^[ \t]*(?:${[...IN_SCOPE_MACRO_PREFIXES]
+    .toSorted((a, b) => b.length - a.length)
+    .join("|")})\s*\(`,
+);
+
+// `AddProperty("a", "b")` and friends — captures the inside of the
+// outermost parens so we can split on top-level commas. Stripping
+// the trailing `)` and `{` is handled by the caller.
+const ADD_PROPERTY_RE = /^[ \t]*AddProperty\s*\((.*?)\)\s*$/;
+const SET_PROPERTY_HEADER_RE = /^[ \t]*SetPropertyHeader\s*\((.*?)\)\s*$/;
+const WITHOUT_PROPERTY_HEADER_RE = /^[ \t]*WithoutPropertyHeader\s*\(\s*\)/;
+const STRING_LITERAL_RE = /^"((?:[^"\\]|\\.)*)"$/;
+
+const splitTopLevelArgs = (raw: string): string[] => {
+  const out: string[] = [];
+  let depth = 0;
+  let buf = "";
+  let inString = false;
+  let escape = false;
+  for (const ch of raw) {
+    if (escape) {
+      buf += ch;
+      escape = false;
+      continue;
+    }
+    if (ch === "\\") {
+      buf += ch;
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      buf += ch;
+      continue;
+    }
+    if (!inString) {
+      if (ch === "(" || ch === "{" || ch === "[") depth++;
+      else if (ch === ")" || ch === "}" || ch === "]") depth--;
+      else if (ch === "," && depth === 0) {
+        out.push(buf.trim());
+        buf = "";
+        continue;
+      }
+    }
+    buf += ch;
+  }
+  if (buf.trim().length > 0) out.push(buf.trim());
+  return out;
+};
+
+const unwrapArg = (raw: string): string => {
+  const m = STRING_LITERAL_RE.exec(raw);
+  return m ? m[1].replaceAll(/\\(.)/g, "$1") : raw;
+};
+
+interface PendingProps {
+  rows: string[][];
+}
+
+const buildPropertiesObject = (
+  rows: readonly (readonly string[])[],
+): Readonly<Record<string, string>> => {
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    const key = row[0];
+    if (!key) continue;
+    out[key] = row[1] ?? "";
+  }
+  return out;
+};
+
+export const extractAttachedProperties = (
+  text: string,
+): AttachedPropertiesByLine => {
+  const lines = text.split("\n");
+  const map = new Map<number, Readonly<Record<string, string>>>();
+  let pending: PendingProps = { rows: [] };
+
+  for (const [i, line] of lines.entries()) {
+    // SetPropertyHeader / WithoutPropertyHeader are render-time
+    // semantics; we keep no header on Model.properties. They still
+    // count as boundary markers that reset any pending rows from
+    // a previous (unused) block.
+    if (
+      SET_PROPERTY_HEADER_RE.test(line) ||
+      WITHOUT_PROPERTY_HEADER_RE.test(line)
+    ) {
+      pending = { rows: [] };
+      continue;
+    }
+
+    const addMatch = ADD_PROPERTY_RE.exec(line);
+    if (addMatch) {
+      const args = splitTopLevelArgs(addMatch[1]).map((a) => unwrapArg(a));
+      pending.rows.push(args);
+      continue;
+    }
+
+    if (IN_SCOPE_MACRO_RE.test(line) && pending.rows.length > 0) {
+      const props = buildPropertiesObject(pending.rows);
+      if (Object.keys(props).length > 0) {
+        // 1-based line index — matches `SourceLocation.start.line`.
+        map.set(i + 1, props);
+      }
+      pending = { rows: [] };
+    }
+  }
+
+  return map;
+};
+
 // ── Composite ───────────────────────────────────────────────────────
 
 /**
  * Apply all pre-lex passes in order. Each pass preserves string length,
  * so the resulting `text` has identical offsets for surviving content.
+ *
+ * `extractAttachedProperties` runs **before** `stripOpaqueMacros`
+ * blanks the `AddProperty` lines — the strip itself is unchanged, the
+ * extracted map lives on `PreParseResult.attachedProperties` for
+ * `toModel` to consume.
  */
 export const preParse = (text: string, file: string): PreParseResult => {
   let cur = stripPreprocessor(text);
   cur = stripLineComments(cur);
   cur = stripPlantumlNative(cur);
+  const attachedProperties = extractAttachedProperties(cur);
   cur = stripOpaqueMacros(cur);
   cur = stripArithmeticAfterFunctionCalls(cur);
   const dep = stripDeploymentBlocks(cur, file);
   cur = dep.text;
   const diag = keepFirstDiagram(cur, file);
   cur = diag.text;
-  return { text: cur, issues: [...dep.issues, ...diag.issues] };
+  return {
+    text: cur,
+    issues: [...dep.issues, ...diag.issues],
+    attachedProperties,
+  };
 };

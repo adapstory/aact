@@ -718,7 +718,11 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
    * любое изменение поведения тут.
    */
 
-  it("KNOWN GAP: PUML SetPropertyHeader/AddProperty не парсятся — Container.properties undefined", async () => {
+  it("attaches PUML SetPropertyHeader/AddProperty rows to Container.properties", async () => {
+    // Gap closed in v3.0.0-beta.18: `preParse.extractAttachedProperties`
+    // walks the source for `AddProperty` lines and threads them through
+    // to `toModel`, which attaches them to the next macro by 1-based
+    // line number.
     const model = await loadFromContent(
       "props.puml",
       [
@@ -731,10 +735,9 @@ describe("PlantUML load — F2 known silent drops (plantuml-parser 0.4)", () => 
         "@enduml",
       ].join("\n"),
     );
-    // Container loaded, но properties stay undefined (parser drops the
-    // SetPropertyHeader/AddProperty side-effects). Документировано.
-    expect(getElement(model, "svc")).toBeDefined();
-    expect(getElement(model, "svc")?.properties).toBeUndefined();
+    const svc = getElement(model, "svc");
+    expect(svc).toBeDefined();
+    expect(svc?.properties).toEqual({ SLA: "99.9%", Owner: "team-x" });
   });
 
   it("KNOWN GAP: Boundary description не expose'ится parser'ом — Boundary.description undefined", async () => {

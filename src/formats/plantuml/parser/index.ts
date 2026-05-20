@@ -75,8 +75,12 @@ export const parseSource = (
   // 4. CST → AST.
   const ast = buildAst(cst, filePath);
 
-  // 5. AST → Model.
-  const result = toModel(ast);
+  // 5. AST → Model. `preParse` extracted the SetPropertyHeader /
+  //    AddProperty / WithoutPropertyHeader rows by target-line so the
+  //    lowering attaches them as `Element.properties` /
+  //    `Relation.properties` once it knows each node's
+  //    sourceLocation.
+  const result = toModel(ast, { attachedProperties: pre.attachedProperties });
 
   // 6. Aggregate lex + parse errors.
   const parseErrors: ChevrotainParseError[] = [];

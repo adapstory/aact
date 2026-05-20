@@ -461,12 +461,79 @@ export interface PumlToModelResult extends LoadResult {
   readonly workspaceLocation?: SourceLocation;
 }
 
+export interface PumlToModelOptions {
+  /** Properties extracted from `SetPropertyHeader` / `AddProperty`
+   *  prefixes by `preParse`, keyed by the 1-based target-macro line.
+   *  Empty / omitted leaves `Element.properties` /
+   *  `Relation.properties` untouched on the output Model. */
+  readonly attachedProperties?: ReadonlyMap<
+    number,
+    Readonly<Record<string, string>>
+  >;
+}
+
+const lookupProperties = (
+  loc: SourceLocation | undefined,
+  attached: PumlToModelOptions["attachedProperties"],
+): Readonly<Record<string, string>> | undefined =>
+  loc && attached ? attached.get(loc.start.line) : undefined;
+
+/**
+ * Attach `AddProperty` rows extracted by preParse to elements,
+ * boundaries, and per-element relations by matching the target
+ * macro's 1-based start line. Returns a new Model when any node
+ * picked up properties; the input Model is reused unchanged
+ * otherwise so the no-properties path stays allocation-free.
+ */
+const attachPropertiesToModel = (
+  model: ReturnType<typeof buildModel>["model"],
+  attached: PumlToModelOptions["attachedProperties"],
+): ReturnType<typeof buildModel>["model"] => {
+  if (!attached || attached.size === 0) return model;
+
+  let changed = false;
+  const elements: Record<string, (typeof model.elements)[string]> = {};
+  for (const [name, el] of Object.entries(model.elements)) {
+    let next = el;
+    const elProps = lookupProperties(el.sourceLocation, attached);
+    if (elProps) {
+      next = { ...next, properties: elProps };
+      changed = true;
+    }
+    const newRels = el.relations.map((r) => {
+      const relProps = lookupProperties(r.sourceLocation, attached);
+      return relProps ? { ...r, properties: relProps } : r;
+    });
+    if (newRels.some((r, i) => r !== el.relations[i])) {
+      next = { ...next, relations: newRels };
+      changed = true;
+    }
+    elements[name] = next;
+  }
+
+  const boundaries: Record<string, (typeof model.boundaries)[string]> = {};
+  for (const [name, b] of Object.entries(model.boundaries)) {
+    const bProps = lookupProperties(b.sourceLocation, attached);
+    if (bProps) {
+      boundaries[name] = { ...b, properties: bProps };
+      changed = true;
+    } else {
+      boundaries[name] = b;
+    }
+  }
+
+  return changed ? { ...model, elements, boundaries } : model;
+};
+
 /**
  * Lower a `FileNode` AST to a `Model`. PUML has no workspace concept,
  * so `Model.workspace` is left undefined. We process only the first
  * diagram (preParse stripped the rest already).
  */
-export const toModel = (file: FileNode): PumlToModelResult => {
+export const toModel = (
+  file: FileNode,
+  options: PumlToModelOptions = {},
+): PumlToModelResult => {
   const acc: WalkAcc = {
     elements: new Map(),
     boundaries: [],
@@ -520,7 +587,7 @@ export const toModel = (file: FileNode): PumlToModelResult => {
   });
 
   return {
-    model: built.model,
+    model: attachPropertiesToModel(built.model, options.attachedProperties),
     issues: built.issues,
   };
 };

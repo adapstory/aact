@@ -1,4 +1,5 @@
 import {
+  extractAttachedProperties,
   keepFirstDiagram,
   preParse,
   stripDeploymentBlocks,
@@ -167,5 +168,93 @@ Container(api, "API")
     // Continuation line `  x + 1` should still be in the stripped
     // text (only the `!define ... \` line itself is blanked).
     expect(parsed.text).toContain("x + 1");
+  });
+});
+
+describe("PUML preParse — extractAttachedProperties", () => {
+  it("attaches AddProperty rows to the next in-scope macro by 1-based line", () => {
+    const src = [
+      "@startuml", //                       1
+      'AddProperty("region", "us-east-1")', // 2
+      'AddProperty("tier", "premium")', //   3
+      'Container(api, "API")', //            4 ← target
+      "@enduml", //                          5
+    ].join("\n");
+    const map = extractAttachedProperties(src);
+    expect(map.size).toBe(1);
+    expect(map.get(4)).toEqual({
+      region: "us-east-1",
+      tier: "premium",
+    });
+  });
+
+  it("resets pending rows when SetPropertyHeader appears between blocks", () => {
+    // First block's AddProperty rows are stranded — no macro follows
+    // before the new SetPropertyHeader resets the pending state.
+    const src = [
+      "@startuml", //                       1
+      'AddProperty("orphan", "value")', //  2 ← discarded, no anchor
+      'SetPropertyHeader("Property", "Value")', // 3
+      'AddProperty("tier", "premium")', //  4
+      'Container(api, "API")', //           5 ← target
+      "@enduml", //                         6
+    ].join("\n");
+    const map = extractAttachedProperties(src);
+    expect(map.size).toBe(1);
+    expect(map.get(5)).toEqual({ tier: "premium" });
+  });
+
+  it("resets after each attachment so the next macro starts fresh", () => {
+    const src = [
+      "@startuml", //                       1
+      'AddProperty("a", "1")', //           2
+      'Container(c1, "C1")', //             3 ← target a
+      'AddProperty("b", "2")', //           4
+      'Container(c2, "C2")', //             5 ← target b
+      'Container(c3, "C3")', //             6 ← no properties
+      "@enduml", //                         7
+    ].join("\n");
+    const map = extractAttachedProperties(src);
+    expect(map.size).toBe(2);
+    expect(map.get(3)).toEqual({ a: "1" });
+    expect(map.get(5)).toEqual({ b: "2" });
+    expect(map.has(6)).toBe(false);
+  });
+
+  it("attaches to relation macros (Rel / BiRel / RelIndex variants)", () => {
+    const src = [
+      "@startuml", //                                1
+      'Container(a, "A")', //                        2
+      'Container(b, "B")', //                        3
+      'AddProperty("latency", "10ms")', //           4
+      'Rel(a, b, "calls")', //                       5 ← target
+      'AddProperty("delivery", "at-least-once")', // 6
+      'BiRel_Down(a, b, "sync")', //                 7 ← target
+      "@enduml", //                                  8
+    ].join("\n");
+    const map = extractAttachedProperties(src);
+    expect(map.get(5)).toEqual({ latency: "10ms" });
+    expect(map.get(7)).toEqual({ delivery: "at-least-once" });
+  });
+
+  it("returns an empty map when no AddProperty appears", () => {
+    const src = '@startuml\nContainer(api, "API")\n@enduml\n';
+    expect(extractAttachedProperties(src).size).toBe(0);
+  });
+
+  it("supports single-argument AddProperty as key with empty value", () => {
+    // `SetPropertyHeader("Property")` with `AddProperty("Value1")` —
+    // the property table is single-column. The Model only carries
+    // key=value, so we surface single-arg rows as key="".
+    const src = [
+      "@startuml", //                      1
+      'SetPropertyHeader("Property")', //  2
+      'AddProperty("Value1")', //          3
+      'AddProperty("Value2")', //          4
+      'System(s, "Label")', //             5 ← target
+      "@enduml", //                        6
+    ].join("\n");
+    const map = extractAttachedProperties(src);
+    expect(map.get(5)).toEqual({ Value1: "", Value2: "" });
   });
 });

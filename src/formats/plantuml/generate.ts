@@ -22,6 +22,23 @@ export interface PlantumlGenerateOptions {
 const isContextKind = (kind: Element["kind"]): boolean =>
   kind === "Person" || kind === "System";
 
+/**
+ * `AddProperty` prefix lines that the C4-PlantUML stdlib attaches to
+ * the next macro call. Emit one per `Element.properties` /
+ * `Relation.properties` entry so the round-trip through `aact diff`
+ * stays stable for diagrams using the property table protocol.
+ *
+ * The default `SetPropertyHeader("Property", "Value")` is implicit on
+ * the stdlib side, so we don't emit it explicitly — the parser also
+ * ignores headers and only records key=value rows.
+ */
+const renderPropertyLines = (
+  properties: Element["properties"] | undefined,
+): readonly string[] =>
+  properties
+    ? Object.entries(properties).map(([k, v]) => `AddProperty("${k}", "${v}")`)
+    : [];
+
 const renderElement = (element: Element): string => {
   const macro = c4MacroName(element.kind, element.external);
   const parts: string[] = [element.name, `"${element.label}"`];
@@ -58,7 +75,10 @@ const renderBoundary = (
   const childContainers = boundary.elementNames
     .map((name) => getElement(model, name))
     .filter((c): c is Element => c !== undefined)
-    .map((c) => `${inner}${renderElement(c)}`);
+    .flatMap((c) => [
+      ...renderPropertyLines(c.properties).map((p) => `${inner}${p}`),
+      `${inner}${renderElement(c)}`,
+    ]);
 
   // Boundary signature: Boundary(alias, label, ?type, ?tags, ?link)
   const parts: string[] = [boundary.name, `"${boundary.label}"`];
@@ -125,13 +145,19 @@ const renderBody = (
     return [
       `Boundary(project, "${boundaryLabel}") {`,
       ...rootBoundaries.map((b) => renderBoundary(model, b, "  ")),
-      ...standaloneContainers.map((c) => `  ${renderElement(c)}`),
+      ...standaloneContainers.flatMap((c) => [
+        ...renderPropertyLines(c.properties).map((p) => `  ${p}`),
+        `  ${renderElement(c)}`,
+      ]),
       `}`,
     ];
   }
   return [
     ...rootBoundaries.map((b) => renderBoundary(model, b, "")),
-    ...standaloneContainers.map((c) => renderElement(c)),
+    ...standaloneContainers.flatMap((c) => [
+      ...renderPropertyLines(c.properties),
+      renderElement(c),
+    ]),
   ];
 };
 
@@ -145,7 +171,10 @@ export const generate = (
   );
 
   const relations = Object.values(model.elements).flatMap((element) =>
-    element.relations.map((rel) => renderRelation(element.name, rel)),
+    element.relations.flatMap((rel) => [
+      ...renderPropertyLines(rel.properties),
+      renderRelation(element.name, rel),
+    ]),
   );
 
   const content = [
