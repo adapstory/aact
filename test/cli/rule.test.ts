@@ -198,7 +198,11 @@ describe("executeRuleExplain", () => {
     expect(result.data.examples?.some((e) => e.label === "good")).toBe(true);
     expect(result.data.examples?.some((e) => e.label === "bad")).toBe(true);
     expect(result.data.adrPath).toBe("ADRs/Database per CRUD-service.md");
-    expect(result.data.helpUri).toContain("#crud");
+    // helpUri points at the rule's ADR on GitHub (encoded path).
+    // The README-anchor form (`#crud`) was a dead link.
+    expect(result.data.helpUri).toBe(
+      "https://github.com/Byndyusoft/aact/blob/main/ADRs/Database%20per%20CRUD-service.md",
+    );
   });
 
   it("marks enabled=false when config disables the rule", async () => {
@@ -298,7 +302,8 @@ describe("renderRuleExplainText", () => {
             { label: "good", source: "Rel(a, repo)" },
           ],
           adrPath: "ADRs/Database per CRUD-service.md",
-          helpUri: "https://github.com/Byndyusoft/aact#crud",
+          helpUri:
+            "https://github.com/Byndyusoft/aact/blob/main/ADRs/Database%20per%20CRUD-service.md",
         },
         meta: { durationMs: 1, configPath: null, source: null },
       }),
@@ -311,7 +316,9 @@ describe("renderRuleExplainText", () => {
     expect(text).toContain("good");
     expect(text).toContain("Rel(a, db)");
     expect(text).toContain("ADRs/Database per CRUD-service.md");
-    expect(text).toContain("github.com/Byndyusoft/aact#crud");
+    expect(text).toContain(
+      "github.com/Byndyusoft/aact/blob/main/ADRs/Database%20per%20CRUD-service.md",
+    );
   });
 
   it("omits sections that have no data", () => {

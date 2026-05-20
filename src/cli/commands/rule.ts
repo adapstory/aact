@@ -70,7 +70,14 @@ export interface RuleExplainArgs {
   readonly _: readonly string[];
 }
 
-const AACT_INFO_URI = "https://github.com/Byndyusoft/aact";
+// Build the GitHub blob URL for a rule's ADR. We anchor on the
+// `main` branch so the link survives rule renames and is stable
+// from npm-installed builds (where the local `ADRs/` directory
+// isn't shipped). Path segments are URL-encoded individually so
+// spaces survive: `Anti-corruption Layer.md` → `Anti-corruption%20Layer.md`.
+const ADR_BASE_URL = "https://github.com/Byndyusoft/aact/blob/main/";
+const adrHelpUri = (adrPath: string): string =>
+  ADR_BASE_URL + adrPath.split("/").map(encodeURIComponent).join("/");
 
 const isEnabled = (rules: AactConfig["rules"], name: string): boolean =>
   rules?.[name] !== false;
@@ -176,9 +183,11 @@ export const executeRuleExplain = async (
         ? { examples: rule.examples.map((e) => ({ ...e })) }
         : {}),
       ...(rule.adrPath ? { adrPath: rule.adrPath } : {}),
-      ...(source === "built-in"
-        ? { helpUri: `${AACT_INFO_URI}#${rule.name}` }
-        : {}),
+      // helpUri only when there's a real document behind it — the
+      // ADR. Synthesising `#${ruleName}` against the README was a
+      // dead anchor (README has no per-rule headings) and led
+      // users to a 404.
+      ...(rule.adrPath ? { helpUri: adrHelpUri(rule.adrPath) } : {}),
     },
     exitCode: 0,
   };

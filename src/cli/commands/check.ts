@@ -188,7 +188,13 @@ const runRules = (
   return results;
 };
 
-const AACT_INFO_URI = "https://github.com/Byndyusoft/aact";
+// GitHub blob URL for the rule's ADR. Anchored on `main` so it
+// keeps resolving from an npm-installed build (where the local
+// `ADRs/` directory isn't shipped). Each path segment is encoded
+// individually so spaces in filenames survive.
+const ADR_BASE_URL = "https://github.com/Byndyusoft/aact/blob/main/";
+const adrHelpUri = (adrPath: string): string =>
+  ADR_BASE_URL + adrPath.split("/").map(encodeURIComponent).join("/");
 
 const buildRuleCatalogue = (
   rules: AactConfig["rules"],
@@ -202,9 +208,12 @@ const buildRuleCatalogue = (
       source: isBuiltin ? "built-in" : "custom",
       enabled: getRuleConfigValue(rules, r.name) !== false,
       hasFix: typeof r.fix === "function",
-      // Built-ins link to upstream README anchors; custom rules can
-      // surface their own helpUri later if `RuleDefinition` grows one.
-      ...(isBuiltin ? { helpUri: `${AACT_INFO_URI}#${r.name}` } : {}),
+      // helpUri points at the rule's ADR when one exists.
+      // Previously we synthesised `<readme>#${r.name}` for every
+      // built-in, but the README has no per-rule anchors, so the
+      // link went 404. Custom rules can surface their own helpUri
+      // later if `RuleDefinition` grows one.
+      ...(r.adrPath ? { helpUri: adrHelpUri(r.adrPath) } : {}),
     };
   });
 
