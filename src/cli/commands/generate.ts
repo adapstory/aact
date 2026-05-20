@@ -8,6 +8,7 @@ import { canGenerate } from "../../formats/types";
 import { loadModel } from "../loadModel";
 import type { Diagnostic, Renderer } from "../output";
 import { ToolError } from "../output";
+import { formatDisplayPath } from "../output/hyperlinks";
 import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
 import { configArg, jsonArg } from "../sharedArgs";
@@ -210,13 +211,13 @@ export const renderGenerateText: Renderer<GenerateData> = (envelope, sink) => {
   }
 
   if (data.outputSink === "file") {
-    sink.write(`✔ Written to ${data.outputPath}\n`);
+    sink.write(`✔ Written to ${formatDisplayPath(data.outputPath)}\n`);
     return;
   }
 
   // directory
   sink.write(
-    `✔ Generated ${data.files.length} file(s) in ${data.outputPath}\n`,
+    `✔ Generated ${data.files.length} file(s) in ${formatDisplayPath(data.outputPath)}\n`,
   );
 };
 

@@ -9,6 +9,7 @@ import type {
   WorkspaceChange,
 } from "../../../diff";
 import type { Renderer } from "../../output";
+import { formatDisplayPath } from "../../output/hyperlinks";
 
 /**
  * Text renderer for `aact diff`. Glyph convention `+ / - / ~` after
@@ -158,9 +159,15 @@ const renderChange = (c: Change): string => {
 export const renderDiffText: Renderer<DiffData> = (envelope, sink) => {
   const { data } = envelope;
 
-  // Header: provenance + headline.
+  // Header: provenance + headline. `source` is either an absolute file
+  // path (loaded via the format registry), a git-ref string like
+  // `HEAD:arch.puml`, or a stdin label `<stdin:baseline>`. formatDisplayPath
+  // only relativises actual absolute paths and passes everything else
+  // through verbatim, so git refs and stdin labels stay readable.
   sink.write(
-    colors.dim(`aact diff ${data.baseline.source} ${data.current.source}\n\n`),
+    colors.dim(
+      `aact diff ${formatDisplayPath(data.baseline.source)} ${formatDisplayPath(data.current.source)}\n\n`,
+    ),
   );
   sink.write(`  ${data.summary.headline}\n\n`);
 
