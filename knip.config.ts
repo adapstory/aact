@@ -14,6 +14,12 @@ export default <KnipConfig>{
     // Prettier plugin auto-loaded by prettier from name pattern; not imported.
     "prettier-plugin-packagejson",
   ],
+  // A re-export consumed only through its own file's return-type
+  // surface (e.g. `interface X { y: readonly PreParseIssue[] }`)
+  // looks "unused" without this flag because nothing else
+  // `import`s it directly. Flipping the heuristic kills a long
+  // tail of parser AST false-positives.
+  ignoreExportsUsedInFile: true,
   // stryker.config.mjs imports types from `@stryker-mutator/api/core` which
   // is transitive via @stryker-mutator/core — knip flags as "unlisted".
   // Ignoring the config from knip's analysis entirely is simpler than

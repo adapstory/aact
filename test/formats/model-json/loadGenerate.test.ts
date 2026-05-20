@@ -443,7 +443,7 @@ describe("modelJsonFormat.generate — canonical output", () => {
     // file as it loads, so $schema needs to land before the rest of
     // the payload. JSON.stringify preserves insertion order, so this
     // test pins the generator's object-literal layout.
-    const firstKey = file.content.match(/"\$schema"|"schemaVersion"|"model"/);
+    const firstKey = /"\$schema"|"schemaVersion"|"model"/.exec(file.content);
     expect(firstKey?.[0]).toBe('"$schema"');
   });
 

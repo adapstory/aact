@@ -287,6 +287,39 @@ export default tseslint.config(
       "sonarjs/cognitive-complexity": ["warn", 25],
     },
   },
+  // Diff engine — `diffRelations` does multiset matching, pair
+  // collapse, and severity assignment in a single sequential pass.
+  // Each phase is short on its own, but the function as a whole
+  // weaves them together against a shared rename map. Extracting
+  // would split a single algorithmic narrative into helpers that
+  // only ever call each other in one order — readers would chase
+  // them anyway.
+  {
+    files: ["src/diff/computeDiff.ts"],
+    rules: {
+      "sonarjs/cognitive-complexity": ["warn", 50],
+    },
+  },
+  // Rule fix planners (e.g. crud, dbPerService) walk the model
+  // and emit a SourceEdit per case branch. The branch count IS the
+  // rule's behavioural surface; refactoring into helpers would
+  // hide the case table that the ADR is anchored on.
+  {
+    files: ["src/rules/*.ts"],
+    rules: {
+      "sonarjs/cognitive-complexity": ["warn", 35],
+    },
+  },
+  // `aact rule explain` text renderer fans out into rationale /
+  // examples / ADR / helpUri / hyperlink sections — every section
+  // is an `if (data.x)` branch. The body is shallow but wide; the
+  // 20-branch ceiling fights the user-visible structure.
+  {
+    files: ["src/cli/commands/rule.ts"],
+    rules: {
+      "sonarjs/cognitive-complexity": ["warn", 25],
+    },
+  },
   // @vitest/eslint-plugin — cherry-pick high-value rules. Skip
   // no-conditional-expect/no-standalone-expect — our property-based tests
   // legitimately use both patterns.
