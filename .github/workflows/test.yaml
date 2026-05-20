@@ -22,6 +22,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Fetch parser reference fixtures
         run: bash scripts/fetch-parser-refs.sh
+      - name: Schema in sync with TS types
+        run: pnpm schema:check
       - name: Lint
         run: pnpm lint
       - name: Build CLI

@@ -1,0 +1,58 @@
+/**
+ * Build the JSON Schema for the canonical model-json file from TS types.
+ *
+ * Run via `pnpm schema:gen`. CI verifies the checked-in schema is
+ * up-to-date with `git diff --exit-code schemas/` after running the
+ * generator, so the schema can never drift from `ModelJsonFile`.
+ *
+ * Pin to draft-07: SchemaStore + VSCode have the most reliable support
+ * there, and the model surface doesn't need anything newer (no
+ * `unevaluatedProperties`, no `$dynamicRef`, etc.). Draft can be
+ * bumped after the schema lands on SchemaStore and we know the
+ * downstream tooling story.
+ */
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+
+import {
+  createFormatter,
+  createParser,
+  createProgram,
+  SchemaGenerator,
+} from "ts-json-schema-generator";
+
+const repoRoot = path.resolve(import.meta.dirname, "..");
+const outputPath = path.join(repoRoot, "schemas", "aact-model-v1.json");
+
+const config = {
+  path: path.join(repoRoot, "src/formats/model-json/types.ts"),
+  tsconfig: path.join(repoRoot, "tsconfig.json"),
+  type: "ModelJsonFile",
+  // $id matches the GitHub raw URL the emitter writes into every
+  // file. SchemaStore submission can happen later; until then `main`
+  // hosts the schema directly. The `-v1` suffix (AsyncAPI convention)
+  // pins the contract by URL: future `schemaVersion: 2` lands at
+  // `aact-model-v2.json` so existing files never start validating
+  // against a different shape.
+  schemaId:
+    "https://raw.githubusercontent.com/Byndyusoft/aact/main/schemas/aact-model-v1.json",
+  topRef: false,
+  expose: "export" as const,
+  jsDoc: "extended" as const,
+  // Draft-07 is what SchemaStore and the JSON Schema VSCode extension
+  // implement most completely; aact emits nothing that requires a
+  // newer dialect.
+  additionalProperties: false,
+};
+
+const program = createProgram(config);
+const parser = createParser(program, config);
+const formatter = createFormatter(config);
+const generator = new SchemaGenerator(program, parser, formatter, config);
+const schema = generator.createSchema(config.type);
+
+const json = JSON.stringify(schema, undefined, 2) + "\n";
+writeFileSync(outputPath, json, "utf8");
+
+ 
+console.log(`Wrote ${path.relative(repoRoot, outputPath)}`);

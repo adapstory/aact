@@ -63,6 +63,42 @@ describe("modelJsonFormat.load — canonical { schemaVersion, model } shape", ()
     }
   });
 
+  it("tolerates the `$schema` pointer that aact generate emits (round-trip)", async () => {
+    // The emitter writes `$schema` as the first key so editors attach
+    // the schema before scanning the body. The loader must accept the
+    // same file back without complaining about an unknown field —
+    // otherwise `aact generate --format model-json > snap.aact.json`
+    // can't be used as a diff baseline.
+    const payload = {
+      $schema:
+        "https://raw.githubusercontent.com/Byndyusoft/aact/main/schemas/aact-model-v1.json",
+      schemaVersion: 1,
+      model: {
+        elements: {
+          svc: {
+            name: "svc",
+            label: "svc",
+            kind: "Container",
+            external: false,
+            description: "",
+            tags: [],
+            relations: [],
+          },
+        },
+        boundaries: {},
+        rootBoundaryNames: [],
+      },
+    };
+    const file = writeTmp(JSON.stringify(payload));
+    try {
+      const result = await modelJsonFormat.load!(file);
+      expect(result.model.elements.svc.name).toBe("svc");
+      expect(result.issues).toEqual([]);
+    } finally {
+      cleanupParent(file);
+    }
+  });
+
   it("rejects unknown schemaVersion", async () => {
     const file = writeTmp(
       JSON.stringify({
@@ -384,6 +420,31 @@ describe("modelJsonFormat.generate — canonical output", () => {
     const parsed = JSON.parse(file.content);
     expect(parsed.schemaVersion).toBe(1);
     expect(parsed.model.elements.svc.name).toBe("svc");
+  });
+
+  it("emits $schema pointing at the versioned upstream URL", () => {
+    const model = makeModel({ elements: [{ name: "svc" }] });
+    const [file] = modelJsonFormat.generate!(model).files;
+    const parsed = JSON.parse(file.content) as { $schema?: string };
+    // VSCode / Cursor / JetBrains pick this up to auto-attach the
+    // schema before the user types anything. The `-v1` suffix
+    // pins the contract by URL so a future `schemaVersion: 2`
+    // file at `aact-model-v2.json` doesn't override editor
+    // validation of existing v1 files.
+    expect(parsed.$schema).toBe(
+      "https://raw.githubusercontent.com/Byndyusoft/aact/main/schemas/aact-model-v1.json",
+    );
+  });
+
+  it("places $schema as the first key so editors attach the schema before scanning the body", () => {
+    const model = makeModel({ elements: [{ name: "svc" }] });
+    const [file] = modelJsonFormat.generate!(model).files;
+    // Order of stringified keys matters: VSCode reads the top of the
+    // file as it loads, so $schema needs to land before the rest of
+    // the payload. JSON.stringify preserves insertion order, so this
+    // test pins the generator's object-literal layout.
+    const firstKey = file.content.match(/"\$schema"|"schemaVersion"|"model"/);
+    expect(firstKey?.[0]).toBe('"$schema"');
   });
 
   it("sorts element / boundary keys alphabetically in the output text", () => {

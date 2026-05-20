@@ -51,8 +51,29 @@ const normaliseModel = (model: Model): Model => ({
 const CURRENT_SCHEMA_VERSION = 1;
 const DEFAULT_OUTPUT_PATH = "architecture.aact.json";
 
+// Schema hosted in the upstream repo on `main`. The `-v1` suffix
+// (AsyncAPI convention) pins the contract by URL: future
+// `schemaVersion: 2` lands at `aact-model-v2.json`, so files emitted
+// today never start validating against a different shape. URL stays
+// valid for the lifetime of the repo — `main` never goes away and
+// the file is checked in alongside this code.
+//
+// SchemaStore submission is a follow-up: once the URL has been live
+// on `main` for a release cycle, opening a `SchemaStore/schemastore`
+// PR with `fileMatch: ["*.aact.json"]` lets VSCode / JetBrains / Zed
+// auto-attach the schema even without the `$schema` field. We keep
+// emitting the field regardless — editors that haven't synced the
+// catalog, or files renamed outside `*.aact.json`, still resolve it.
+const SCHEMA_URL =
+  "https://raw.githubusercontent.com/Byndyusoft/aact/main/schemas/aact-model-v1.json";
+
 export const generate = (model: Model): FormatOutput => {
+  // `$schema` first so it's the editor's first read — VSCode / Cursor /
+  // JetBrains scan the top of the file and attach the schema before
+  // they hit Model fields, so autocomplete kicks in even on partial
+  // files mid-edit.
   const payload = {
+    $schema: SCHEMA_URL,
     schemaVersion: CURRENT_SCHEMA_VERSION,
     model: normaliseModel(model),
   };
