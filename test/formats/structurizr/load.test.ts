@@ -96,6 +96,8 @@ describe("structurizr load — DSL identifier", () => {
     });
     expect(model.boundaries.my_system).toBeDefined();
     expect(model.boundaries.my_system?.elementNames).toContain("my_svc");
+    expect(model.boundaries.my_system?.properties).toBeUndefined();
+    expect(model.elements.my_svc?.properties).toBeUndefined();
   });
 
   it("falls back to raw id when no DSL identifier property is set", async () => {
@@ -696,6 +698,32 @@ describe("structurizr load — properties forwarding", () => {
       },
     });
     expect(getElement(model, "c")?.properties).toEqual({ good: "value" });
+  });
+
+  it("filters out generated structurizr.dsl.identifier from properties", async () => {
+    const model = await loadWorkspace({
+      model: {
+        softwareSystems: [
+          {
+            id: "1",
+            name: "Sys",
+            containers: [
+              {
+                id: "c",
+                name: "Svc",
+                properties: {
+                  "structurizr.dsl.identifier": "svc",
+                  owner: "team-a",
+                },
+                relationships: [],
+              },
+            ],
+          },
+        ],
+        people: [],
+      },
+    });
+    expect(getElement(model, "svc")?.properties).toEqual({ owner: "team-a" });
   });
 
   it("returns undefined for container with no properties", async () => {

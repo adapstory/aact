@@ -22,10 +22,12 @@ import {
   STRUCTURIZR_TAG_ASYNC,
 } from "./types";
 
+const STRUCTURIZR_DSL_IDENTIFIER = "structurizr.dsl.identifier";
+
 /** Resolve human-readable name через `structurizr.dsl.identifier` property,
  * fallback на raw id. Это позволяет правилам ссылаться на читаемые имена. */
 const dslId = (id: string, properties?: StructurizrProperties): string =>
-  properties?.["structurizr.dsl.identifier"] ?? id;
+  properties?.[STRUCTURIZR_DSL_IDENTIFIER] ?? id;
 
 /**
  * Composite properties bag: user-defined + group (как prefix `group`) +
@@ -43,6 +45,7 @@ const toProperties = (
   const out: Record<string, string> = {};
   if (base) {
     for (const [k, v] of Object.entries(base)) {
+      if (k === STRUCTURIZR_DSL_IDENTIFIER) continue;
       if (typeof v === "string") out[k] = v;
     }
   }
