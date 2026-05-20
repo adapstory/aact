@@ -20,6 +20,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Fetch parser reference fixtures
+        run: bash scripts/fetch-parser-refs.sh
       - name: Lint
         run: pnpm lint
       - name: Build CLI
