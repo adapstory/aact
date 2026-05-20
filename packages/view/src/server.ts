@@ -1,8 +1,36 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { H3, defineWebSocketHandler, toNodeHandler } from "h3";
 import { listen, type Listener } from "listhen";
 
 import type { ModelLoadResult } from "./load-model.js";
-import { indexHtml } from "./ui.js";
+
+/**
+ * Resolve the bundled SPA dist relative to this module so the path
+ * survives both the source tree (`packages/view/dist/ui/`) and the
+ * post-publish layout (`<install>/node_modules/@aact/view/dist/ui/`).
+ * Computed from `import.meta.url` because aact uses pure ESM —
+ * `__dirname` is unavailable.
+ */
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const UI_ROOT = path.resolve(HERE, "ui");
+
+const MIME: Readonly<Record<string, string>> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".map": "application/json; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+};
+
+const mimeFor = (file: string): string =>
+  MIME[path.extname(file).toLowerCase()] ?? "application/octet-stream";
 
 /**
  * The envelope shape the server pushes over `/api/ws` and returns
@@ -100,12 +128,59 @@ export const startServer = async (
     }),
   );
 
-  // The inline HTML page is the only thing served from `/`; everything
-  // else lives under `/api/*`. The page bootstraps itself by fetching
-  // `/api/model` + subscribing to `/api/ws`.
-  app.get("/", () => {
-    return new Response(indexHtml(""), {
-      headers: { "content-type": "text/html; charset=utf-8" },
+  // Serve the pre-built Svelte SPA from `dist/ui/`. Resolve each
+  // request path against the bundle dir, fall back to `index.html`
+  // for client-side routes (Svelte Flow drill-down is in-app, but
+  // a deep link / refresh hits `/something` and we want to bring
+  // the SPA up regardless). Aggressive directory traversal blocked
+  // by re-resolving and asserting the path stays under UI_ROOT.
+  const serveAsset = async (
+    requestPath: string,
+  ): Promise<{ body: Buffer; contentType: string } | null> => {
+    const clean = requestPath.replace(/^\/+/, "").split("?")[0] ?? "";
+    const relative = clean === "" ? "index.html" : clean;
+    const candidate = path.resolve(UI_ROOT, relative);
+    if (!candidate.startsWith(UI_ROOT)) return null;
+    try {
+      const body = await readFile(candidate);
+      return { body, contentType: mimeFor(candidate) };
+    } catch {
+      return null;
+    }
+  };
+
+  app.get("/", async () => {
+    const asset = await serveAsset("index.html");
+    if (!asset) {
+      return new Response(
+        "aact view UI bundle is missing — run `pnpm --filter @aact/view build:ui`.",
+        {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        },
+      );
+    }
+    return new Response(asset.body, {
+      headers: { "content-type": asset.contentType },
+    });
+  });
+
+  app.get("/**:path", async (event) => {
+    const url = new URL(event.req.url);
+    if (url.pathname.startsWith("/api/")) {
+      return new Response("Not Found", { status: 404 });
+    }
+    const asset = await serveAsset(url.pathname);
+    if (asset) {
+      return new Response(asset.body, {
+        headers: { "content-type": asset.contentType },
+      });
+    }
+    // SPA fallback — let the client route in-app.
+    const indexAsset = await serveAsset("index.html");
+    if (!indexAsset) return new Response("Not Found", { status: 404 });
+    return new Response(indexAsset.body, {
+      headers: { "content-type": indexAsset.contentType },
     });
   });
 
