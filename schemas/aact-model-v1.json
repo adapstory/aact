@@ -16,7 +16,10 @@
       "$ref": "#/definitions/Model"
     }
   },
-  "required": ["schemaVersion", "model"],
+  "required": [
+    "schemaVersion",
+    "model"
+  ],
   "additionalProperties": false,
   "description": "Canonical on-disk shape that `aact generate --format model-json` emits and that the loader treats as the primary input form. Wrapped here so the JSON Schema generator has a single root type that pins the `schemaVersion` literal alongside the Model payload.\n\nThe `$schema` field is optional in the type but always present on emit — VSCode / Cursor / JetBrains use it to auto-attach the schema to any `*.aact.json` file the user opens without a SchemaStore lookup. Loaders pass it through untouched.",
   "definitions": {
@@ -47,7 +50,11 @@
           "description": "Workspace-level metadata: name, description, extends target. Optional — formats that don't carry workspace headers (e.g. PUML) leave it undefined; Structurizr DSL / JSON populate it from `workspace \"name\" \"description\" extends \"...\"` headers. Reference parsers expose this via `Workspace.getName()` / `getExtends()` etc.\n\nWorkspace `properties { … }` blocks and `version` fields are intentionally NOT surfaced here — they're Structurizr-specific authoring concerns (style overrides, layout hints) that don't affect linting. If a future rule needs them, extend the type."
         }
       },
-      "required": ["elements", "boundaries", "rootBoundaryNames"],
+      "required": [
+        "elements",
+        "boundaries",
+        "rootBoundaryNames"
+      ],
       "additionalProperties": false,
       "description": "Корневая Model. Record-based для O(1) lookup'ов на масштабе aact и native JSON-сериализации. Все поля readonly — после loader-фазы модель immutable."
     },
@@ -182,7 +189,10 @@
           "description": "Foundation для terminal-link OSC8. Заполняется loader'ом где возможно."
         }
       },
-      "required": ["to", "tags"],
+      "required": [
+        "to",
+        "tags"
+      ],
       "additionalProperties": false,
       "description": "Связь между двумя elements. `to` — имя целевого element (name-ref), не объектная ссылка — это рвёт Element↔Relation цикл, делает Model сериализуемой и упрощает test fixtures (`to: \"elementB\"` вместо ref'а)."
     },
@@ -199,7 +209,11 @@
           "$ref": "#/definitions/SourcePosition"
         }
       },
-      "required": ["file", "start", "end"],
+      "required": [
+        "file",
+        "start",
+        "end"
+      ],
       "additionalProperties": false,
       "description": "A range within a source file: `start` and `end` `SourcePosition`s plus the `file` they belong to. `end` is the position **after** the last character of the parsed construct (half-open interval, matching chevrotain and LSP conventions).\n\nThe chevrotain parser populates this on every Element / Boundary / Relation node it emits. Regex-based loaders may omit it entirely — the field is optional on each Model node. When present, the range must be complete (no partial fills); the new shape exists precisely so that diagnostics, terminal-link OSC8, and AST-based fixes have full information."
     },
@@ -217,7 +231,11 @@
           "description": "0-based offset in UTF-16 code units (JS string index)."
         }
       },
-      "required": ["line", "col", "offset"],
+      "required": [
+        "line",
+        "col",
+        "offset"
+      ],
       "additionalProperties": false,
       "description": "A position within a source file. 1-based for `line` and `col` (matches editor conventions and OSC8 terminal-link expectations).\n\n`offset` is a 0-based **UTF-16 code unit** index into the source string — the same unit `String.prototype.slice` / `charCodeAt` operate on, which is also what chevrotain emits (`token.startOffset` / `endOffset`) and what LSP uses by default (`positionEncoding: \"utf-16\"`). It is **not** a UTF-8 byte offset, despite the field name. Non-ASCII content (cyrillic, emoji, CJK) round-trips correctly through `applyEdits` because both producer and consumer use the same unit; consumers that need byte / codepoint offsets must convert themselves.\n\nAll three are mandatory. If a position is not known, the enclosing `SourceLocation` must be omitted entirely (it is optional on each Model node) — never fabricated with placeholder values."
     },
@@ -284,7 +302,12 @@
     },
     "BoundaryKind": {
       "type": "string",
-      "enum": ["System", "Container", "Component", "Enterprise"],
+      "enum": [
+        "System",
+        "Container",
+        "Component",
+        "Enterprise"
+      ],
       "description": "Boundary types сохраняются для round-trip без шумного diff'а в git. PlantUML stdlib дает `System_Boundary` / `Container_Boundary` / `Enterprise_Boundary` (плюс generic `Boundary(name, label, $type=…)`, где `$type` подставляется в один из них). `aact generate` обязан вернуть тот же ключ.\n\n`\"Component\"` — model-level kind для случая, когда Structurizr или generic `Boundary($type=\"Component\")` помечает scope как component-level. Stdlib не имеет `Component_Boundary` макроса, поэтому `aact generate` для PUML падает обратно в `Container_Boundary` — это документированная потеря fidelity на этой паре направлений."
     },
     "WorkspaceMetadata": {

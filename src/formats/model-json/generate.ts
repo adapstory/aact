@@ -3,9 +3,15 @@ import type { FormatOutput } from "../types";
 
 /**
  * `model-json` generator. Emits the canonical format-level shape
- * `{ schemaVersion: 1, model: Model }` — distinct from
+ * `{ $schema, schemaVersion: 1, model: Model }` — distinct from
  * `aact model --json` which wraps the same Model in `CliEnvelope`
- * with CLI-level meta (durationMs, command, configPath).
+ * with CLI-level meta (durationMs, command, configPath) and never
+ * carries `$schema`.
+ *
+ * `$schema` is intentional payload, not metadata: VSCode / Cursor /
+ * JetBrains / Zed key off it to attach the JSON Schema for
+ * autocomplete and validation on `*.aact.json` files (and on any
+ * file the user renamed outside that pattern).
  *
  * The Format-API `generate(model)` is a pure function: no access to
  * runtime context, no envelope semantics. So this output is the

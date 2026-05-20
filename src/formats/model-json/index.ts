@@ -4,9 +4,11 @@ import { load } from "./load";
 
 /**
  * `model-json` — format-neutral serialised Model. Canonical shape on
- * emit: `{ schemaVersion: 1, model: Model }`. Load accepts that plus
- * two compat shapes (CliEnvelope<ModelData> from `aact model --json`,
- * and raw Model for hand-authored snapshots).
+ * emit: `{ $schema, schemaVersion: 1, model: Model }`. Load accepts
+ * that plus two compat shapes (CliEnvelope<ModelData> from
+ * `aact model --json`, and raw Model for hand-authored snapshots).
+ * `$schema` is optional on read — hand-authored files commonly omit
+ * it, and the loader treats it as just another tolerated extra key.
  *
  * Capabilities: load + generate, **no fix** — JSON does not have a
  * meaningful "source range" semantics for C4 edits; range-based

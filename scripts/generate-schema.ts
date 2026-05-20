@@ -10,21 +10,24 @@
  * `unevaluatedProperties`, no `$dynamicRef`, etc.). Draft can be
  * bumped after the schema lands on SchemaStore and we know the
  * downstream tooling story.
+ *
+ * `createGenerator(config)` is the documented entry point — the
+ * `createProgram / createParser / createFormatter / SchemaGenerator`
+ * quartet exists but each factory expects a `CompletedConfig`, not the
+ * partial `Config` we ship here. Going through the public façade keeps
+ * typecheck clean.
  */
+
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  createFormatter,
-  createParser,
-  createProgram,
-  SchemaGenerator,
-} from "ts-json-schema-generator";
+import type { Config } from "ts-json-schema-generator";
+import { createGenerator } from "ts-json-schema-generator";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const outputPath = path.join(repoRoot, "schemas", "aact-model-v1.json");
 
-const config = {
+const config: Config = {
   path: path.join(repoRoot, "src/formats/model-json/types.ts"),
   tsconfig: path.join(repoRoot, "tsconfig.json"),
   type: "ModelJsonFile",
@@ -37,22 +40,18 @@ const config = {
   schemaId:
     "https://raw.githubusercontent.com/Byndyusoft/aact/main/schemas/aact-model-v1.json",
   topRef: false,
-  expose: "export" as const,
-  jsDoc: "extended" as const,
+  expose: "export",
+  jsDoc: "extended",
   // Draft-07 is what SchemaStore and the JSON Schema VSCode extension
   // implement most completely; aact emits nothing that requires a
   // newer dialect.
   additionalProperties: false,
 };
 
-const program = createProgram(config);
-const parser = createParser(program, config);
-const formatter = createFormatter(config);
-const generator = new SchemaGenerator(program, parser, formatter, config);
-const schema = generator.createSchema(config.type);
-
+const schema = createGenerator(config).createSchema(config.type);
 const json = JSON.stringify(schema, undefined, 2) + "\n";
 writeFileSync(outputPath, json, "utf8");
 
+// One-shot build script: direct console output is the point.
  
 console.log(`Wrote ${path.relative(repoRoot, outputPath)}`);

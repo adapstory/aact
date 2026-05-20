@@ -61,7 +61,7 @@
     "publint": "publint",
     "lint": "npm run lint:eslint && npm run lint:prettier",
     "lint:eslint": "eslint .",
-    "lint:prettier": "prettier --ignore-path ./.gitignore --check \"./**/*.{ts,js,json,yaml,yml,md}\"",
+    "lint:prettier": "prettier --ignore-path ./.gitignore --ignore-path ./.prettierignore --check \"./**/*.{ts,js,json,yaml,yml,md}\"",
     "prepare": "husky || true"
   },
   "lint-staged": {
