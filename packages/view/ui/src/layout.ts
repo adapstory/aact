@@ -335,16 +335,24 @@ interface ElkInputNode {
   width?: number;
   height?: number;
   children?: ElkInputNode[];
+  edges?: ElkInputEdge[];
   layoutOptions?: Record<string, string>;
 }
 
 const containerLayoutOptions: Record<string, string> = { ...layeredOptions };
+
+interface ElkInputEdge {
+  id: string;
+  sources: string[];
+  targets: string[];
+}
 
 const buildNestedTree = (
   model: Model,
   expanded: ReadonlySet<string>,
   rootBoundaries: readonly Boundary[],
   standalone: readonly Element[],
+  edges: readonly ElkInputEdge[],
 ): ElkInputNode => {
   const renderBoundary = (b: Boundary): ElkInputNode => {
     if (!expanded.has(b.name)) {
@@ -379,6 +387,11 @@ const buildNestedTree = (
     id: "root",
     layoutOptions: {
       ...layeredOptions,
+      // INCLUDE_CHILDREN lets edges cross hierarchy levels — without
+      // it `layered` errors on edges that span containers. With
+      // edges in the input, ELK has the dependency data it needs to
+      // build proper left-to-right layers; otherwise it stacks
+      // everything in a single column.
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
     },
     children: [
@@ -388,6 +401,7 @@ const buildNestedTree = (
         ...leafSize(e.kind),
       })),
     ],
+    edges: [...edges],
   };
 };
 
@@ -543,7 +557,25 @@ export const layoutNested = async (
 ): Promise<LayoutResult> => {
   const { rootBoundaries, standalone } = collectStandaloneAndRoots(model);
   const parentMap = buildParentMap(model);
-  const tree = buildNestedTree(model, expanded, rootBoundaries, standalone);
+  const edges = collectVisibleEdges(model, expanded, parentMap);
+
+  // ELK and Svelte Flow share the same edge identity. ELK uses the
+  // edges to compute layers (without them the layered algorithm
+  // collapses to a single vertical column); Svelte Flow uses them
+  // to render the lines after we hand back the layout result.
+  const elkEdges: ElkInputEdge[] = edges.map((e) => ({
+    id: e.id,
+    sources: [e.source],
+    targets: [e.target],
+  }));
+
+  const tree = buildNestedTree(
+    model,
+    expanded,
+    rootBoundaries,
+    standalone,
+    elkEdges,
+  );
   const result = await elk.layout(tree);
   const nodes = flattenElkResult(
     result.children ?? [],
@@ -551,7 +583,6 @@ export const layoutNested = async (
     expanded,
     undefined,
   );
-  const edges = collectVisibleEdges(model, expanded, parentMap);
   return { nodes, edges };
 };
 
