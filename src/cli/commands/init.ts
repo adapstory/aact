@@ -52,7 +52,7 @@ const config: AactConfig = {
     crud: true, // Only repo/relay containers access databases
     dbPerService: true, // Each database accessed by a single service
     cohesion: true, // Boundary cohesion > coupling
-    stableDependencies: true, // Depend on more stable components
+    stableDependencies: false, // Depend on more stable components — off by default until you tag stability
     commonReuse: true, // Reuse all of a context's public API or none
   },
 
