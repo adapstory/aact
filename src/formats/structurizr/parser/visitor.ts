@@ -110,6 +110,33 @@ const findClosingBrace = (cst: CstNode): IToken | undefined => {
 
 const zeroPos = (): SourcePosition => ({ line: 1, col: 1, offset: 0 });
 
+const zeroRange = (file: string): SourceLocation => ({
+  file,
+  start: zeroPos(),
+  end: zeroPos(),
+});
+
+const collectTokens = (cst: CstNode): IToken[] => {
+  const out: IToken[] = [];
+  const visit = (node: CstNode): void => {
+    for (const key of Object.keys(node.children)) {
+      const arr = (node.children as Record<string, unknown[]>)[key];
+      for (const child of arr) {
+        if (child && typeof child === "object" && "image" in child) {
+          out.push(child as IToken);
+        } else if (child && typeof child === "object" && "children" in child) {
+          visit(child as CstNode);
+        }
+      }
+    }
+  };
+  visit(cst);
+  return out;
+};
+
+const firstTokenIn = (cst: CstNode): IToken | undefined =>
+  collectTokens(cst).at(0);
+
 /**
  * Strip `"""..."""` wrapping from a triple-quoted text block token.
  * The reference DSL preserves the inner contents verbatim — no escape
@@ -188,12 +215,22 @@ class StructurizrCstToAst extends BaseVisitor {
   }
 
   workspaceBlock(ctx: WorkspaceBlockCtx): WorkspaceNode {
-    const workspaceToken = ctx.Workspace[0];
+    const fallbackToken = ctx.modelBlock?.[0]
+      ? firstTokenIn(ctx.modelBlock[0])
+      : undefined;
+    const workspaceToken =
+      ctx.Workspace?.[0] ??
+      ctx.name?.[0] ??
+      ctx.description?.[0] ??
+      ctx.extendsTarget?.[0] ??
+      ctx.LBrace?.[0] ??
+      ctx.RBrace?.[0] ??
+      fallbackToken;
     // After a parse error, chevrotain may produce a partial CST where
     // the closing brace is missing. Fall back to the workspace token's
     // own range — `recovered: true` signals the partial parse.
     const closeToken = ctx.RBrace?.[0] ?? workspaceToken;
-    const recovered = !ctx.RBrace?.[0];
+    const recovered = !ctx.Workspace?.[0] || !ctx.RBrace?.[0];
     const name = ctx.name ? this.stringFromToken(ctx.name[0]) : undefined;
     const description = ctx.description
       ? this.stringFromToken(ctx.description[0])
@@ -210,22 +247,32 @@ class StructurizrCstToAst extends BaseVisitor {
       description,
       extendsTarget,
       body: modelBlocks,
-      range: rangeFromTokens(workspaceToken, closeToken, this.file),
+      range:
+        workspaceToken && closeToken
+          ? rangeFromTokens(workspaceToken, closeToken, this.file)
+          : zeroRange(this.file),
       ...(recovered ? { recovered: true as const } : {}),
     };
   }
 
   modelBlock(ctx: ModelBlockCtx): ModelNode {
-    const modelToken = ctx.Model[0];
+    const modelToken =
+      ctx.Model?.[0] ??
+      ctx.LBrace?.[0] ??
+      ctx.RBrace?.[0] ??
+      (ctx.modelBodyItem?.[0] ? firstTokenIn(ctx.modelBodyItem[0]) : undefined);
     const closeToken = ctx.RBrace?.[0] ?? modelToken;
-    const recovered = !ctx.RBrace?.[0];
+    const recovered = !ctx.Model?.[0] || !ctx.RBrace?.[0];
     const items = (ctx.modelBodyItem ?? [])
       .map((i) => this.visit(i) as ModelChildNode | undefined)
       .filter((i): i is ModelChildNode => i !== undefined);
     return {
       kind: "model",
       children: items,
-      range: rangeFromTokens(modelToken, closeToken, this.file),
+      range:
+        modelToken && closeToken
+          ? rangeFromTokens(modelToken, closeToken, this.file)
+          : zeroRange(this.file),
       ...(recovered ? { recovered: true as const } : {}),
     };
   }
@@ -869,7 +916,7 @@ interface WorkspaceFileCtx {
 }
 
 interface WorkspaceBlockCtx {
-  readonly Workspace: readonly [IToken];
+  readonly Workspace?: readonly [IToken];
   readonly name?: readonly [IToken];
   readonly description?: readonly [IToken];
   readonly extendsTarget?: readonly [IToken];
@@ -879,7 +926,7 @@ interface WorkspaceBlockCtx {
 }
 
 interface ModelBlockCtx {
-  readonly Model: readonly [IToken];
+  readonly Model?: readonly [IToken];
   readonly LBrace?: readonly [IToken];
   readonly RBrace?: readonly [IToken];
   readonly modelBodyItem?: readonly CstNode[];

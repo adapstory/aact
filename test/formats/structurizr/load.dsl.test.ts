@@ -28,10 +28,13 @@ describe("structurizrFormat.load — .dsl dispatch", () => {
     ]);
     expect(result.model.elements["payment"]?.kind).toBe("System");
     expect(result.model.elements["notifications"]?.kind).toBe("System");
+    expect(result.model.elements["payment"]?.external).toBe(true);
+    expect(result.model.elements["notifications"]?.external).toBe(true);
 
     // Container kinds resolved by name (CRUD → repo tag, DB → kind
     // ContainerDb when technology heuristic kicks in)
     expect(result.model.elements["orders_api"]?.kind).toBe("Container");
+    expect(result.model.elements["orders_db"]?.kind).toBe("ContainerDb");
     expect(result.model.elements["orders_db"]?.technology).toBe("PostgreSQL");
 
     // Explicit relationships preserved with description, technology,

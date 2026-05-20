@@ -25,7 +25,9 @@ import type {
   Relation,
 } from "../../../model";
 import { buildModel } from "../../../model";
+import { inferKindFromTechnology } from "../../_shared/kindHeuristics";
 import type { LoadResult } from "../../types";
+import { STRUCTURIZR_LOCATION_EXTERNAL } from "../types";
 import type {
   ElementBodyNode,
   ElementNode,
@@ -598,11 +600,15 @@ const handleLeaf = (
 ): void => {
   const displayName = element.name.value;
   const agg = aggregateBody(element);
+  const kind = kindFromLeaf(element, agg.technology);
+  const external =
+    element.kind === "softwareSystem" &&
+    agg.tags.includes(STRUCTURIZR_LOCATION_EXTERNAL);
   containers.push({
     name,
     label: displayName,
-    kind: kindFromAstKind(element.kind),
-    external: false,
+    kind,
+    external,
     description: agg.description ?? "",
     tags: agg.tags,
     technology: agg.technology,
@@ -706,6 +712,16 @@ const handleElement = (
     return;
   }
   handleLeaf(element, children, containers, identifierMap, lookupKey);
+};
+
+const kindFromLeaf = (
+  element: Exclude<ElementNode, { kind: "group" }>,
+  technology: string | undefined,
+): ElementKind => {
+  if (element.kind === "container") {
+    return inferKindFromTechnology(technology, element.name.value);
+  }
+  return kindFromAstKind(element.kind);
 };
 
 const kindFromAstKind = (k: ElementNode["kind"]): ElementKind => {
@@ -912,14 +928,35 @@ const mergeContainerBody = (
   >[],
 ): Element => {
   const delta = aggregateBodyStatements(statements);
+  const technology = delta.technology ?? c.technology;
+  const tags = dedupeTags([...c.tags, ...delta.tags]);
   return {
     ...c,
     description: delta.description ?? c.description,
-    technology: delta.technology ?? c.technology,
-    tags: dedupeTags([...c.tags, ...delta.tags]),
+    kind: inferKindForExistingContainer(c, technology),
+    external:
+      c.kind === "System"
+        ? tags.includes(STRUCTURIZR_LOCATION_EXTERNAL)
+        : c.external,
+    technology,
+    tags,
     link: delta.link ?? c.link,
     properties: mergeProperties(c.properties, delta.properties),
   };
+};
+
+const inferKindForExistingContainer = (
+  c: Element,
+  technology: string | undefined,
+): ElementKind => {
+  if (
+    c.kind === "Container" ||
+    c.kind === "ContainerDb" ||
+    c.kind === "ContainerQueue"
+  ) {
+    return inferKindFromTechnology(technology, c.label ?? c.name);
+  }
+  return c.kind;
 };
 
 const mergeBoundaryBody = (
