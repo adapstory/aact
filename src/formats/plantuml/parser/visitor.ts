@@ -157,6 +157,24 @@ const unwrapStringLiteral = (image: string): string => {
   });
 };
 
+const diagramNameFromStartUml = (
+  token: IToken,
+  file: string,
+): DiagramName | undefined => {
+  const m = /^@startuml\b(?<rest>[^\r\n]*)/.exec(token.image);
+  const raw = m?.groups?.rest.trim();
+  if (!raw) return undefined;
+  const quoted =
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"));
+  return {
+    kind: "diagramName",
+    range: tokenRange(token, file),
+    value: quoted ? unwrapStringLiteral(raw) : raw,
+    form: quoted ? "string" : "identifier",
+  };
+};
+
 // ── Known named-arg names ──────────────────────────────────────────
 
 /**
@@ -712,7 +730,7 @@ class C4PumlAstBuilder extends BaseVisitor {
     const end = children.EndUml?.[0] ?? start;
     const name = children.diagramName
       ? this.diagramName(children.diagramName[0])
-      : undefined;
+      : diagramNameFromStartUml(start, file);
     const statements: DiagramStatement[] = [];
     for (const s of children.statement ?? []) {
       const st = this.statement(s);
@@ -955,16 +973,20 @@ class C4PumlAstBuilder extends BaseVisitor {
     const file = this.filePath;
     const children = cst.children as {
       StringLiteral?: IToken[];
+      SingleStringLiteral?: IToken[];
       IntegerLiteral?: IToken[];
       Identifier?: IToken[];
+      NamedArgKey?: IToken[];
       functionCallValue?: CstNode[];
+      keywordArgValue?: CstNode[];
     };
-    if (children.StringLiteral) {
-      const t = children.StringLiteral[0];
+    const stringToken =
+      children.StringLiteral?.[0] ?? children.SingleStringLiteral?.[0];
+    if (stringToken) {
       const lit: AstStringLiteral = {
         kind: "string",
-        range: tokenRange(t, file),
-        value: unwrapStringLiteral(t.image),
+        range: tokenRange(stringToken, file),
+        value: unwrapStringLiteral(stringToken.image),
       };
       return lit;
     }
@@ -983,7 +1005,19 @@ class C4PumlAstBuilder extends BaseVisitor {
       };
       return bare;
     }
-    const t = children.Identifier![0];
+    const t =
+      children.Identifier?.[0] ??
+      children.NamedArgKey?.[0] ??
+      (children.keywordArgValue
+        ? firstChildToken(children.keywordArgValue[0])
+        : undefined);
+    if (!t) {
+      return {
+        kind: "bareToken",
+        range: cstRange(cst, file),
+        value: "",
+      };
+    }
     const bare: BareToken = {
       kind: "bareToken",
       range: tokenRange(t, file),

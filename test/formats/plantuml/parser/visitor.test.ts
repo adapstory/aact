@@ -37,6 +37,14 @@ describe("PUML visitor — CST → AST", () => {
     expect(ast.diagrams[0].name?.form).toBe("string");
   });
 
+  it("captures @startuml names with spaces and dashes without lex noise", () => {
+    const src = `@startuml custom-rules demo\nContainer(api, "API")\n@enduml\n`;
+    const { ast, lexErrors, parseErrors } = parse(src);
+    expect(lexErrors).toEqual([]);
+    expect(parseErrors).toEqual([]);
+    expect(ast.diagrams[0].name?.value).toBe("custom-rules demo");
+  });
+
   it("element macro positionals retain order — alias, label, techn, descr", () => {
     const src = `@startuml\nContainer(api, "API", "Node.js", "REST gateway")\n@enduml\n`;
     const { ast } = parse(src);
@@ -78,6 +86,46 @@ describe("PUML visitor — CST → AST", () => {
     expect(byName.sprite.value).toMatchObject({
       kind: "string",
       value: "logo",
+    });
+  });
+
+  it("accepts PUML variable references as named argument values", () => {
+    const src = `@startuml\nPerson(p, "", $sprite=$img)\n@enduml\n`;
+    const { ast, lexErrors, parseErrors } = parse(src);
+    expect(lexErrors).toEqual([]);
+    expect(parseErrors).toEqual([]);
+    const stmt = ast.diagrams[0].statements[0];
+    if (stmt.kind !== "elementMacro") throw new Error("expected elementMacro");
+    expect(stmt.namedArgs[0]).toMatchObject({
+      name: "sprite",
+      value: { kind: "bareToken", value: "$img" },
+    });
+  });
+
+  it("accepts single-quoted strings used by PlantUML examples", () => {
+    const src = `@startuml\nSystem_Boundary(c1, 'Sample') {\n  Container(api, 'API')\n}\n@enduml\n`;
+    const { ast, lexErrors, parseErrors } = parse(src);
+    expect(lexErrors).toEqual([]);
+    expect(parseErrors).toEqual([]);
+    const boundary = ast.diagrams[0].statements[0];
+    if (boundary.kind !== "boundaryMacro")
+      throw new Error("expected boundaryMacro");
+    expect(boundary.positionals[1]).toMatchObject({
+      kind: "string",
+      value: "Sample",
+    });
+  });
+
+  it("accepts exact C4 macro keywords as bare aliases", () => {
+    const src = `@startuml\nComponent(Component, "Component")\n@enduml\n`;
+    const { ast, lexErrors, parseErrors } = parse(src);
+    expect(lexErrors).toEqual([]);
+    expect(parseErrors).toEqual([]);
+    const stmt = ast.diagrams[0].statements[0];
+    if (stmt.kind !== "elementMacro") throw new Error("expected elementMacro");
+    expect(stmt.positionals[0]).toMatchObject({
+      kind: "bareToken",
+      value: "Component",
     });
   });
 

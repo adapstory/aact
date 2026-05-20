@@ -28,14 +28,18 @@
  *      `!includes` of itself, so without this pass the lexer never
  *      gets past the URL line.
  *
- *   2. `stripPlantumlNative` — drops every line whose first token is
+ *   2. `stripLineComments` — drops whole-line `' comments` before
+ *      the lexer can confuse apostrophes inside comment prose with
+ *      single-quoted strings.
+ *
+ *   3. `stripPlantumlNative` — drops every line whose first token is
  *      a PlantUML host keyword the linter does not interpret
  *      (`skinparam`, `title`, `caption`, `header`, `footer`,
  *      `hide`, `show`, `scale`, `legend`, `endlegend`, `note`,
  *      `endnote`, `together`, `class`, `interface`, `enum`, …).
  *      `note ... end note` multi-line blocks land in the same pass.
  *
- *   3. `stripOpaqueMacros` — drops every line that opens with a known
+ *   4. `stripOpaqueMacros` — drops every line that opens with a known
  *      opaque C4 macro call: `LAYOUT_*`, `HIDE_STEREOTYPE`,
  *      `SHOW_*`, `SET_SKETCH_STYLE`, `SetPropertyHeader`,
  *      `AddProperty`, `WithoutPropertyHeader`,
@@ -47,14 +51,14 @@
  *      parens across newlines, so multi-line opaque calls (named-arg
  *      lists wrapped onto several lines) strip cleanly.
  *
- *   4. `stripDeploymentBlocks` — `Deployment_Node`, `Node`, `Node_L`,
+ *   5. `stripDeploymentBlocks` — `Deployment_Node`, `Node`, `Node_L`,
  *      `Node_R`, `Deployment_Node_L`, `Deployment_Node_R`. Per
  *      `grammar.md` §3 these are parsed-then-info-issue: out of C4
  *      scope, but a legal file must not crash. Whitespace out the
  *      macro call AND its balanced `{ ... }` body (if present); emit
  *      one `infoIssue` per stripped block.
  *
- *   5. `keepFirstDiagram` — `.puml` may hold multiple
+ *   6. `keepFirstDiagram` — `.puml` may hold multiple
  *      `@startuml`/`@enduml` blocks. aact processes the first and
  *      emits an info-issue for the rest.
  *
@@ -138,7 +142,12 @@ const rangeOf = (
 export const stripPreprocessor = (text: string): string =>
   text.replaceAll(/^[ \t]*!.*$/gm, (line) => blank(line));
 
-// ── Pass 2: PlantUML native ─────────────────────────────────────────
+// ── Pass 2: whole-line comments ────────────────────────────────────
+
+export const stripLineComments = (text: string): string =>
+  text.replaceAll(/^[ \t]*'.*$/gm, (line) => blank(line));
+
+// ── Pass 3: PlantUML native ─────────────────────────────────────────
 
 /**
  * Tokens we treat as line-leading PlantUML host syntax. The list is
@@ -191,7 +200,7 @@ export const stripPlantumlNative = (text: string): string => {
   return out;
 };
 
-// ── Pass 3: opaque C4 macros ────────────────────────────────────────
+// ── Pass 4: opaque C4 macros ────────────────────────────────────────
 
 const OPAQUE_MACRO_NAMES = [
   // Layout / view directives
@@ -237,6 +246,7 @@ const OPAQUE_MACRO_NAMES = [
   "UpdateContainerBoundaryStyle",
   "UpdateEnterpriseBoundaryStyle",
   "UpdateSystemBoundaryStyle",
+  "increment",
 ];
 
 const OPAQUE_MACRO_RE = new RegExp(
@@ -311,34 +321,34 @@ export const stripOpaqueMacros = (text: string): string => {
   return out.join("\n");
 };
 
-// ── Pass 3.5: arithmetic after function-call values ─────────────────
+// ── Pass 4.5: arithmetic after auto-number values ───────────────────
 
 /**
- * PUML preprocessor lets `$index=Index()-1` evaluate as
- * `Index() - 1` at render time. The C4 macro grammar has no notion
- * of arithmetic expressions — `)` must be followed by `,` or `)`,
- * so the bare `-1` after `Index()` would crash the parser.
+ * PUML preprocessor lets `$index=Index()-1` and legacy dynamic
+ * diagrams use `$index-1`. The C4 macro grammar has no notion of
+ * arithmetic expressions — `)` / `$index` must be followed by `,`
+ * or `)`, so the bare `-1` tail would produce parser recovery noise.
  *
  * The architectural meaning of `Index()-1` is "this step's index
  * minus one" — a presentation-time auto-numbering offset that
  * does not survive into the Model anyway (the Index() sentinel
  * itself already collapses to `Relation.order = undefined`).
  *
- * Strategy: strip the `[op N]` tail after a function-call's `)` so
- * the parser sees a clean `Index()` and grammar accepts it. Byte
- * length preserved as usual.
+ * Strategy: strip the `[op N]` tail after a function-call's `)` or
+ * a variable ref so the parser sees a clean `Index()` / `$index`.
+ * Byte length preserved as usual.
  *
- * Pattern: literal `)` followed by optional whitespace, an operator
- * (`+ - * /`), more whitespace, and digits. The operator/digits are
- * blanked; the `)` survives. Repeats across the source.
+ * Pattern: literal `)` or `$name` followed by optional whitespace,
+ * an operator (`+ - * /`), more whitespace, and digits. The
+ * operator/digits are blanked; the value head survives.
  */
 export const stripArithmeticAfterFunctionCalls = (text: string): string =>
   text.replaceAll(
-    /(\))(\s*[+\-*/]\s*\d+)/g,
-    (_match, paren: string, tail: string) => paren + blank(tail),
+    /(\)|\$[A-Za-z_]\w*)(\s*[+\-*/]\s*\d+)/g,
+    (_match, head: string, tail: string) => head + blank(tail),
   );
 
-// ── Pass 4: deployment blocks (info-issue) ──────────────────────────
+// ── Pass 5: deployment blocks (info-issue) ──────────────────────────
 
 const DEPLOYMENT_MACRO_NAMES = [
   "Deployment_Node_L",
@@ -417,7 +427,7 @@ export const stripDeploymentBlocks = (
   return { text: chars.join(""), issues };
 };
 
-// ── Pass 5: keep only the first diagram ─────────────────────────────
+// ── Pass 6: keep only the first diagram ─────────────────────────────
 
 /**
  * Whitespace out everything after the first `@enduml` (inclusive of
@@ -461,6 +471,7 @@ export const keepFirstDiagram = (
  */
 export const preParse = (text: string, file: string): PreParseResult => {
   let cur = stripPreprocessor(text);
+  cur = stripLineComments(cur);
   cur = stripPlantumlNative(cur);
   cur = stripOpaqueMacros(cur);
   cur = stripArithmeticAfterFunctionCalls(cur);

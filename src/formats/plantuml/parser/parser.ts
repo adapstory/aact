@@ -57,9 +57,13 @@ import {
   IntegerLiteral,
   LayDistance,
   LayDown,
+  LayDownLong,
   LayLeft,
+  LayLeftLong,
   LayRight,
+  LayRightLong,
   LayUp,
+  LayUpLong,
   LBrace,
   LParen,
   NamedArgKey,
@@ -95,6 +99,7 @@ import {
   RelUp,
   RelUpLong,
   RParen,
+  SingleStringLiteral,
   StartUml,
   StringLiteral,
   System,
@@ -286,6 +291,10 @@ class C4PumlParser extends CstParser {
   private layoutKeyword = this.RULE("layoutKeyword", () => {
     this.OR([
       { ALT: () => this.CONSUME(LayDistance) },
+      { ALT: () => this.CONSUME(LayDownLong) },
+      { ALT: () => this.CONSUME(LayUpLong) },
+      { ALT: () => this.CONSUME(LayLeftLong) },
+      { ALT: () => this.CONSUME(LayRightLong) },
       { ALT: () => this.CONSUME(LayDown) },
       { ALT: () => this.CONSUME(LayUp) },
       { ALT: () => this.CONSUME(LayLeft) },
@@ -343,6 +352,7 @@ class C4PumlParser extends CstParser {
   private argValue = this.RULE("argValue", () => {
     this.OR([
       { ALT: () => this.CONSUME(StringLiteral) },
+      { ALT: () => this.CONSUME(SingleStringLiteral) },
       { ALT: () => this.CONSUME(IntegerLiteral) },
       {
         // `Identifier(...)` — inline function call value (e.g.
@@ -351,6 +361,12 @@ class C4PumlParser extends CstParser {
         ALT: () => this.SUBRULE(this.functionCallValue),
       },
       { ALT: () => this.CONSUME(Identifier) },
+      // `$sprite=$img` / `$baseShape=$shape` variable references lex as
+      // NamedArgKey, but semantically they are just bare values.
+      { ALT: () => this.CONSUME(NamedArgKey) },
+      // C4/PlantUML examples occasionally use aliases that are exact
+      // macro keywords, e.g. `Component(Component, "Component")`.
+      { ALT: () => this.SUBRULE(this.keywordArgValue) },
     ]);
   });
 
@@ -359,6 +375,89 @@ class C4PumlParser extends CstParser {
     this.CONSUME(LParen);
     this.SUBRULE(this.argList);
     this.CONSUME(RParen);
+  });
+
+  private keywordArgValue = this.RULE("keywordArgValue", () => {
+    this.OR([
+      // Element keywords.
+      { ALT: () => this.CONSUME(Container) },
+      { ALT: () => this.CONSUME(ContainerDb) },
+      { ALT: () => this.CONSUME(ContainerQueue) },
+      { ALT: () => this.CONSUME(ContainerExt) },
+      { ALT: () => this.CONSUME(ContainerDbExt) },
+      { ALT: () => this.CONSUME(ContainerQueueExt) },
+      { ALT: () => this.CONSUME(Component) },
+      { ALT: () => this.CONSUME(ComponentDb) },
+      { ALT: () => this.CONSUME(ComponentQueue) },
+      { ALT: () => this.CONSUME(ComponentExt) },
+      { ALT: () => this.CONSUME(ComponentDbExt) },
+      { ALT: () => this.CONSUME(ComponentQueueExt) },
+      { ALT: () => this.CONSUME(System) },
+      { ALT: () => this.CONSUME(SystemDb) },
+      { ALT: () => this.CONSUME(SystemQueue) },
+      { ALT: () => this.CONSUME(SystemExt) },
+      { ALT: () => this.CONSUME(SystemDbExt) },
+      { ALT: () => this.CONSUME(SystemQueueExt) },
+      { ALT: () => this.CONSUME(Person) },
+      { ALT: () => this.CONSUME(PersonExt) },
+
+      // Boundary keywords.
+      { ALT: () => this.CONSUME(Boundary) },
+      { ALT: () => this.CONSUME(SystemBoundary) },
+      { ALT: () => this.CONSUME(ContainerBoundary) },
+      { ALT: () => this.CONSUME(EnterpriseBoundary) },
+
+      // Relation keywords.
+      { ALT: () => this.CONSUME(Rel) },
+      { ALT: () => this.CONSUME(RelDown) },
+      { ALT: () => this.CONSUME(RelUp) },
+      { ALT: () => this.CONSUME(RelLeft) },
+      { ALT: () => this.CONSUME(RelRight) },
+      { ALT: () => this.CONSUME(RelDownLong) },
+      { ALT: () => this.CONSUME(RelUpLong) },
+      { ALT: () => this.CONSUME(RelLeftLong) },
+      { ALT: () => this.CONSUME(RelRightLong) },
+      { ALT: () => this.CONSUME(RelBack) },
+      { ALT: () => this.CONSUME(RelBackDown) },
+      { ALT: () => this.CONSUME(RelBackUp) },
+      { ALT: () => this.CONSUME(RelBackLeft) },
+      { ALT: () => this.CONSUME(RelBackRight) },
+      { ALT: () => this.CONSUME(RelNeighbor) },
+      { ALT: () => this.CONSUME(RelBackNeighbor) },
+      { ALT: () => this.CONSUME(BiRel) },
+      { ALT: () => this.CONSUME(BiRelDown) },
+      { ALT: () => this.CONSUME(BiRelUp) },
+      { ALT: () => this.CONSUME(BiRelLeft) },
+      { ALT: () => this.CONSUME(BiRelRight) },
+      { ALT: () => this.CONSUME(BiRelNeighbor) },
+      { ALT: () => this.CONSUME(BiRelDownLong) },
+      { ALT: () => this.CONSUME(BiRelUpLong) },
+      { ALT: () => this.CONSUME(BiRelLeftLong) },
+      { ALT: () => this.CONSUME(BiRelRightLong) },
+      { ALT: () => this.CONSUME(RelIndex) },
+      { ALT: () => this.CONSUME(RelIndexBack) },
+      { ALT: () => this.CONSUME(RelIndexNeighbor) },
+      { ALT: () => this.CONSUME(RelIndexBackNeighbor) },
+      { ALT: () => this.CONSUME(RelIndexDown) },
+      { ALT: () => this.CONSUME(RelIndexUp) },
+      { ALT: () => this.CONSUME(RelIndexLeft) },
+      { ALT: () => this.CONSUME(RelIndexRight) },
+      { ALT: () => this.CONSUME(RelIndexDownLong) },
+      { ALT: () => this.CONSUME(RelIndexUpLong) },
+      { ALT: () => this.CONSUME(RelIndexLeftLong) },
+      { ALT: () => this.CONSUME(RelIndexRightLong) },
+
+      // Layout keywords.
+      { ALT: () => this.CONSUME(LayDown) },
+      { ALT: () => this.CONSUME(LayUp) },
+      { ALT: () => this.CONSUME(LayLeft) },
+      { ALT: () => this.CONSUME(LayRight) },
+      { ALT: () => this.CONSUME(LayDownLong) },
+      { ALT: () => this.CONSUME(LayUpLong) },
+      { ALT: () => this.CONSUME(LayLeftLong) },
+      { ALT: () => this.CONSUME(LayRightLong) },
+      { ALT: () => this.CONSUME(LayDistance) },
+    ]);
   });
 }
 

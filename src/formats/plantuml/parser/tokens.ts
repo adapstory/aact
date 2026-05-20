@@ -33,14 +33,6 @@ export const Newline = createToken({
   group: Lexer.SKIPPED,
 });
 
-/** PUML line comment — starts with a single quote `'` and runs to end
- *  of line. Distinct from PUML's block `/' ... '/` form below. */
-export const LineComment = createToken({
-  name: "LineComment",
-  pattern: /'[^\r\n]*/,
-  group: Lexer.SKIPPED,
-});
-
 /** PUML block comment `/' ... '/`. */
 export const BlockComment = createToken({
   name: "BlockComment",
@@ -54,6 +46,20 @@ export const BlockComment = createToken({
 export const StringLiteral = createToken({
   name: "StringLiteral",
   pattern: /"(?:[^"\\]|\\.)*"/,
+});
+
+/** `'...'` — accepted by PlantUML/C4 examples for labels. */
+export const SingleStringLiteral = createToken({
+  name: "SingleStringLiteral",
+  pattern: /'(?:[^'\\\r\n]|\\.)*'/,
+});
+
+/** PUML line comment — starts with a single quote `'` and runs to end
+ *  of line. Distinct from PUML's block `/' ... '/` form above. */
+export const LineComment = createToken({
+  name: "LineComment",
+  pattern: /'[^\r\n]*/,
+  group: Lexer.SKIPPED,
 });
 
 /**
@@ -113,7 +119,7 @@ const keyword = (name: string, lexeme: string) =>
 // @startuml / @enduml
 export const StartUml = createToken({
   name: "StartUml",
-  pattern: /@startuml\b/,
+  pattern: /@startuml[^\r\n]*/,
 });
 export const EndUml = createToken({
   name: "EndUml",
@@ -239,6 +245,10 @@ export const LayDown = relKeyword("LayDown", "Lay_D");
 export const LayUp = relKeyword("LayUp", "Lay_U");
 export const LayLeft = relKeyword("LayLeft", "Lay_L");
 export const LayRight = relKeyword("LayRight", "Lay_R");
+export const LayDownLong = relKeyword("LayDownLong", "Lay_Down");
+export const LayUpLong = relKeyword("LayUpLong", "Lay_Up");
+export const LayLeftLong = relKeyword("LayLeftLong", "Lay_Left");
+export const LayRightLong = relKeyword("LayRightLong", "Lay_Right");
 export const LayDistance = relKeyword("LayDistance", "Lay_Distance");
 
 // Preprocessor — `!include`, `!define`, etc. Each `!keyword` is a
@@ -282,10 +292,11 @@ export const allTokens = [
   // Whitespace / comments (skipped)
   WhiteSpace,
   Newline,
-  LineComment,
   BlockComment,
 
   // Literals
+  SingleStringLiteral,
+  LineComment,
   StringLiteral,
   IntegerLiteral,
 
@@ -394,6 +405,10 @@ export const allTokens = [
 
   // Layout macros
   LayDistance,
+  LayDownLong,
+  LayUpLong,
+  LayLeftLong,
+  LayRightLong,
   LayDown,
   LayUp,
   LayLeft,
