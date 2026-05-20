@@ -64,17 +64,12 @@
   <header class="header">
     <span class="chip">{data.kind} boundary</span>
     <span class="label">{data.label}</span>
-    <span class="meta">
-      {#if data.expanded}
-        expanded
-      {:else if data.canExpand}
+    {#if !data.expanded}
+      <span class="meta">
         {data.childCount} child{data.childCount === 1 ? "" : "ren"} · dblclick to
-        expand
-      {:else}
-        {data.childCount} child{data.childCount === 1 ? "" : "ren"} · dblclick to
-        enter
-      {/if}
-    </span>
+        {data.canExpand ? "expand" : "enter"}
+      </span>
+    {/if}
   </header>
   <Handle type="source" position={Position.Right} />
 </div>

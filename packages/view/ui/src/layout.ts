@@ -350,7 +350,14 @@ interface ElkInputNode {
   layoutOptions?: Record<string, string>;
 }
 
-const containerLayoutOptions: Record<string, string> = { ...layeredOptions };
+// Expanded boundaries reserve extra top-padding so children render
+// below the BoundaryNode's header (kind chip + label + meta line)
+// instead of being painted on top of it. The header is ~76px tall —
+// 96 gives a clean margin.
+const containerLayoutOptions: Record<string, string> = {
+  ...layeredOptions,
+  "elk.padding": "[top=96, left=44, bottom=44, right=44]",
+};
 
 interface ElkInputEdge {
   id: string;
