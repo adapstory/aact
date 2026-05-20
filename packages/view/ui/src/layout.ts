@@ -4,31 +4,83 @@ import type { Edge, Node } from "@xyflow/svelte";
 import type { Boundary, Element, Model } from "./types.ts";
 
 /**
- * Hierarchical layout for the currently-visible scope. ELK's
- * `layered` algorithm gives directed C4-style layouts where edges
- * generally flow left-to-right and child containers stack
- * predictably. We compute coordinates here and hand pre-positioned
- * `Node`s to Svelte Flow so the user never sees a re-layout flash
- * after the model loads.
+ * Three layout strategies sharing one ELK pipeline:
  *
- * The function is async because ELK exposes a web-worker-compatible
- * Promise API; we use the bundled in-process variant which still
- * resolves immediately on small graphs.
+ *   - `layoutScope`  — Drill mode. Flat layout for the current
+ *                      breadcrumb level; siblings only, parents are
+ *                      replaced as the user descends.
+ *
+ *   - `layoutNested` — Expand-in-place mode. Boundaries the user
+ *                      toggles open render inline as containers,
+ *                      with their children visible alongside parent
+ *                      siblings.
+ *
+ *   - `layoutFlat`   — Full hierarchy. Every boundary in the model
+ *                      starts expanded; user sees the whole tree at
+ *                      once. Useful for an overview or print.
+ *
+ * Nested and Flat both share the same ELK `INCLUDE_CHILDREN` tree
+ * and `parentId` flattening — Flat is just "expanded = every
+ * boundary name" preconfigured.
+ *
+ * The id-prefix convention (`b:` for boundaries, `e:` for elements)
+ * is exported so node components and click handlers can decode IDs.
  */
 const elk = new ELK();
 
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 80;
+const LEAF_WIDTH = 220;
+const LEAF_HEIGHT = 110;
+const PERSON_WIDTH = 200;
+const PERSON_HEIGHT = 130;
+const BOUNDARY_MIN_WIDTH = 260;
+const BOUNDARY_MIN_HEIGHT = 160;
+
+export const elementId = (name: string): string => `e:${name}`;
+export const boundaryId = (name: string): string => `b:${name}`;
+
+const leafSize = (kind: Element["kind"]): { width: number; height: number } =>
+  kind === "Person"
+    ? { width: PERSON_WIDTH, height: PERSON_HEIGHT }
+    : { width: LEAF_WIDTH, height: LEAF_HEIGHT };
+
+const elementNodeType = (kind: Element["kind"]): string => {
+  if (kind === "Person") return "person";
+  if (kind === "SystemDb" || kind === "ContainerDb" || kind === "ComponentDb")
+    return "database";
+  if (
+    kind === "SystemQueue" ||
+    kind === "ContainerQueue" ||
+    kind === "ComponentQueue"
+  )
+    return "queue";
+  return "element";
+};
+
+const elementNodeData = (e: Element): Record<string, unknown> => ({
+  name: e.name,
+  label: e.label,
+  kind: e.kind,
+  description: e.description ?? "",
+  external: e.external,
+  technology: e.technology ?? "",
+  tags: e.tags,
+});
+
+const boundaryNodeData = (
+  b: Boundary,
+  options: { expanded: boolean; canExpand: boolean },
+): Record<string, unknown> => ({
+  name: b.name,
+  label: b.label,
+  kind: b.kind,
+  childCount: b.elementNames.length + b.boundaryNames.length,
+  expanded: options.expanded,
+  canExpand: options.canExpand,
+});
 
 export interface LayoutScope {
   readonly elements: readonly Element[];
   readonly boundaries: readonly Boundary[];
-  /**
-   * Relations resolved to the current visible scope. `fromKind` /
-   * `toKind` indicate whether each endpoint resolves to an element
-   * or to a (possibly ancestor) boundary node — `layoutScope`
-   * needs this to build the `e:` / `b:` id prefix correctly.
-   */
   readonly relations: ReadonlyArray<{
     readonly from: string;
     readonly to: string;
@@ -43,100 +95,73 @@ export interface LayoutResult {
   readonly edges: Edge[];
 }
 
-const kindBackground = (kind: Element["kind"]): string => {
-  switch (kind) {
-    case "Person":
-      return "#3b82f6";
-    case "System":
-      return "#6366f1";
-    case "SystemDb":
-    case "ContainerDb":
-    case "ComponentDb":
-      return "#f59e0b";
-    case "SystemQueue":
-    case "ContainerQueue":
-    case "ComponentQueue":
-      return "#fb923c";
-    default:
-      return "#2563eb";
-  }
+const layeredOptions = {
+  "elk.algorithm": "layered",
+  "elk.direction": "RIGHT",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "80",
+  "elk.spacing.nodeNode": "45",
+  "elk.padding": "[top=48, left=44, bottom=44, right=44]",
 };
+
+/** ----------------------------------------------------------------
+ *  Drill mode (existing behaviour). One scope, flat layout.
+ *  ---------------------------------------------------------------- */
 
 export const layoutScope = async (
   scope: LayoutScope,
 ): Promise<LayoutResult> => {
-  const elkNodes = [
-    ...scope.boundaries.map((b) => ({
-      id: `b:${b.name}`,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    })),
-    ...scope.elements.map((e) => ({
-      id: `e:${e.name}`,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    })),
-  ];
   const edgeId = (
     r: LayoutScope["relations"][number],
   ): { source: string; target: string } => ({
-    source: `${r.fromKind === "boundary" ? "b" : "e"}:${r.from}`,
-    target: `${r.toKind === "boundary" ? "b" : "e"}:${r.to}`,
+    source: r.fromKind === "boundary" ? boundaryId(r.from) : elementId(r.from),
+    target: r.toKind === "boundary" ? boundaryId(r.to) : elementId(r.to),
   });
+
+  const elkChildren = [
+    ...scope.boundaries.map((b) => ({
+      id: boundaryId(b.name),
+      width: BOUNDARY_MIN_WIDTH,
+      height: BOUNDARY_MIN_HEIGHT,
+    })),
+    ...scope.elements.map((e) => ({
+      id: elementId(e.name),
+      ...leafSize(e.kind),
+    })),
+  ];
   const elkEdges = scope.relations.map((r, index) => {
     const { source, target } = edgeId(r);
-    return {
-      id: `edge-${index}`,
-      sources: [source],
-      targets: [target],
-    };
+    return { id: `edge-${index}`, sources: [source], targets: [target] };
   });
 
   const result = await elk.layout({
     id: "root",
-    layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": "RIGHT",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "60",
-      "elk.spacing.nodeNode": "30",
-      "elk.padding": "[top=30, left=30, bottom=30, right=30]",
-    },
-    children: elkNodes,
+    layoutOptions: layeredOptions,
+    children: elkChildren,
     edges: elkEdges,
   });
 
   const nodes: Node[] = [];
   for (const b of scope.boundaries) {
-    const laid = result.children?.find((c) => c.id === `b:${b.name}`);
+    const id = boundaryId(b.name);
+    const laid = result.children?.find((c) => c.id === id);
     nodes.push({
-      id: `b:${b.name}`,
+      id,
       type: "boundary",
       position: { x: laid?.x ?? 0, y: laid?.y ?? 0 },
-      data: {
-        name: b.name,
-        label: b.label,
-        kind: b.kind,
-        childCount:
-          (b.elementNames?.length ?? 0) + (b.boundaryNames?.length ?? 0),
-      },
-      style: `width: ${NODE_WIDTH}px; height: ${NODE_HEIGHT}px;`,
+      data: boundaryNodeData(b, { expanded: false, canExpand: false }),
+      style: `width: ${laid?.width ?? BOUNDARY_MIN_WIDTH}px; height: ${laid?.height ?? BOUNDARY_MIN_HEIGHT}px;`,
     });
   }
   for (const e of scope.elements) {
-    const laid = result.children?.find((c) => c.id === `e:${e.name}`);
+    const id = elementId(e.name);
+    const laid = result.children?.find((c) => c.id === id);
+    const { width, height } = leafSize(e.kind);
     nodes.push({
-      id: `e:${e.name}`,
-      type: "element",
+      id,
+      type: elementNodeType(e.kind),
       position: { x: laid?.x ?? 0, y: laid?.y ?? 0 },
-      data: {
-        name: e.name,
-        label: e.label,
-        kind: e.kind,
-        external: e.external,
-        technology: e.technology ?? "",
-        color: kindBackground(e.kind),
-      },
-      style: `width: ${NODE_WIDTH}px; height: ${NODE_HEIGHT}px;`,
+      data: elementNodeData(e),
+      style: `width: ${width}px; height: ${height}px;`,
     });
   }
 
@@ -155,19 +180,20 @@ export const layoutScope = async (
   return { nodes, edges };
 };
 
-/**
- * Build a map from element name to the visible ancestor it belongs
- * to in the current scope. "Visible" means a boundary that's rendered
- * as a node at this level (root boundary on Landscape, child boundary
- * inside a parent on drill-down). Elements directly in the visible
- * scope map to themselves; elements deeper in the tree map to the
- * top-most visible boundary in their ancestor chain.
- *
- * This is the basis for cross-boundary edge aggregation: a relation
- * from a deeply-nested element to a standalone Person bubbles up to
- * `(boundary) → (Person)`, which is what users actually want to see
- * at Landscape level.
- */
+/** ----------------------------------------------------------------
+ *  Shared ownership infrastructure (Drill aggregation + Nested
+ *  endpoint resolution).
+ *  ---------------------------------------------------------------- */
+
+const buildParentMap = (model: Model): Map<string, string> => {
+  const parent = new Map<string, string>();
+  for (const b of Object.values(model.boundaries)) {
+    for (const child of b.boundaryNames) parent.set(child, b.name);
+    for (const el of b.elementNames) parent.set(el, b.name);
+  }
+  return parent;
+};
+
 const buildOwnership = (
   model: Model,
   visibleBoundaryNames: ReadonlySet<string>,
@@ -184,9 +210,6 @@ const buildOwnership = (
 
   const walk = (b: Boundary, top: Boundary): void => {
     for (const n of b.elementNames) {
-      // Only set ownership if the element doesn't already resolve to
-      // a closer visible node — direct membership in a visible
-      // boundary wins over transitive nesting.
       if (!owner.has(n)) {
         owner.set(n, { kind: "boundary", name: top.name });
       }
@@ -205,15 +228,6 @@ const buildOwnership = (
   return owner;
 };
 
-/**
- * Resolve relations into edges anchored on visible nodes. For each
- * relation, look up both endpoints in the ownership map: if either
- * doesn't resolve to a visible node it's dropped (out of scope), if
- * both endpoints resolve to the same node it's dropped (self-loop
- * from aggregation), otherwise it's kept. Duplicates are folded so
- * multiple inner relations between the same pair of boundaries show
- * as one aggregated edge.
- */
 const buildScopeRelations = (
   model: Model,
   owner: ReadonlyMap<string, { kind: "element" | "boundary"; name: string }>,
@@ -224,41 +238,32 @@ const buildScopeRelations = (
       const fromOwner = owner.get(el.name);
       const toOwner = owner.get(rel.to);
       if (!fromOwner || !toOwner) continue;
-      const fromId = `${fromOwner.kind === "boundary" ? "b" : "e"}:${fromOwner.name}`;
-      const toId = `${toOwner.kind === "boundary" ? "b" : "e"}:${toOwner.name}`;
-      if (fromId === toId) continue;
-      const key = `${fromId}->${toId}`;
-      const existing = out.get(key);
-      // Keep the first label we see; subsequent aggregated relations
-      // are summarised by the edge's existence. The details panel
-      // still shows the full list when the user clicks an endpoint.
-      if (!existing) {
-        out.set(key, {
-          from: fromOwner.name,
-          to: toOwner.name,
-          label:
-            fromOwner.kind === "boundary" || toOwner.kind === "boundary"
-              ? undefined
-              : rel.description,
-          fromKind: fromOwner.kind,
-          toKind: toOwner.kind,
-        });
-      }
+      const fromKey =
+        fromOwner.kind === "boundary"
+          ? boundaryId(fromOwner.name)
+          : elementId(fromOwner.name);
+      const toKey =
+        toOwner.kind === "boundary"
+          ? boundaryId(toOwner.name)
+          : elementId(toOwner.name);
+      if (fromKey === toKey) continue;
+      const key = `${fromKey}->${toKey}`;
+      if (out.has(key)) continue;
+      out.set(key, {
+        from: fromOwner.name,
+        to: toOwner.name,
+        label:
+          fromOwner.kind === "boundary" || toOwner.kind === "boundary"
+            ? undefined
+            : rel.description,
+        fromKind: fromOwner.kind,
+        toKind: toOwner.kind,
+      });
     }
   }
   return [...out.values()];
 };
 
-/**
- * Compute the visible scope for the current breadcrumb stack:
- *  - top of stack === landscape → root boundaries + standalone elements
- *  - top of stack === boundary  → its direct children (elements + nested
- *                                  boundaries)
- *
- * Cross-boundary relations are aggregated to the visible level via
- * `buildOwnership` so a Person → Container interaction surfaces as
- * `Person → [owning boundary]` on Landscape rather than vanishing.
- */
 export const sliceModel = (
   model: Model,
   breadcrumb: readonly {
@@ -273,9 +278,9 @@ export const sliceModel = (
       .map((n) => model.boundaries[n])
       .filter((b): b is Boundary => Boolean(b));
     const visibleBoundaryNames = new Set(rootBoundaries.map((b) => b.name));
-    const boundedNames = new Set<string>();
+    const bounded = new Set<string>();
     const walk = (b: Boundary): void => {
-      for (const n of b.elementNames) boundedNames.add(n);
+      for (const n of b.elementNames) bounded.add(n);
       for (const child of b.boundaryNames) {
         const cb = model.boundaries[child];
         if (cb) walk(cb);
@@ -283,7 +288,7 @@ export const sliceModel = (
     };
     for (const b of rootBoundaries) walk(b);
     const standalone = Object.values(model.elements).filter(
-      (e) => !boundedNames.has(e.name),
+      (e) => !bounded.has(e.name),
     );
     const visibleElementNames = new Set(standalone.map((e) => e.name));
     const owner = buildOwnership(
@@ -319,4 +324,243 @@ export const sliceModel = (
     elements,
     relations: buildScopeRelations(model, owner),
   };
+};
+
+/** ----------------------------------------------------------------
+ *  Nested / Flat modes — hierarchical layout with `parentId`.
+ *  ---------------------------------------------------------------- */
+
+interface ElkInputNode {
+  id: string;
+  width?: number;
+  height?: number;
+  children?: ElkInputNode[];
+  layoutOptions?: Record<string, string>;
+}
+
+const containerLayoutOptions: Record<string, string> = { ...layeredOptions };
+
+const buildNestedTree = (
+  model: Model,
+  expanded: ReadonlySet<string>,
+  rootBoundaries: readonly Boundary[],
+  standalone: readonly Element[],
+): ElkInputNode => {
+  const renderBoundary = (b: Boundary): ElkInputNode => {
+    if (!expanded.has(b.name)) {
+      return {
+        id: boundaryId(b.name),
+        width: BOUNDARY_MIN_WIDTH,
+        height: BOUNDARY_MIN_HEIGHT,
+      };
+    }
+    const children: ElkInputNode[] = [];
+    for (const childName of b.boundaryNames) {
+      const child = model.boundaries[childName];
+      if (child) children.push(renderBoundary(child));
+    }
+    for (const childName of b.elementNames) {
+      const child = model.elements[childName];
+      if (child) {
+        children.push({
+          id: elementId(child.name),
+          ...leafSize(child.kind),
+        });
+      }
+    }
+    return {
+      id: boundaryId(b.name),
+      children,
+      layoutOptions: containerLayoutOptions,
+    };
+  };
+
+  return {
+    id: "root",
+    layoutOptions: {
+      ...layeredOptions,
+      "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+    },
+    children: [
+      ...rootBoundaries.map(renderBoundary),
+      ...standalone.map((e) => ({
+        id: elementId(e.name),
+        ...leafSize(e.kind),
+      })),
+    ],
+  };
+};
+
+/**
+ * Resolve a relation endpoint to the deepest visible node id.
+ * Walks up the parent chain; if a parent isn't expanded, the
+ * collapsed parent becomes the visible endpoint instead.
+ */
+const visibleEndpoint = (
+  name: string,
+  kindHint: "element" | "boundary",
+  expanded: ReadonlySet<string>,
+  parentMap: ReadonlyMap<string, string>,
+): { id: string; kind: "element" | "boundary"; name: string } => {
+  let current = name;
+  let kind: "element" | "boundary" = kindHint;
+  for (;;) {
+    const parent = parentMap.get(current);
+    if (parent === undefined || expanded.has(parent)) {
+      return {
+        id: kind === "boundary" ? boundaryId(current) : elementId(current),
+        kind,
+        name: current,
+      };
+    }
+    current = parent;
+    kind = "boundary";
+  }
+};
+
+interface ElkResultNode {
+  id: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  children?: readonly ElkResultNode[];
+}
+
+/**
+ * Flatten ELK's nested result into Svelte Flow nodes. ELK returns
+ * child positions relative to their parent — exactly what
+ * `parentId` + `extent: "parent"` expects.
+ */
+const flattenElkResult = (
+  results: readonly ElkResultNode[],
+  model: Model,
+  expanded: ReadonlySet<string>,
+  parentId: string | undefined,
+): Node[] => {
+  const out: Node[] = [];
+  for (const r of results) {
+    const x = r.x ?? 0;
+    const y = r.y ?? 0;
+    const width = r.width ?? 0;
+    const height = r.height ?? 0;
+    const isBoundary = r.id.startsWith("b:");
+    const name = r.id.slice(2);
+    if (isBoundary) {
+      const b = model.boundaries[name];
+      if (!b) continue;
+      const isExpanded = expanded.has(name);
+      const node: Node = {
+        id: r.id,
+        type: "boundary",
+        position: { x, y },
+        data: boundaryNodeData(b, { expanded: isExpanded, canExpand: true }),
+        style: `width: ${width}px; height: ${height}px;`,
+      };
+      if (parentId) {
+        node.parentId = parentId;
+        node.extent = "parent";
+      }
+      out.push(node);
+      if (isExpanded && r.children?.length) {
+        out.push(...flattenElkResult(r.children, model, expanded, r.id));
+      }
+    } else {
+      const el = model.elements[name];
+      if (!el) continue;
+      const { width: dw, height: dh } = leafSize(el.kind);
+      const node: Node = {
+        id: r.id,
+        type: elementNodeType(el.kind),
+        position: { x, y },
+        data: elementNodeData(el),
+        style: `width: ${width || dw}px; height: ${height || dh}px;`,
+      };
+      if (parentId) {
+        node.parentId = parentId;
+        node.extent = "parent";
+      }
+      out.push(node);
+    }
+  }
+  return out;
+};
+
+const collectVisibleEdges = (
+  model: Model,
+  expanded: ReadonlySet<string>,
+  parentMap: ReadonlyMap<string, string>,
+): Edge[] => {
+  const seen = new Map<string, Edge>();
+  let index = 0;
+  for (const el of Object.values(model.elements)) {
+    for (const rel of el.relations) {
+      const from = visibleEndpoint(el.name, "element", expanded, parentMap);
+      const to = visibleEndpoint(rel.to, "element", expanded, parentMap);
+      if (from.id === to.id) continue;
+      const key = `${from.id}->${to.id}`;
+      if (seen.has(key)) continue;
+      seen.set(key, {
+        id: `edge-${index++}`,
+        source: from.id,
+        target: to.id,
+        label:
+          from.kind === "element" && to.kind === "element"
+            ? rel.description
+            : undefined,
+        type: "default",
+        animated: false,
+      });
+    }
+  }
+  return [...seen.values()];
+};
+
+const collectStandaloneAndRoots = (
+  model: Model,
+): { rootBoundaries: Boundary[]; standalone: Element[] } => {
+  const rootBoundaries = (model.rootBoundaryNames ?? [])
+    .map((n) => model.boundaries[n])
+    .filter((b): b is Boundary => Boolean(b));
+  const bounded = new Set<string>();
+  const walk = (b: Boundary): void => {
+    for (const n of b.elementNames) bounded.add(n);
+    for (const child of b.boundaryNames) {
+      const cb = model.boundaries[child];
+      if (cb) walk(cb);
+    }
+  };
+  for (const b of rootBoundaries) walk(b);
+  const standalone = Object.values(model.elements).filter(
+    (e) => !bounded.has(e.name),
+  );
+  return { rootBoundaries, standalone };
+};
+
+export const layoutNested = async (
+  model: Model,
+  expanded: ReadonlySet<string>,
+): Promise<LayoutResult> => {
+  const { rootBoundaries, standalone } = collectStandaloneAndRoots(model);
+  const parentMap = buildParentMap(model);
+  const tree = buildNestedTree(model, expanded, rootBoundaries, standalone);
+  const result = await elk.layout(tree);
+  const nodes = flattenElkResult(
+    result.children ?? [],
+    model,
+    expanded,
+    undefined,
+  );
+  const edges = collectVisibleEdges(model, expanded, parentMap);
+  return { nodes, edges };
+};
+
+/**
+ * Flat mode = every boundary in the model is expanded from the
+ * start. Use this for a single overview rendering of the full
+ * tree (good for print / read-only big-picture view).
+ */
+export const layoutFlat = (model: Model): Promise<LayoutResult> => {
+  const everyBoundary = new Set(Object.keys(model.boundaries));
+  return layoutNested(model, everyBoundary);
 };

@@ -10,53 +10,72 @@
     label: string;
     kind: string;
     childCount: number;
+    expanded: boolean;
+    canExpand: boolean;
   }
 
-  let { data }: NodeProps<{ data: BoundaryNodeData }> = $props();
+  let { data, selected }: NodeProps<{ data: BoundaryNodeData }> = $props();
 
   const actions = getContext<ViewActions>(VIEW_ACTIONS);
 
-  // System boundaries get a distinct accent so they don't blend
-  // with Container boundaries on Landscape view — same palette as
-  // System elements, applied to the dashed border + kind chip.
-  const accent =
-    data.kind === "System"
-      ? "#6366f1"
-      : data.kind === "Component"
-        ? "#14b8a6"
-        : "#94a3b8";
+  // Boundary borders follow the same C4 progression as the elements
+  // they wrap, just dashed and translucent so they read as containers
+  // not as solid shapes.
+  const palette: Record<string, string> = {
+    Enterprise: "#0b3b6c",
+    System: "#1168bd",
+    Container: "#438dd5",
+    Component: "#85bbf0",
+  };
+  const accent = palette[data.kind] ?? "#94a3b8";
+
+  const onClick = (event: MouseEvent): void => {
+    // Boundary headers absorb clicks; ignore clicks that bubble up
+    // from interactive children (controls, child nodes) so we don't
+    // double-fire selection.
+    if (event.target !== event.currentTarget) {
+      const isHeader = (event.target as HTMLElement).closest(".header");
+      if (!isHeader) return;
+    }
+    actions?.selectBoundary(data.name);
+  };
 
   const onDblClick = (event: MouseEvent): void => {
     event.stopPropagation();
-    actions?.enterBoundary(data.name, data.label);
-  };
-
-  const onClick = (): void => {
-    actions?.selectBoundary(data.name);
+    if (data.canExpand) {
+      actions?.toggleBoundary(data.name, data.label);
+    } else {
+      actions?.enterBoundary(data.name, data.label);
+    }
   };
 </script>
 
 <div
   class="boundary"
+  class:expanded={data.expanded}
+  class:is-selected={selected}
   style:--accent={accent}
-  role="button"
-  tabindex="0"
+  role="group"
+  aria-label={`${data.kind} boundary: ${data.label}`}
   onclick={onClick}
   ondblclick={onDblClick}
-  onkeydown={(event) => {
-    if (event.key === "Enter")
-      actions?.enterBoundary(data.name, data.label);
-  }}
 >
   <Handle type="target" position={Position.Left} />
-  <span class="kind">
-    <span class="kind-chip">{data.kind}</span>
-    boundary
-  </span>
-  <span class="label">{data.label}</span>
-  <span class="hint">
-    {data.childCount} child{data.childCount === 1 ? "" : "ren"} · double-click to enter
-  </span>
+  <header class="header">
+    <span class="chip">{data.kind} boundary</span>
+    <span class="label">{data.label}</span>
+    <span class="meta">
+      {#if data.expanded}
+        expanded
+      {:else if data.canExpand}
+        {data.childCount} child{data.childCount === 1 ? "" : "ren"} · dblclick to
+        expand
+      {:else}
+        {data.childCount} child{data.childCount === 1 ? "" : "ren"} · dblclick to
+        enter
+      {/if}
+    </span>
+  </header>
   <Handle type="source" position={Position.Right} />
 </div>
 
@@ -64,49 +83,62 @@
   .boundary {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: rgba(30, 41, 59, 0.6);
+    border-radius: 16px;
     border: 2px dashed var(--accent, #94a3b8);
+    background: color-mix(in srgb, var(--accent, #94a3b8) 8%, transparent);
     color: #e2e8f0;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
     cursor: pointer;
+    transition:
+      background 120ms ease,
+      box-shadow 120ms ease;
+    backdrop-filter: blur(2px);
   }
   .boundary:hover {
-    background: rgba(30, 41, 59, 0.85);
+    background: color-mix(in srgb, var(--accent, #94a3b8) 14%, transparent);
   }
-  .kind {
+  .boundary.expanded {
+    cursor: default;
+  }
+  .boundary.is-selected {
+    box-shadow:
+      0 0 0 1px var(--accent),
+      0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .header {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #94a3b8;
-    font-weight: 600;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    border-bottom: 1px dashed
+      color-mix(in srgb, var(--accent) 60%, transparent);
+    background: color-mix(in srgb, var(--accent) 18%, #0f172a);
+    border-radius: 14px 14px 0 0;
   }
-  .kind-chip {
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: var(--accent, #94a3b8);
+  .chip {
+    align-self: flex-start;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent);
     color: white;
     font-weight: 700;
   }
   .label {
     font-size: 14px;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.15;
+    color: #f8fafc;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .hint {
-    font-size: 11px;
-    color: #94a3b8;
+  .meta {
+    font-size: 10px;
+    color: rgba(226, 232, 240, 0.6);
   }
 </style>
