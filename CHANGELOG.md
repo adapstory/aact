@@ -6,6 +6,146 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.17 — 2026-05-20
+
+UX polish and parser corpus coverage release. Every text-mode anchor
+in the CLI now relativises against cwd (rustc / biome / eslint
+convention), so `aact check` no longer eats half the terminal width
+with `/Users/.../project/architecture.puml:23:1` repeats. `aact
+generate --format model-json` writes a `$schema` pointer so
+VSCode / Cursor / JetBrains / Zed auto-attach the bundled JSON Schema
+and validate `*.aact.json` files inline. The PUML and Structurizr
+parsers survive the upstream stdlib corpus, and Structurizr-DSL
+loaded models reach parity with what the Structurizr JSON loader
+already produced (`ContainerDb` from technology, `external: true`
+from the location tag).
+
+### Added
+
+- **`$schema` in `architecture.aact.json`.** `aact generate
+--format model-json` now writes a top-level
+  `"$schema": "https://raw.githubusercontent.com/Byndyusoft/aact/main/schemas/aact-model-v1.json"`
+  ahead of `schemaVersion` and `model`. Editors that resolve
+  `$schema` (VSCode + forks, JetBrains, Zed) attach the bundled
+  JSON Schema and provide autocomplete on Element / Boundary
+  fields, `kind` enum suggestions, hover docs from the TS JSDoc,
+  and real-time validation — same DX as writing TS without
+  running aact. The schema is generated from `ModelJsonFile` via
+  `pnpm schema:gen` and pinned in CI with `pnpm schema:check`
+  so it can never drift from the TS type.
+- **`renderCheckText` takes an explicit `mode` argument** (`"human"`
+  or `"github-actions"`). Tests no longer rely on ambient
+  `GITHUB_ACTIONS` env; production CLI behaviour is unchanged via
+  an env-derived default.
+- **PUML parser** accepts the C4-PlantUML stdlib's long-form layout
+  macros (`Lay_Down` / `Lay_Up` / `Lay_Left` / `Lay_Right`),
+  single-quoted strings (`'Sample'`), `$var` references as named
+  arg values (`$sprite=$img`), and macro keywords used as bare
+  element aliases (`Component(Component, "Component")`). A new
+  `stripLineComments` preParse pass blanks `' …` whole-line
+  comments before the lexer can pair them with single-quoted
+  strings. `@startuml diagram-name` (and quoted variants) carries
+  through to the AST.
+- **Structurizr parser** infers `ContainerDb` / `ContainerQueue`
+  from a container's `technology` field via the shared
+  `kindHeuristics` helper, and lifts `external: true` from the
+  `structurizr.location.external` tag for softwareSystem leaves —
+  DSL-loaded models now match what the Structurizr JSON loader
+  already produced. CST recovery hardened so a partial parse
+  (missing closing brace) yields a `recovered: true` Model
+  instead of throwing on undefined token access.
+- **Corpus confidence smoke tests** for both parsers. Walks
+  `examples/`, `fixtures/`, and `.parser-refs/{C4-PlantUML,java}/`
+  — first-party diagrams must round-trip through `generate`,
+  upstream fixtures must never throw, and `*.dsl` / compiled
+  `*.json` siblings must produce identical Models.
+
+### Fixed
+
+- **CLI text-mode paths relativise against cwd.** Following the
+  rustc / biome / eslint / oxlint convention, every user-facing
+  path in `aact check` (violation table primary anchor, `↳`
+  related-location rows, dry-run `~ replace …` preview,
+  `editConflict` diagnostic message, `✔ Applied N fix(es),
+wrote …` success line), `aact diff` header, and `aact generate`
+  write messages now prints relative to the current working
+  directory when the file lives under it. The URI on the OSC 8
+  hyperlink stays absolute so editor click-through still works in
+  VSCode / Cursor / Ghostty / iTerm2 / Zed / CI. JSON / SARIF
+  outputs untouched — they continue to carry absolute paths for
+  downstream tooling that joins them against external anchors.
+- **`envelope.meta.source` canonicalised to absolute path.** The
+  raw config string (`"./architecture.puml"`) used to sit next to
+  an absolute `configPath` from c12, mixing conventions in a
+  single envelope and breaking downstream tools that joined the
+  two fields. Both now land absolute.
+- **`source.path` / `source.writePath` resolve relative to the
+  config file.** Running `npx aact check` from a subdirectory was
+  hitting `ENOENT` because relative paths in `aact.config.ts`
+  resolved against the process cwd instead of the directory of
+  the config. Both fields now go through
+  `resolve(dirname(configFile), …)` at envelope-assembly time.
+- **`rule.helpUri` points at the rule's ADR**, not a dead README
+  anchor. The synthesised `<readme>#<rule>` link was a soft 404
+  for every built-in (the README has no per-rule headings).
+  `helpUri` now points at the actual ADR blob URL
+  (`https://github.com/Byndyusoft/aact/blob/main/ADRs/Anti-corruption%20Layer.md`,
+  etc.); rules without an ADR omit `helpUri` entirely instead of
+  emitting a dead link.
+- **Tool errors no longer print twice.** The shared error renderer
+  consumed `diagnostics[0]` for the `✗ <command>: <message>` line
+  and then `renderDiagnostics` re-emitted the same primary
+  diagnostic as `⚠ <kind>  <message>`. Skip the first entry on
+  error envelopes; route the `✗` line to stderr (Unix convention)
+  so pipe consumers (`aact check | jq`) still see failures even
+  when stdout is captured.
+- **Structurizr `linkedRelationshipId` edges dropped on load.**
+  Structurizr JSON propagates each `Container → Container` edge
+  up to its enclosing `System → System` pair as a derived
+  relationship with `linkedRelationshipId` pointing back at the
+  concrete edge. They are aggregate / view artefacts, not
+  author-level model edges — loading them duplicated every
+  container call as a phantom system-to-system arrow on the
+  Model.
+- **`structurizr.dsl.identifier` filtered from `Element.properties`.**
+  The DSL compiler's internal marker is plumbing, not user data;
+  it no longer leaks through into Model.properties to pollute
+  diff / generate output with a key no one wrote.
+- **pnpm 11 compatibility.**
+  `package.json#pnpm.onlyBuiltDependencies` was silently ignored
+  by pnpm 11 (the field moved). esbuild + unrs-resolver build
+  approval now lives in `pnpm-workspace.yaml`'s `allowBuilds` map.
+- **`aact generate` with empty output no longer trips on null
+  `outputPath`.** When `outputSink === "none"` / `"stdout"`,
+  `data.outputPath` is null; passing it through
+  `formatDisplayPath` would crash on `.startsWith` without a
+  guard.
+
+### Tooling
+
+- **Stryker scope expanded** to `src/diff/**`, `src/config.ts`,
+  and the pure modules under `src/cli/output/` (envelope,
+  sarifReporter, hyperlinks, resolveMode). Targeted test passes
+  on the two below-threshold files lifted scores to:
+  `resolveMode 100`, `envelope 89`, `hyperlinks 86`,
+  `sarifReporter 80`, `computeDiff 71` (was 58), `config 100`
+  (was 35).
+- **`@fast-check/vitest` property test** for `renderCheckText`'s
+  `mode` argument — sweeps mode × env combinations so a future
+  refactor that quietly re-reads `process.env.GITHUB_ACTIONS`
+  instead of the explicit arg fails on at least one combination.
+- **CI fetches parser reference fixtures** before tests so the
+  empirical roundtrip / corpus suites actually exercise the
+  upstream samples instead of silently skipping.
+- **CI verifies schema sync** via `pnpm schema:check`.
+- **Lint thresholds tuned** for the file groups that already had
+  legitimate density (`computeDiff` 50, `rules/*` 35,
+  `cli/commands/rule` 25). Same justification pattern as the
+  existing parser / validate / analyze overrides — splitting on
+  the 20-branch ceiling would hide the algorithm.
+- **Knip / ESLint / Prettier all clean** on the v3 branch — zero
+  warnings, zero errors.
+
 ## v3.0.0-beta.16 — 2026-05-20
 
 Agent-facing release. Three commands' worth of new surface for AI
