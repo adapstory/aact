@@ -1,4 +1,5 @@
 import { loadConfig } from "c12";
+import path from "pathe";
 
 import { loadAndValidateConfig } from "../../src/cli/loadConfig";
 
@@ -71,6 +72,33 @@ describe("loadAndValidateConfig", () => {
     const { config } = await loadAndValidateConfig();
     expect(config.source.type).toBe("plantuml");
     expect(config.source.path).toBe("test.puml");
+  });
+
+  it("resolves source.path and source.writePath relative to the config file", async () => {
+    const configFile = path.resolve(
+      "/repo/examples/ecommerce-structurizr/aact.config.ts",
+    );
+    mockLoadConfig.mockResolvedValue({
+      config: {
+        source: {
+          type: "structurizr",
+          path: "./workspace.json",
+          writePath: "./workspace.dsl",
+        },
+      },
+      configFile,
+    });
+
+    const { config } = await loadAndValidateConfig(
+      "examples/ecommerce-structurizr/aact.config.ts",
+    );
+
+    expect(config.source.path).toBe(
+      path.resolve("/repo/examples/ecommerce-structurizr/workspace.json"),
+    );
+    expect(config.source.writePath).toBe(
+      path.resolve("/repo/examples/ecommerce-structurizr/workspace.dsl"),
+    );
   });
 
   describe("source.type auto-detection via defaultPattern", () => {

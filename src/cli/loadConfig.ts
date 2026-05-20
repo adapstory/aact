@@ -1,5 +1,5 @@
 import { loadConfig } from "c12";
-import { basename } from "pathe";
+import { basename, dirname, isAbsolute, resolve } from "pathe";
 import * as v from "valibot";
 
 import type { AactConfig } from "../config";
@@ -122,7 +122,8 @@ const loadRawConfig = async (
     });
     return {
       raw: result.config,
-      configFile: result.configFile ?? null,
+      configFile:
+        result.configFile ?? (configPath ? resolve(configPath) : null),
     };
   } catch (error) {
     throw new ToolError(
@@ -156,6 +157,14 @@ const isAbsent = (raw: unknown): boolean => {
   return typeof raw === "object" && Object.keys(raw).length === 0;
 };
 
+const resolveConfigRelativePath = (
+  filePath: string,
+  configFile: string | null,
+): string => {
+  if (isAbsolute(filePath) || !configFile) return filePath;
+  return resolve(dirname(configFile), filePath);
+};
+
 export interface LoadedConfig {
   readonly config: AactConfig;
   /** Absolute path to the resolved config file. `null` when caller
@@ -179,11 +188,17 @@ export const loadAndValidateConfig = async (
   }
 
   const parsed = parseConfig(raw, configPath);
+  const configBase = configFile;
 
   // Normalize source: string shorthand → object form, infer type if missing.
   const rawSource =
     typeof parsed.source === "string" ? { path: parsed.source } : parsed.source;
   const type = rawSource.type ?? (await inferSourceType(rawSource.path));
+  const sourcePath = resolveConfigRelativePath(rawSource.path, configBase);
+  const writePath =
+    "writePath" in rawSource && rawSource.writePath !== undefined
+      ? resolveConfigRelativePath(rawSource.writePath, configBase)
+      : undefined;
 
   // Validate explicit type against registry — fail fast вместо deferred
   // "Unknown format" из loadModel. Inferred type гарантированно валиден.
@@ -204,11 +219,9 @@ export const loadAndValidateConfig = async (
       ...parsed,
       customRules,
       source: {
-        path: rawSource.path,
+        path: sourcePath,
         type,
-        ...("writePath" in rawSource && rawSource.writePath !== undefined
-          ? { writePath: rawSource.writePath }
-          : {}),
+        ...(writePath === undefined ? {} : { writePath }),
       },
     },
     configPath: configFile,
