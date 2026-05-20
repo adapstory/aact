@@ -90,6 +90,7 @@ export interface StructurizrRelationship {
   description?: string;
   sourceId: string;
   destinationId: string;
+  linkedRelationshipId?: string;
   technology?: string;
   interactionStyle?: "Synchronous" | "Asynchronous";
   tags?: string;

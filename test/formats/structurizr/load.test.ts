@@ -362,6 +362,59 @@ describe("structurizr load — relations", () => {
     expect(allElements(result.model)).toHaveLength(1);
   });
 
+  it("skips linked Structurizr JSON relationships as derived duplicates", async () => {
+    const file = path.join(tmpDir, "linked-relations.json");
+    await writeFile(
+      file,
+      JSON.stringify({
+        model: {
+          softwareSystems: [
+            {
+              id: "sys_a",
+              name: "System A",
+              properties: { "structurizr.dsl.identifier": "sys_a" },
+              containers: [
+                {
+                  id: "a",
+                  name: "A",
+                  relationships: [
+                    {
+                      id: "r1",
+                      sourceId: "a",
+                      destinationId: "b",
+                      description: "HTTP",
+                    },
+                    {
+                      id: "r2",
+                      sourceId: "a",
+                      destinationId: "sys_b",
+                      linkedRelationshipId: "r1",
+                      description: "HTTP",
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              id: "sys_b",
+              name: "System B",
+              properties: { "structurizr.dsl.identifier": "sys_b" },
+              containers: [{ id: "b", name: "B", relationships: [] }],
+            },
+          ],
+          people: [],
+        },
+      }),
+      "utf8",
+    );
+
+    const result = await load(file);
+    expect(result.issues).toHaveLength(0);
+    expect(getElement(result.model, "a")?.relations).toMatchObject([
+      { to: "b", description: "HTTP" },
+    ]);
+  });
+
   it("trims whitespace from relation tags", async () => {
     const model = await loadWorkspace({
       model: {

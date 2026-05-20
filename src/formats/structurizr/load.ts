@@ -241,6 +241,10 @@ export const load = async (filePath: string): Promise<LoadResult> => {
 
     const newRelations: Relation[] = [...source.relations];
     for (const rel of relationships) {
+      // Structurizr JSON can include derived relationships linked to a
+      // concrete container-level relation (for example Container -> System).
+      // They are view/aggregate duplicates, not author-level model edges.
+      if (rel.linkedRelationshipId) continue;
       const targetName = idToName.get(rel.destinationId);
       if (!targetName) continue; // dangling — validateModel surfaces
       newRelations.push(buildRelation(rel, targetName));
