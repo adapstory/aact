@@ -8,6 +8,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`model-json` source format.** A first-class registered Format —
+  `aact.config.ts → source: { type: "model-json", path: "arch.aact.json" }`
+  is now a valid config, `aact check` / `aact analyze` / `aact model` /
+  `aact diff` all consume `.aact.json` through the same registry
+  pathway as PlantUML and Structurizr. Capabilities: **load +
+  generate, no fix** (JSON has no meaningful range semantics for
+  C4 edits — for authoring use PUML/DSL; model-json is the
+  LLM-input / snapshot / cross-tool exchange surface).
+
+  **Canonical shape** on emit: `{ "schemaVersion": 1, "model": Model }`.
+  The version header future-proofs the format independently of the
+  Model TS type evolving post-GA. Loader accepts three shapes by
+  structural detection (canonical → envelope → raw):
+  - **Canonical** — `{ schemaVersion, model }`, from
+    `aact generate --format model-json`.
+  - **`CliEnvelope<ModelData>`** — from `aact model --json`, so
+    `aact model --json > snap.aact.json && aact diff snap.aact.json`
+    just works.
+  - **Raw `Model`** — `{ elements, boundaries, rootBoundaryNames }`,
+    hand-authored or LLM-emitted.
+
+  **Determinism.** `generate` sorts element / boundary keys
+  alphabetically before stringifying so two emits from the same
+  Model are byte-identical — `aact diff` against a regenerated
+  baseline shows phantom-move-free output.
+
+  **Auto-detect** keys off `*.aact.json` (strict — collision-free
+  with structurizr's `workspace.json` and PUML's `*.puml`).
+  Non-canonical names like `my-arch.json` require explicit
+  `source.type: "model-json"` in config or `--baseline-format
+model-json` for `aact diff`. `diff/baseline.ts` no longer owns
+  an inline JSON loader; it routes through `loadFormat("model-json")`
+  like every other format.
+
 - **`aact diff <baseline> [<current>]` command.** Structural diff
   between two C4 architecture models — designed for PR review:
   agents and humans see what changed _architecturally_, not what

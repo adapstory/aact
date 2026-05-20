@@ -12,7 +12,14 @@ type FormatLoader = () => Promise<Format>;
 
 const formatLoaders: Readonly<Record<string, FormatLoader>> = Object.freeze({
   plantuml: () => import("./plantuml").then((m) => m.plantumlFormat),
+  // Register order matters for auto-detect: knownFormatNames() iterates
+  // in insertion order. Keep `structurizr` before `model-json` so a
+  // file literally named `workspace.json` resolves to structurizr
+  // (exact-basename match) before model-json's `*.aact.json` is even
+  // consulted. Patterns don't overlap today, but order is defensive
+  // documentation for the next contributor adding a `.json` format.
   structurizr: () => import("./structurizr").then((m) => m.structurizrFormat),
+  "model-json": () => import("./model-json").then((m) => m.modelJsonFormat),
   kubernetes: () => import("./kubernetes").then((m) => m.kubernetesFormat),
 });
 

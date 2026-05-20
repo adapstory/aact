@@ -43,6 +43,13 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
     generate: true,
     fix: false, // IaC не authored руками — fix не имеет смысла
   },
+  {
+    name: "model-json",
+    load: true,
+    generate: true,
+    fix: false, // JSON не имеет meaningful range semantics для C4 edits
+    defaultPattern: "*.aact.json",
+  },
 ];
 
 describe("Format registry — capability contracts", () => {

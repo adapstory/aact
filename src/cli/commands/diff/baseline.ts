@@ -16,36 +16,26 @@ import type { Model, ModelIssue } from "../../../model";
 import { ToolError } from "../../output";
 
 /**
- * Resolve `<arg>` to a normalized Model + provenance label, for
- * `aact diff <baseline> [<current>]`. Three input forms:
+ * Resolve `<arg>` to a normalized Model + provenance label for
+ * `aact diff <baseline> [<current>]`. The whole heavy-lift —
+ * format detection, parsing, shape validation — lives in the
+ * Format registry. This module only resolves the three CLI input
+ * forms (file path, git ref, stdin) into a file-on-disk that the
+ * registry's `format.load(path)` can consume:
  *
- *  - **File path** — `./architecture.puml`, `./snapshot.aact.json`.
- *    Format is inferred from the extension via the registry.
- *  - **Git ref** — `<ref>:<path>`, e.g. `main:architecture.puml`,
- *    `HEAD~3:docs/c4.dsl`. We shell out to `git show <ref>:<path>`,
- *    write the bytes to memory, and feed them through the loader
- *    keyed on the path's extension. Pass through `--baseline-format`
- *    / `--current-format` to override detection.
- *  - **`-` (stdin)** — read once, feed to the loader. The format
- *    is required via the corresponding `--*-format` flag.
+ *  - **File path** — passed straight to the loader.
+ *  - **Git ref** — `<ref>:<path>` — we shell out to `git show` and
+ *    write the bytes to a scratch tmp file so the loader sees a
+ *    real path.
+ *  - **`-` (stdin)** — read once, write to scratch, hand the path
+ *    to the loader. Stdin requires an explicit `--*-format`
+ *    because we have nothing else to infer from.
  *
- * The `.aact.json` format is special: we accept *both* a raw
- * `Model` object and a `CliEnvelope<ModelData>` (the output of
- * `aact model --json`), so `aact model --json > snap.json`
- * followed by `aact diff snap.json …` works without
- * post-processing. Detection is by shape: a `data.model` key
- * wins, then bare `elements` / `boundaries` keys, else error.
- *
- * `.json` autodetect policy: any file ending in `.json` is treated
- * as `model-json` by default, *except* the conventional
- * `workspace.json` (Structurizr's canonical workspace dump). If
- * you have a Structurizr workspace stored under a non-canonical
- * name (e.g. `my-arch.json`), pass `--baseline-format structurizr`
- * (or `--current-format structurizr`) to override. We don't try
- * to sniff the JSON shape here because Structurizr workspace JSON
- * and Model JSON have non-overlapping top-level keys but the cost
- * of a wrong guess (loader crash on shape mismatch) is higher
- * than asking the user to be explicit one time.
+ * Format autodetect by extension is uniform across the registry —
+ * see `formats/registry.ts` and `cli/loadConfig.ts:inferSourceType`.
+ * model-json's canonical extension is `*.aact.json`; non-canonical
+ * `.json` files (e.g. `my-arch.json` Structurizr export) require
+ * `--baseline-format <name>` explicitly.
  */
 
 const isGitRef = (arg: string): boolean =>
@@ -77,6 +67,25 @@ const readGitRefBytes = (ref: string, path: string): string => {
 
 const readStdin = (): string => readFileSync(0, "utf8");
 
+/**
+ * Pick a sensible suffix for the scratch tmp file so loaders that
+ * key off extension still behave correctly: `model-json` wants
+ * `.aact.json`, `plantuml` wants `.puml`, etc.
+ */
+const scratchExt = (arg: string, formatHint: string): string => {
+  if (arg === "-") {
+    return formatHint === "model-json" ? ".aact.json" : `.${formatHint}`;
+  }
+  return path.extname(splitGitRef(arg).path) || `.${formatHint}`;
+};
+
+/**
+ * Format detection by file extension — uniform with the registry's
+ * `defaultPattern` for each format. Restricted to the canonical
+ * extensions to keep "auto-detect" predictable; non-canonical
+ * names (`my-arch.json`, `topology.txt`) require an explicit
+ * `--baseline-format` flag.
+ */
 const detectFormatFromPath = (filePath: string): string | undefined => {
   const base = path.basename(filePath).toLowerCase();
   const ext = path.extname(base);
@@ -84,77 +93,9 @@ const detectFormatFromPath = (filePath: string): string | undefined => {
     return "plantuml";
   }
   if (ext === ".dsl") return "structurizr";
-  if (ext === ".json") {
-    // Structurizr's canonical workspace dump is `workspace.json` —
-    // the structurizr format's load() understands it. `.aact.json`
-    // is our format-neutral Model dump. Other .json files default
-    // to the latter (raw Model / CliEnvelope<ModelData> heuristic).
-    if (base === "workspace.json") return "structurizr";
-    return "model-json";
-  }
+  if (base === "workspace.json") return "structurizr";
+  if (base.endsWith(".aact.json")) return "model-json";
   return undefined;
-};
-
-/**
- * Load a Model from a `.aact.json` content. Accepts both raw `Model`
- * and `CliEnvelope<ModelData>` shapes so `aact model --json` output
- * works as a diff input without re-shaping.
- */
-const loadModelJsonContent = (
-  content: string,
-  source: string,
-): { model: Model; issues: readonly ModelIssue[] } => {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch (error) {
-    throw new ToolError(
-      "model.parseError",
-      `${source} is not valid JSON: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-      { path: source },
-    );
-  }
-  if (!parsed || typeof parsed !== "object") {
-    throw new ToolError(
-      "model.parseError",
-      `${source} JSON top-level is not an object`,
-      { path: source },
-    );
-  }
-  const obj = parsed as Record<string, unknown>;
-
-  // Shape 1: CliEnvelope<ModelData> — `aact model --json` output.
-  if (
-    obj.data &&
-    typeof obj.data === "object" &&
-    "model" in (obj.data as Record<string, unknown>)
-  ) {
-    const data = obj.data as { model: unknown; issues?: unknown };
-    if (!data.model || typeof data.model !== "object") {
-      throw new ToolError(
-        "model.parseError",
-        `${source} envelope.data.model is missing or invalid`,
-        { path: source },
-      );
-    }
-    return {
-      model: data.model as Model,
-      issues: Array.isArray(data.issues) ? (data.issues as ModelIssue[]) : [],
-    };
-  }
-
-  // Shape 2: raw Model — must carry the structural keys.
-  if ("elements" in obj && "boundaries" in obj && "rootBoundaryNames" in obj) {
-    return { model: obj as unknown as Model, issues: [] };
-  }
-
-  throw new ToolError(
-    "model.parseError",
-    `${source} does not look like a Model or CliEnvelope<ModelData> — expected keys "elements"/"boundaries"/"rootBoundaryNames" at top level, or "data.model"`,
-    { path: source },
-  );
 };
 
 export interface LoadBaselineInput {
@@ -242,15 +183,6 @@ export const loadBaseline = async (
     }
   }
 
-  if (formatHint === "model-json") {
-    const { model, issues } = loadModelJsonContent(rawContent, sourceLabel);
-    return {
-      model,
-      issues,
-      side: { source: sourceLabel, format: "model-json" },
-    };
-  }
-
   const format = await loadFormat(formatHint);
   if (!canLoad(format)) {
     throw new ToolError(
@@ -270,11 +202,10 @@ export const loadBaseline = async (
   let scratchDir: string | undefined;
   if (needsScratch) {
     scratchDir = mkdtempSync(path.join(tmpdir(), "aact-diff-"));
-    const ext =
-      path.extname(
-        arg === "-" ? `stdin.${formatHint}` : splitGitRef(arg).path,
-      ) || `.${formatHint}`;
-    pathForLoad = path.join(scratchDir, `baseline${ext}`);
+    pathForLoad = path.join(
+      scratchDir,
+      `baseline${scratchExt(arg, formatHint)}`,
+    );
     writeFileSync(pathForLoad, rawContent, "utf8");
   }
 
@@ -285,6 +216,15 @@ export const loadBaseline = async (
       issues: result.issues,
       side: { source: sourceLabel, format: formatHint },
     };
+  } catch (error) {
+    // Format loader threw — surface as model.parseError so the
+    // envelope downstream sees a consistent `kind`.
+    if (error instanceof ToolError) throw error;
+    throw new ToolError(
+      "model.parseError",
+      `${sourceLabel}: ${error instanceof Error ? error.message : String(error)}`,
+      { path: sourceLabel },
+    );
   } finally {
     if (scratchDir) {
       try {

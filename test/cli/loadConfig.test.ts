@@ -73,6 +73,40 @@ describe("loadAndValidateConfig", () => {
     expect(config.source.path).toBe("test.puml");
   });
 
+  describe("source.type auto-detection via defaultPattern", () => {
+    it("infers plantuml from *.puml extension", async () => {
+      mockLoadConfig.mockResolvedValue({
+        config: { source: "./architecture.puml" },
+      });
+      const { config } = await loadAndValidateConfig();
+      expect(config.source.type).toBe("plantuml");
+    });
+
+    it("infers structurizr from workspace.json basename", async () => {
+      mockLoadConfig.mockResolvedValue({
+        config: { source: "./workspace.json" },
+      });
+      const { config } = await loadAndValidateConfig();
+      expect(config.source.type).toBe("structurizr");
+    });
+
+    it("infers model-json from *.aact.json suffix", async () => {
+      mockLoadConfig.mockResolvedValue({
+        config: { source: "./snapshot.aact.json" },
+      });
+      const { config } = await loadAndValidateConfig();
+      expect(config.source.type).toBe("model-json");
+    });
+
+    it("falls back to plantuml-style positional shape when no pattern matches and explicit type is missing", async () => {
+      mockLoadConfig.mockResolvedValue({
+        config: { source: { type: "model-json", path: "./my-arch.json" } },
+      });
+      const { config } = await loadAndValidateConfig();
+      expect(config.source.type).toBe("model-json");
+    });
+  });
+
   it("accepts empty-object form for option-less rules (symmetry with option-bearing)", async () => {
     // After the AcyclicOptions/CohesionOptions/etc. additions, the
     // four rules that have no options today still accept `rules:

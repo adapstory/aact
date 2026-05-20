@@ -94,7 +94,7 @@ export default tseslint.config(
         { type: "format-shared", pattern: "src/formats/_shared" },
         {
           type: "format",
-          pattern: "src/formats/(plantuml|structurizr|kubernetes)",
+          pattern: "src/formats/(plantuml|structurizr|kubernetes|model-json)",
           capture: ["formatName"],
         },
         {

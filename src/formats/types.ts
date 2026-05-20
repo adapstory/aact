@@ -74,6 +74,9 @@ export interface LoadResult {
  * artefactов. Capabilities опциональны:
  *  - PlantUML / Mermaid / Structurizr: load + generate + fix
  *  - Kubernetes / Compose: load + generate (no fix — IaC не authored руками)
+ *  - model-json: load + generate (no fix — JSON не имеет meaningful
+ *    range semantics for C4 edits; для авторской работы PUML/DSL,
+ *    JSON это snapshot / LLM-input / cross-tool exchange surface)
  *  - Hypothetical write-only: только generate
  *  - Hypothetical read-only: только load
  *
