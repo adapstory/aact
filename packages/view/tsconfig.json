@@ -12,9 +12,8 @@
     "strict": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "resolveJsonModule": true,
-    "types": ["vitest/globals"]
+    "resolveJsonModule": true
   },
-  "include": ["./**/*.ts"],
-  "exclude": ["./dist", "./node_modules", "./packages"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
 }

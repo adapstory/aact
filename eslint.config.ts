@@ -26,6 +26,12 @@ export default tseslint.config(
       // on demand by scripts/fetch-parser-refs.sh, not our code.
       ".parser-refs/",
       "stryker.config.mjs",
+      // Workspace packages own their own lint config + dist. The
+      // root config only covers the core aact code under src/ and
+      // test/; touching packages/* from here would force one
+      // ruleset onto wildly different runtime stacks (Svelte +
+      // Vite under packages/view/, for instance).
+      "packages/",
     ],
   },
   js.configs.recommended,

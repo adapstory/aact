@@ -3,13 +3,26 @@ import type { KnipConfig } from "knip";
 // Knip — finds unused exports/files/deps. Run via `pnpm knip`.
 // Most config files are auto-detected; only non-default entries listed here.
 export default <KnipConfig>{
-  entry: [
-    "test/**/*.test.ts",
-    "examples/**/*.test.ts",
-    "examples/**/aact.config.ts",
-    "vitest.mutation.config.ts",
-  ],
-  project: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts"],
+  workspaces: {
+    ".": {
+      // Core aact package. Tests / examples / mutation config drive
+      // the entry surface; src/ is the project scope.
+      entry: [
+        "test/**/*.test.ts",
+        "examples/**/*.test.ts",
+        "examples/**/aact.config.ts",
+        "vitest.mutation.config.ts",
+      ],
+      project: ["src/**/*.ts", "test/**/*.ts", "examples/**/*.ts"],
+    },
+    "packages/view": {
+      // Optional companion. Entry is auto-detected from
+      // `exports`/`main` in packages/view/package.json; only the
+      // project scope needs to be explicit so knip doesn't pick
+      // up dist/ as source.
+      project: ["src/**/*.ts"],
+    },
+  },
   ignoreDependencies: [
     // Prettier plugin auto-loaded by prettier from name pattern; not imported.
     "prettier-plugin-packagejson",

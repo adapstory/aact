@@ -9,6 +9,7 @@ import { init } from "./commands/init";
 import { model } from "./commands/model";
 import { rule } from "./commands/rule";
 import { skill } from "./commands/skill";
+import { view } from "./commands/view";
 
 const main = defineCommand({
   meta: {
@@ -16,7 +17,17 @@ const main = defineCommand({
     version,
     description: "Architecture analysis and compliance tool",
   },
-  subCommands: { init, check, analyze, model, diff, generate, rule, skill },
+  subCommands: {
+    init,
+    check,
+    analyze,
+    model,
+    diff,
+    view,
+    generate,
+    rule,
+    skill,
+  },
 });
 
 void runMain(main);

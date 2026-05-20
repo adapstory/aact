@@ -45,6 +45,9 @@ export type DiagnosticKind =
   // Skill installer
   | "skill.unmanagedDir"
   | "skill.repoMismatch"
+  // Architecture workbench (`aact view`)
+  | "view.companionMissing"
+  | "view.bootFailed"
   // Catchall for unexpected internal errors (should never appear in normal flow)
   | "internal.unexpected";
 
