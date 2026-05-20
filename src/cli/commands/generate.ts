@@ -210,15 +210,20 @@ export const renderGenerateText: Renderer<GenerateData> = (envelope, sink) => {
     return;
   }
 
+  // `outputPath` is typed `string | null` because the stdout / none
+  // sinks set it to null upstream; both branches below have already
+  // returned, so anything reaching here has a real path. `?? ""`
+  // keeps TS happy without a non-null assertion in case a future
+  // GenerateOutputSink variant forgets to populate it.
+  const displayPath = formatDisplayPath(data.outputPath ?? "");
+
   if (data.outputSink === "file") {
-    sink.write(`✔ Written to ${formatDisplayPath(data.outputPath)}\n`);
+    sink.write(`✔ Written to ${displayPath}\n`);
     return;
   }
 
   // directory
-  sink.write(
-    `✔ Generated ${data.files.length} file(s) in ${formatDisplayPath(data.outputPath)}\n`,
-  );
+  sink.write(`✔ Generated ${data.files.length} file(s) in ${displayPath}\n`);
 };
 
 // -----------------------------------------------------------------------------
