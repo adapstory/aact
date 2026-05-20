@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { setContext } from "svelte";
+
   import {
     SvelteFlow,
     SvelteFlowProvider,
     Background,
     Controls,
+    MiniMap,
     type Node,
     type Edge,
   } from "@xyflow/svelte";
@@ -18,6 +21,7 @@
     Boundary,
     ModelEnvelope,
   } from "./types.ts";
+  import { VIEW_ACTIONS, type ViewActions } from "./actions.ts";
 
   let envelope = $state<ModelEnvelope | null>(null);
   let breadcrumb = $state<BreadcrumbEntry[]>([{ kind: "landscape" }]);
@@ -94,8 +98,10 @@
     connect();
   });
 
-  const onNodeClick = (event: CustomEvent<{ node: Node }>): void => {
-    const node = event.detail.node;
+  // Svelte Flow 1.x dispatches node clicks via the `onnodeclick`
+  // callback prop with shape `{ node, event }` — Svelte 4 event
+  // directives are not supported in the Svelte 5 build.
+  const onnodeclick = ({ node }: { node: Node }): void => {
     if (node.type === "element") {
       selected = { kind: "element", name: String(node.data.name) };
     } else if (node.type === "boundary") {
@@ -103,14 +109,23 @@
     }
   };
 
-  const onNodeDblClick = (event: CustomEvent<{ node: Node }>): void => {
-    const node = event.detail.node;
-    if (node.type !== "boundary") return;
-    const name = String(node.data.name);
-    const label = String(node.data.label ?? name);
+  // There is no `onnodedblclick` in @xyflow/svelte 1.x — custom node
+  // components dispatch drill-in intent via the ViewActions context.
+  const enterBoundary = (name: string, label: string): void => {
     breadcrumb = [...breadcrumb, { kind: "boundary", name, label }];
     selected = null;
   };
+
+  const actions: ViewActions = {
+    selectElement: (name) => {
+      selected = { kind: "element", name };
+    },
+    selectBoundary: (name) => {
+      selected = { kind: "boundary", name };
+    },
+    enterBoundary,
+  };
+  setContext(VIEW_ACTIONS, actions);
 
   const breadcrumbClick = (index: number): void => {
     breadcrumb = breadcrumb.slice(0, index + 1);
@@ -177,13 +192,18 @@
           {nodes}
           {edges}
           {nodeTypes}
+          {onnodeclick}
           fitView
           fitViewOptions={{ padding: 0.2 }}
-          on:nodeclick={onNodeClick}
-          on:nodedblclick={onNodeDblClick}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable
+          panOnDrag
+          zoomOnDoubleClick={false}
         >
           <Background />
           <Controls />
+          <MiniMap pannable zoomable />
         </SvelteFlow>
       </SvelteFlowProvider>
     </div>

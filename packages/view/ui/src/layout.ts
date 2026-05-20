@@ -23,10 +23,18 @@ const NODE_HEIGHT = 80;
 export interface LayoutScope {
   readonly elements: readonly Element[];
   readonly boundaries: readonly Boundary[];
+  /**
+   * Relations resolved to the current visible scope. `fromKind` /
+   * `toKind` indicate whether each endpoint resolves to an element
+   * or to a (possibly ancestor) boundary node — `layoutScope`
+   * needs this to build the `e:` / `b:` id prefix correctly.
+   */
   readonly relations: ReadonlyArray<{
     readonly from: string;
     readonly to: string;
     readonly label?: string;
+    readonly fromKind?: "element" | "boundary";
+    readonly toKind?: "element" | "boundary";
   }>;
 }
 
@@ -69,11 +77,20 @@ export const layoutScope = async (
       height: NODE_HEIGHT,
     })),
   ];
-  const elkEdges = scope.relations.map((r, index) => ({
-    id: `edge-${index}`,
-    sources: [`e:${r.from}`],
-    targets: [`e:${r.to}`],
-  }));
+  const edgeId = (
+    r: LayoutScope["relations"][number],
+  ): { source: string; target: string } => ({
+    source: `${r.fromKind === "boundary" ? "b" : "e"}:${r.from}`,
+    target: `${r.toKind === "boundary" ? "b" : "e"}:${r.to}`,
+  });
+  const elkEdges = scope.relations.map((r, index) => {
+    const { source, target } = edgeId(r);
+    return {
+      id: `edge-${index}`,
+      sources: [source],
+      targets: [target],
+    };
+  });
 
   const result = await elk.layout({
     id: "root",
@@ -123,16 +140,113 @@ export const layoutScope = async (
     });
   }
 
-  const edges: Edge[] = scope.relations.map((r, index) => ({
-    id: `edge-${index}`,
-    source: `e:${r.from}`,
-    target: `e:${r.to}`,
-    label: r.label,
-    type: "default",
-    animated: false,
-  }));
+  const edges: Edge[] = scope.relations.map((r, index) => {
+    const { source, target } = edgeId(r);
+    return {
+      id: `edge-${index}`,
+      source,
+      target,
+      label: r.label,
+      type: "default",
+      animated: false,
+    };
+  });
 
   return { nodes, edges };
+};
+
+/**
+ * Build a map from element name to the visible ancestor it belongs
+ * to in the current scope. "Visible" means a boundary that's rendered
+ * as a node at this level (root boundary on Landscape, child boundary
+ * inside a parent on drill-down). Elements directly in the visible
+ * scope map to themselves; elements deeper in the tree map to the
+ * top-most visible boundary in their ancestor chain.
+ *
+ * This is the basis for cross-boundary edge aggregation: a relation
+ * from a deeply-nested element to a standalone Person bubbles up to
+ * `(boundary) → (Person)`, which is what users actually want to see
+ * at Landscape level.
+ */
+const buildOwnership = (
+  model: Model,
+  visibleBoundaryNames: ReadonlySet<string>,
+  visibleElementNames: ReadonlySet<string>,
+): Map<string, { kind: "element" | "boundary"; name: string }> => {
+  const owner = new Map<
+    string,
+    { kind: "element" | "boundary"; name: string }
+  >();
+
+  for (const name of visibleElementNames) {
+    owner.set(name, { kind: "element", name });
+  }
+
+  const walk = (b: Boundary, top: Boundary): void => {
+    for (const n of b.elementNames) {
+      // Only set ownership if the element doesn't already resolve to
+      // a closer visible node — direct membership in a visible
+      // boundary wins over transitive nesting.
+      if (!owner.has(n)) {
+        owner.set(n, { kind: "boundary", name: top.name });
+      }
+    }
+    for (const child of b.boundaryNames) {
+      const cb = model.boundaries[child];
+      if (!cb) continue;
+      walk(cb, top);
+    }
+  };
+  for (const name of visibleBoundaryNames) {
+    const b = model.boundaries[name];
+    if (b) walk(b, b);
+  }
+
+  return owner;
+};
+
+/**
+ * Resolve relations into edges anchored on visible nodes. For each
+ * relation, look up both endpoints in the ownership map: if either
+ * doesn't resolve to a visible node it's dropped (out of scope), if
+ * both endpoints resolve to the same node it's dropped (self-loop
+ * from aggregation), otherwise it's kept. Duplicates are folded so
+ * multiple inner relations between the same pair of boundaries show
+ * as one aggregated edge.
+ */
+const buildScopeRelations = (
+  model: Model,
+  owner: ReadonlyMap<string, { kind: "element" | "boundary"; name: string }>,
+): LayoutScope["relations"] => {
+  const out = new Map<string, LayoutScope["relations"][number]>();
+  for (const el of Object.values(model.elements)) {
+    for (const rel of el.relations) {
+      const fromOwner = owner.get(el.name);
+      const toOwner = owner.get(rel.to);
+      if (!fromOwner || !toOwner) continue;
+      const fromId = `${fromOwner.kind === "boundary" ? "b" : "e"}:${fromOwner.name}`;
+      const toId = `${toOwner.kind === "boundary" ? "b" : "e"}:${toOwner.name}`;
+      if (fromId === toId) continue;
+      const key = `${fromId}->${toId}`;
+      const existing = out.get(key);
+      // Keep the first label we see; subsequent aggregated relations
+      // are summarised by the edge's existence. The details panel
+      // still shows the full list when the user clicks an endpoint.
+      if (!existing) {
+        out.set(key, {
+          from: fromOwner.name,
+          to: toOwner.name,
+          label:
+            fromOwner.kind === "boundary" || toOwner.kind === "boundary"
+              ? undefined
+              : rel.description,
+          fromKind: fromOwner.kind,
+          toKind: toOwner.kind,
+        });
+      }
+    }
+  }
+  return [...out.values()];
 };
 
 /**
@@ -141,9 +255,9 @@ export const layoutScope = async (
  *  - top of stack === boundary  → its direct children (elements + nested
  *                                  boundaries)
  *
- * Relations are filtered to edges where BOTH endpoints land on a node
- * in the current scope. Cross-scope edges are summarised separately
- * in the details panel rather than dangling off-canvas.
+ * Cross-boundary relations are aggregated to the visible level via
+ * `buildOwnership` so a Person → Container interaction surfaces as
+ * `Person → [owning boundary]` on Landscape rather than vanishing.
  */
 export const sliceModel = (
   model: Model,
@@ -158,6 +272,7 @@ export const sliceModel = (
     const rootBoundaries = (model.rootBoundaryNames ?? [])
       .map((n) => model.boundaries[n])
       .filter((b): b is Boundary => Boolean(b));
+    const visibleBoundaryNames = new Set(rootBoundaries.map((b) => b.name));
     const boundedNames = new Set<string>();
     const walk = (b: Boundary): void => {
       for (const n of b.elementNames) boundedNames.add(n);
@@ -170,16 +285,17 @@ export const sliceModel = (
     const standalone = Object.values(model.elements).filter(
       (e) => !boundedNames.has(e.name),
     );
-    const visibleNames = new Set<string>(standalone.map((e) => e.name));
-    const relations: LayoutScope["relations"] = [];
-    for (const el of standalone) {
-      for (const rel of el.relations) {
-        if (visibleNames.has(rel.to)) {
-          relations.push({ from: el.name, to: rel.to, label: rel.description });
-        }
-      }
-    }
-    return { boundaries: rootBoundaries, elements: standalone, relations };
+    const visibleElementNames = new Set(standalone.map((e) => e.name));
+    const owner = buildOwnership(
+      model,
+      visibleBoundaryNames,
+      visibleElementNames,
+    );
+    return {
+      boundaries: rootBoundaries,
+      elements: standalone,
+      relations: buildScopeRelations(model, owner),
+    };
   }
 
   const b = top.name ? model.boundaries[top.name] : undefined;
@@ -191,14 +307,16 @@ export const sliceModel = (
   const boundaries = b.boundaryNames
     .map((n) => model.boundaries[n])
     .filter((nb): nb is Boundary => Boolean(nb));
-  const visibleNames = new Set<string>(elements.map((e) => e.name));
-  const relations: LayoutScope["relations"] = [];
-  for (const el of elements) {
-    for (const rel of el.relations) {
-      if (visibleNames.has(rel.to)) {
-        relations.push({ from: el.name, to: rel.to, label: rel.description });
-      }
-    }
-  }
-  return { boundaries, elements, relations };
+  const visibleBoundaryNames = new Set(boundaries.map((nb) => nb.name));
+  const visibleElementNames = new Set(elements.map((e) => e.name));
+  const owner = buildOwnership(
+    model,
+    visibleBoundaryNames,
+    visibleElementNames,
+  );
+  return {
+    boundaries,
+    elements,
+    relations: buildScopeRelations(model, owner),
+  };
 };

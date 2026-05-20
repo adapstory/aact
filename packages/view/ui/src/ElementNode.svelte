@@ -1,5 +1,9 @@
 <script lang="ts">
+  import { getContext } from "svelte";
+
   import { Handle, Position, type NodeProps } from "@xyflow/svelte";
+
+  import { VIEW_ACTIONS, type ViewActions } from "./actions.ts";
 
   interface ElementNodeData {
     name: string;
@@ -11,9 +15,25 @@
   }
 
   let { data }: NodeProps<{ data: ElementNodeData }> = $props();
+
+  const actions = getContext<ViewActions>(VIEW_ACTIONS);
+
+  const onClick = (): void => {
+    actions?.selectElement(data.name);
+  };
 </script>
 
-<div class="el" style:--accent={data.color} class:external={data.external}>
+<div
+  class="el"
+  style:--accent={data.color}
+  class:external={data.external}
+  role="button"
+  tabindex="0"
+  onclick={onClick}
+  onkeydown={(event) => {
+    if (event.key === "Enter") actions?.selectElement(data.name);
+  }}
+>
   <Handle type="target" position={Position.Left} />
   <span class="kind">{data.kind}</span>
   <span class="label">{data.label}</span>
@@ -41,6 +61,10 @@
     box-sizing: border-box;
     width: 100%;
     height: 100%;
+    cursor: pointer;
+  }
+  .el:hover {
+    background: #1e293b;
   }
   .el.external {
     background: #1e293b;
