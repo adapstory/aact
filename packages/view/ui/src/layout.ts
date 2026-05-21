@@ -176,9 +176,9 @@ export const layoutScope = async (
       animated: false,
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: 20,
-        height: 20,
-        color: "#94a3b8",
+        width: 24,
+        height: 24,
+        color: "#cbd5e1",
       },
       // @xyflow/svelte 1.x renders the label as an HTML <div>, so
       // styling goes through CSS / CSS variables (see App.svelte).
@@ -544,15 +544,11 @@ const collectVisibleEdges = (
         animated: false,
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          width: 18,
-          height: 18,
-          color: "#64748b",
+          width: 24,
+          height: 24,
+          color: "#cbd5e1",
         },
-        style: "stroke: #64748b; stroke-width: 1.5;",
-        labelStyle: "fill: #f8fafc; font-weight: 600; font-size: 11px;",
-        labelBgStyle: "fill: #0f172a; stroke: #334155; stroke-width: 1; rx: 4;",
-        labelBgPadding: [6, 4],
-        labelBgBorderRadius: 4,
+        style: "stroke: #94a3b8; stroke-width: 1.8;",
       });
     }
   }

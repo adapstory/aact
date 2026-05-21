@@ -218,17 +218,17 @@
       ? edges.map((e) => {
           const incident =
             e.source === hoveredNodeId || e.target === hoveredNodeId;
-          const color = incident ? "#38bdf8" : "#64748b";
+          const color = incident ? "#38bdf8" : "#475569";
           return {
             ...e,
             animated: incident,
             style: incident
               ? "stroke: #38bdf8; stroke-width: 2.4; opacity: 1;"
-              : "stroke: #64748b; stroke-width: 1.2; opacity: 0.35;",
+              : "stroke: #475569; stroke-width: 1.2; opacity: 0.4;",
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              width: 20,
-              height: 20,
+              width: 24,
+              height: 24,
               color,
             },
           };
@@ -870,8 +870,22 @@
   }
   :global(.svelte-flow__arrowhead polyline),
   :global(.svelte-flow__arrowhead path) {
-    fill: #94a3b8;
-    stroke: #94a3b8;
+    fill: #cbd5e1;
+    stroke: #cbd5e1;
+  }
+  /* Hide connection handles. xyflow still needs the <Handle>
+     components to compute edge endpoints, but the default `o` dot
+     visually competes with the arrowhead at the node border. We
+     keep size > 0 so the layout math is intact, just invisible. */
+  :global(.svelte-flow__handle) {
+    width: 6px;
+    height: 6px;
+    background: transparent;
+    border: 0;
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+    pointer-events: none;
   }
   :global(.svelte-flow__controls) {
     background: #0f172a;
