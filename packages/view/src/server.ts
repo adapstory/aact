@@ -32,6 +32,14 @@ const MIME: Readonly<Record<string, string>> = {
 const mimeFor = (file: string): string =>
   MIME[path.extname(file).toLowerCase()] ?? "application/octet-stream";
 
+const isInside = (root: string, candidate: string): boolean => {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
+};
+
 /**
  * The envelope shape the server pushes over `/api/ws` and returns
  * from `/api/model`. Mirrors aact's `CliEnvelope<ModelData>` enough
@@ -140,7 +148,7 @@ export const startServer = async (
     const clean = requestPath.replace(/^\/+/, "").split("?")[0] ?? "";
     const relative = clean === "" ? "index.html" : clean;
     const candidate = path.resolve(UI_ROOT, relative);
-    if (!candidate.startsWith(UI_ROOT)) return null;
+    if (!isInside(UI_ROOT, candidate)) return null;
     try {
       const body = await readFile(candidate);
       return { body, contentType: mimeFor(candidate) };

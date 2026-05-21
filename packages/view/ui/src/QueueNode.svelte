@@ -18,7 +18,7 @@
 
   const actions = getContext<ViewActions>(VIEW_ACTIONS);
 
-  const fill = data.external ? "#475569" : "#1168bd";
+  const fill = $derived(data.external ? "#475569" : "#1168bd");
 </script>
 
 <div

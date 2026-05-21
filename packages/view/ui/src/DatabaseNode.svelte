@@ -21,7 +21,7 @@
   // Database fill follows the C4 container/system gradient. Externals
   // drop to neutral grey per Simon Brown's reference palette so the
   // "ours vs theirs" distinction stays at a glance.
-  const fill = data.external ? "#475569" : "#1168bd";
+  const fill = $derived(data.external ? "#475569" : "#1168bd");
 </script>
 
 <div

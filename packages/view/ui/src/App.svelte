@@ -346,8 +346,16 @@
       (typeof window !== "undefined" &&
         (window as { __AACT_OPENER__?: string }).__AACT_OPENER__) ||
       "vscode";
-    return `${opener}://file/${file}:${line}:${col}`;
+    const encodedFile = file
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    return `${opener}://file/${encodedFile}:${line}:${col}`;
   };
+
+  const propertyEntries = (
+    properties: Readonly<Record<string, string>> | undefined,
+  ): readonly (readonly [string, string])[] => Object.entries(properties ?? {});
 
   const minimapNodeColor = (node: Node): string => {
     const kind = String((node.data as { kind?: string } | undefined)?.kind);
@@ -536,6 +544,16 @@
             </span>
           </div>
         {/if}
+        {#if propertyEntries(selectedElement.properties).length}
+          <div class="field">
+            <span class="k">props</span>
+            <span class="v props">
+              {#each propertyEntries(selectedElement.properties) as [key, value] (key)}
+                <span class="prop"><span class="prop-key">{key}</span>{value}</span>
+              {/each}
+            </span>
+          </div>
+        {/if}
         {#if selectedElement.sourceLocation}
           <div class="field">
             <span class="k">source</span>
@@ -575,6 +593,16 @@
             <span class="v">
               {#each selectedBoundary.tags as t (t)}
                 <span class="tag">{t}</span>
+              {/each}
+            </span>
+          </div>
+        {/if}
+        {#if propertyEntries(selectedBoundary.properties).length}
+          <div class="field">
+            <span class="k">props</span>
+            <span class="v props">
+              {#each propertyEntries(selectedBoundary.properties) as [key, value] (key)}
+                <span class="prop"><span class="prop-key">{key}</span>{value}</span>
               {/each}
             </span>
           </div>
@@ -892,6 +920,27 @@
     background: #1e293b;
     color: #cbd5e1;
     margin-right: 4px;
+  }
+  .props {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .prop {
+    display: inline-flex;
+    gap: 5px;
+    max-width: 100%;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #cbd5e1;
+    border: 1px solid #1e293b;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+  .prop-key {
+    color: #38bdf8;
+    font-weight: 700;
   }
   .relations {
     list-style: none;

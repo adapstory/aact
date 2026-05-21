@@ -27,7 +27,7 @@
     Container: "#438dd5",
     Component: "#85bbf0",
   };
-  const accent = palette[data.kind] ?? "#94a3b8";
+  const accent = $derived(palette[data.kind] ?? "#94a3b8");
 
   const onClick = (event: MouseEvent): void => {
     // Boundary headers absorb clicks; ignore clicks that bubble up
@@ -48,6 +48,20 @@
       actions?.enterBoundary(data.name, data.label);
     }
   };
+
+  const onKeydown = (event: KeyboardEvent): void => {
+    if (event.key === "Enter") {
+      actions?.selectBoundary(data.name);
+      return;
+    }
+    if (event.key !== " ") return;
+    event.preventDefault();
+    if (data.canExpand) {
+      actions?.toggleBoundary(data.name, data.label);
+    } else {
+      actions?.enterBoundary(data.name, data.label);
+    }
+  };
 </script>
 
 <div
@@ -55,10 +69,12 @@
   class:expanded={data.expanded}
   class:is-selected={selected}
   style:--accent={accent}
-  role="group"
+  role="button"
+  tabindex="0"
   aria-label={`${data.kind} boundary: ${data.label}`}
   onclick={onClick}
   ondblclick={onDblClick}
+  onkeydown={onKeydown}
 >
   <Handle type="target" position={Position.Left} />
   <header class="header">

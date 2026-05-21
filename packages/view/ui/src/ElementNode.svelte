@@ -29,9 +29,10 @@
     if (kind === "Component") return "#85bbf0";
     return "#1168bd";
   };
-  const fill = palette(data.kind, data.external);
-  const textColor =
-    data.kind === "Component" && !data.external ? "#0f172a" : "#f8fafc";
+  const fill = $derived(palette(data.kind, data.external));
+  const textColor = $derived(
+    data.kind === "Component" && !data.external ? "#0f172a" : "#f8fafc",
+  );
 </script>
 
 <div
