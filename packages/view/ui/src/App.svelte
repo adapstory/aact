@@ -209,10 +209,11 @@
   );
 
   // Dim edges that aren't incident to the hovered node so the user
-  // can trace a single dependency through a crowded canvas. Empty
-  // hover → identity (no dimming). Re-write the markerEnd color
-  // explicitly because SVG markers don't inherit `stroke` from the
-  // referencing path.
+  // can trace a single dependency through a crowded canvas. Strip
+  // labels from non-incident edges as well — at 30+ relations the
+  // label chips pile up faster than the lines do. Re-write
+  // markerEnd color explicitly because SVG markers don't inherit
+  // `stroke` from the referencing path.
   const decoratedEdges = $derived<Edge[]>(
     hoveredNodeId
       ? edges.map((e) => {
@@ -222,9 +223,10 @@
           return {
             ...e,
             animated: incident,
+            label: incident ? e.label : undefined,
             style: incident
               ? "stroke: #38bdf8; stroke-width: 2.4; opacity: 1;"
-              : "stroke: #475569; stroke-width: 1.2; opacity: 0.4;",
+              : "stroke: #475569; stroke-width: 1.2; opacity: 0.35;",
             markerEnd: {
               type: MarkerType.ArrowClosed,
               width: 24,
@@ -373,7 +375,7 @@
           zoomOnDoubleClick={false}
           minZoom={0.1}
           maxZoom={2}
-          defaultEdgeOptions={{ type: "default", animated: false }}
+          defaultEdgeOptions={{ type: "smoothstep", animated: false }}
         >
           <Background />
           <Controls />

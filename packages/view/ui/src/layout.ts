@@ -95,11 +95,23 @@ export interface LayoutResult {
   readonly edges: Edge[];
 }
 
+// Dense C4 landscapes routinely have 50+ relations passing through a
+// shared API gateway. ELK's default polyline routing produces
+// dozens of crossing diagonals that read like spaghetti. Bumping
+// `edgeEdge` / `edgeNode` spacing + asking layered for orthogonal
+// routing keeps parallel edges visually separated; combined with
+// smoothstep edges on the xyflow side, the resulting layout looks
+// like Structurizr / IcePanel rather than a hairball.
 const layeredOptions = {
   "elk.algorithm": "layered",
   "elk.direction": "RIGHT",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "80",
-  "elk.spacing.nodeNode": "45",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "90",
+  "elk.spacing.nodeNode": "50",
+  "elk.spacing.edgeEdge": "20",
+  "elk.spacing.edgeNode": "30",
+  "elk.layered.spacing.edgeEdgeBetweenLayers": "20",
+  "elk.layered.spacing.edgeNodeBetweenLayers": "30",
+  "elk.edgeRouting": "ORTHOGONAL",
   "elk.padding": "[top=48, left=44, bottom=44, right=44]",
 };
 
@@ -172,7 +184,7 @@ export const layoutScope = async (
       source,
       target,
       label: r.label,
-      type: "default",
+      type: "smoothstep",
       animated: false,
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -540,7 +552,7 @@ const collectVisibleEdges = (
           from.kind === "element" && to.kind === "element"
             ? rel.description
             : undefined,
-        type: "default",
+        type: "smoothstep",
         animated: false,
         markerEnd: {
           type: MarkerType.ArrowClosed,
