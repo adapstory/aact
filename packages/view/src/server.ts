@@ -64,9 +64,21 @@ export interface ModelEnvelope {
   };
 }
 
+export interface ViewError {
+  readonly message: string;
+  readonly source: string | null;
+  readonly configPath: string | null;
+  readonly durationMs: number;
+  readonly at: string;
+}
+
+export type ServerMessage =
+  | { readonly type: "model-update"; readonly envelope: ModelEnvelope }
+  | { readonly type: "model-error"; readonly error: ViewError };
+
 /** Subscriber callback type — the workbench pushes a fresh envelope
  *  to every subscriber whenever chokidar reports a source change. */
-export type Subscriber = (envelope: ModelEnvelope) => void;
+export type Subscriber = (message: ServerMessage) => void;
 
 export interface ServerHandle {
   readonly listener: Listener;
@@ -76,6 +88,8 @@ export interface ServerHandle {
   subscribe(fn: Subscriber): () => void;
   /** Push a fresh envelope to every connected client. */
   broadcast(envelope: ModelEnvelope): void;
+  /** Push a reload failure while keeping the latest valid model cached. */
+  broadcastError(error: ViewError): void;
   /** Update the cached envelope so new HTTP `/api/model` hits return
    *  the latest known model without re-loading from disk. */
   setCurrent(envelope: ModelEnvelope): void;
@@ -90,6 +104,9 @@ export interface ServerOptions {
   /** Initial envelope to serve immediately. The watcher will
    *  replace it via `setCurrent` whenever the source changes. */
   readonly initialEnvelope: ModelEnvelope;
+  /** Per-session token protecting local JSON / WS endpoints from
+   *  unrelated browser pages hitting localhost. */
+  readonly authToken: string;
 }
 
 /**
@@ -112,14 +129,77 @@ export const startServer = async (
   let current: ModelEnvelope = options.initialEnvelope;
   const subscribers = new Set<Subscriber>();
   const peers = new Set<{ send: (data: string) => void }>();
+  const authCookie = `aact_view_token=${options.authToken}; Path=/; SameSite=Strict; HttpOnly`;
+
+  const hasAuthCookie = (headers: Headers): boolean => {
+    const raw = headers.get("cookie") ?? "";
+    return raw
+      .split(";")
+      .map((part) => part.trim())
+      .some((part) => part === `aact_view_token=${options.authToken}`);
+  };
+
+  const isAuthorized = (url: URL, headers: Headers): boolean =>
+    url.searchParams.get("token") === options.authToken ||
+    hasAuthCookie(headers);
+
+  const parseRequestUrl = (input: string): URL =>
+    new URL(input, "http://localhost");
+
+  const authUrl = (url: string): string =>
+    `${url.replace(/\/$/, "")}/?token=${encodeURIComponent(options.authToken)}`;
+
+  const unauthorized = (): Response =>
+    new Response("Unauthorized", {
+      status: 401,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+
+  const htmlHeaders = (
+    contentType: string,
+  ): Readonly<Record<string, string>> => ({
+    "content-type": contentType,
+    "set-cookie": authCookie,
+  });
+
+  const sendToSubscribers = (message: ServerMessage): void => {
+    for (const fn of subscribers) {
+      try {
+        fn(message);
+      } catch {
+        // Subscriber threw — don't let one bad listener stop the
+        // others from receiving the update.
+      }
+    }
+  };
+
+  const sendToPeers = (message: ServerMessage): void => {
+    const payload = JSON.stringify(message);
+    for (const peer of peers) {
+      try {
+        peer.send(payload);
+      } catch {
+        // Peer dropped mid-broadcast; CrossWS will report `close`
+        // / `error` next tick so just skip it here.
+      }
+    }
+  };
 
   const app = new H3();
 
-  app.get("/api/model", () => current);
+  app.get("/api/model", (event) => {
+    const url = parseRequestUrl(event.req.url);
+    if (!isAuthorized(url, event.req.headers)) return unauthorized();
+    return current;
+  });
 
   app.get(
     "/api/ws",
     defineWebSocketHandler({
+      upgrade(request) {
+        const url = parseRequestUrl(request.url);
+        if (!isAuthorized(url, request.headers)) return unauthorized();
+      },
       open(peer) {
         peers.add(peer);
         // Send the latest known envelope right away so a freshly
@@ -169,7 +249,7 @@ export const startServer = async (
       );
     }
     return new Response(asset.body, {
-      headers: { "content-type": asset.contentType },
+      headers: htmlHeaders(asset.contentType),
     });
   });
 
@@ -181,14 +261,14 @@ export const startServer = async (
     const asset = await serveAsset(url.pathname);
     if (asset) {
       return new Response(asset.body, {
-        headers: { "content-type": asset.contentType },
+        headers: htmlHeaders(asset.contentType),
       });
     }
     // SPA fallback — let the client route in-app.
     const indexAsset = await serveAsset("index.html");
     if (!indexAsset) return new Response("Not Found", { status: 404 });
     return new Response(indexAsset.body, {
-      headers: { "content-type": indexAsset.contentType },
+      headers: htmlHeaders(indexAsset.contentType),
     });
   });
 
@@ -201,7 +281,7 @@ export const startServer = async (
     ws: true,
   });
 
-  const url = listener.url.replace(/\/$/, "");
+  const url = authUrl(listener.url);
 
   return {
     listener,
@@ -212,23 +292,14 @@ export const startServer = async (
     },
     broadcast(envelope) {
       current = envelope;
-      const payload = JSON.stringify({ type: "model-update", envelope });
-      for (const peer of peers) {
-        try {
-          peer.send(payload);
-        } catch {
-          // Peer dropped mid-broadcast; CrossWS will report `close`
-          // / `error` next tick so just skip it here.
-        }
-      }
-      for (const fn of subscribers) {
-        try {
-          fn(envelope);
-        } catch {
-          // Subscriber threw — don't let one bad listener stop the
-          // others from receiving the update.
-        }
-      }
+      const message = { type: "model-update", envelope } as const;
+      sendToPeers(message);
+      sendToSubscribers(message);
+    },
+    broadcastError(error) {
+      const message = { type: "model-error", error } as const;
+      sendToPeers(message);
+      sendToSubscribers(message);
     },
     setCurrent(envelope) {
       current = envelope;

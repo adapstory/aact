@@ -1,7 +1,9 @@
+import { randomBytes } from "node:crypto";
+
 import type { AactConfig } from "aact";
 
 import { loadModelFromConfig } from "./load-model.js";
-import type { ModelEnvelope, ServerHandle } from "./server.js";
+import type { ModelEnvelope, ServerHandle, ViewError } from "./server.js";
 import { startServer } from "./server.js";
 import { startWatcher } from "./watcher.js";
 
@@ -40,6 +42,8 @@ export interface RunWorkbenchResult {
 const sourceOf = (config: AactConfig): string =>
   typeof config.source === "string" ? config.source : config.source.path;
 
+const createAuthToken = (): string => randomBytes(24).toString("base64url");
+
 /** Build a `ModelEnvelope` from a single in-process loadModel call.
  *  Mirrors the wider `aact model --json` envelope so the SPA can
  *  reuse aact's contract — schemaVersion stays at `1`. */
@@ -64,6 +68,18 @@ const buildEnvelope = async (
     },
   };
 };
+
+const buildReloadError = (
+  options: RunWorkbenchOptions,
+  error: unknown,
+  startedAt: number,
+): ViewError => ({
+  message: error instanceof Error ? error.message : String(error),
+  source: sourceOf(options.config),
+  configPath: options.configPath,
+  durationMs: Math.round(performance.now() - startedAt),
+  at: new Date().toISOString(),
+});
 
 /**
  * Lifecycle entry point invoked by the core `aact view` subcommand
@@ -98,11 +114,13 @@ export const runWorkbench = async (
   let server: ServerHandle | undefined;
 
   try {
+    const authToken = createAuthToken();
     const envelope = await buildEnvelope(options, aactVersion);
     server = await startServer({
       ...(options.port === undefined ? {} : { port: options.port }),
       ...(options.noOpen === undefined ? {} : { noOpen: options.noOpen }),
       initialEnvelope: envelope,
+      authToken,
     });
 
     // eslint-disable-next-line no-console -- intentional user-facing banner
@@ -119,6 +137,7 @@ export const runWorkbench = async (
     const watcher = startWatcher({
       paths: [sourceOf(options.config)],
       onChange: async () => {
+        const startedAt = performance.now();
         try {
           const next = await buildEnvelope(options, aactVersion);
           server?.broadcast(next);
@@ -127,12 +146,10 @@ export const runWorkbench = async (
             `  ↻ reloaded (${Object.keys(next.data.model.elements).length} elements, ${next.data.issues.length} issues)`,
           );
         } catch (error) {
+          const viewError = buildReloadError(options, error, startedAt);
+          server?.broadcastError(viewError);
           // eslint-disable-next-line no-console
-          console.error(
-            `  ✗ reload failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
+          console.error(`  ✗ reload failed: ${viewError.message}`);
         }
       },
     });

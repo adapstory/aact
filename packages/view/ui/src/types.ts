@@ -96,6 +96,18 @@ export interface ModelEnvelope {
   };
 }
 
+export interface ViewError {
+  readonly message: string;
+  readonly source: string | null;
+  readonly configPath: string | null;
+  readonly durationMs: number;
+  readonly at: string;
+}
+
+export type ServerMessage =
+  | { readonly type: "model-update"; readonly envelope: ModelEnvelope }
+  | { readonly type: "model-error"; readonly error: ViewError };
+
 /**
  * One step on the drill-down stack. `landscape` is the implicit
  * root that's always at the bottom; entries above it identify a

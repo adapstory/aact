@@ -28,13 +28,21 @@
     BreadcrumbEntry,
     Element,
     Boundary,
+    ModelIssue,
     ModelEnvelope,
+    Relation,
+    ServerMessage,
+    ViewError,
   } from "./types.ts";
   import { VIEW_ACTIONS, type ViewActions } from "./actions.ts";
 
   type ViewMode = "drill" | "expand" | "flat";
   type EdgeStyle = "bezier" | "smoothstep" | "step";
   type EdgeFilter = "all" | "cross-boundary";
+  interface IncomingRelation {
+    readonly from: string;
+    readonly relation: Relation;
+  }
 
   // Persist edge-style + edge-filter choices across page reloads —
   // both are personal preferences with no model coupling, so we
@@ -64,7 +72,10 @@
   let hoveredNodeId = $state<string | null>(null);
   let nodes = $state<Node[]>([]);
   let edges = $state<Edge[]>([]);
-  let status = $state<"connecting" | "live" | "lost">("connecting");
+  let status = $state<"connecting" | "live" | "lost" | "error">(
+    "connecting",
+  );
+  let loadError = $state<ViewError | null>(null);
 
   const nodeTypes = {
     element: ElementNode,
@@ -105,16 +116,32 @@
     };
   });
 
+  const sessionToken =
+    typeof location !== "undefined"
+      ? new URLSearchParams(location.search).get("token")
+      : null;
+
+  const withSessionToken = (path: string): string =>
+    sessionToken ? `${path}?token=${encodeURIComponent(sessionToken)}` : path;
+
   const fetchModel = async (): Promise<ModelEnvelope> => {
-    const res = await fetch("/api/model");
+    const res = await fetch(withSessionToken("/api/model"));
     if (!res.ok) throw new Error(`/api/model returned ${res.status}`);
     return (await res.json()) as ModelEnvelope;
   };
 
   const wsUrl = (() => {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${location.host}/api/ws`;
+    return `${proto}//${location.host}${withSessionToken("/api/ws")}`;
   })();
+
+  const clientError = (error: unknown): ViewError => ({
+    message: error instanceof Error ? error.message : String(error),
+    source: envelope?.meta.source ?? null,
+    configPath: envelope?.meta.configPath ?? null,
+    durationMs: 0,
+    at: new Date().toISOString(),
+  });
 
   const connect = (): void => {
     const ws = new WebSocket(wsUrl);
@@ -123,12 +150,15 @@
     });
     ws.addEventListener("message", (ev) => {
       try {
-        const payload = JSON.parse(ev.data) as {
-          type: string;
-          envelope: ModelEnvelope;
-        };
+        const payload = JSON.parse(ev.data) as ServerMessage;
         if (payload.type === "model-update") {
           envelope = payload.envelope;
+          loadError = null;
+          status = "live";
+        }
+        if (payload.type === "model-error") {
+          loadError = payload.error;
+          status = "error";
         }
       } catch {
         // ignore malformed payloads — server won't emit any
@@ -143,6 +173,11 @@
 
   void fetchModel().then((env) => {
     envelope = env;
+    loadError = null;
+    connect();
+  }).catch((error: unknown) => {
+    loadError = clientError(error);
+    status = "error";
     connect();
   });
 
@@ -224,6 +259,24 @@
     selected?.kind === "boundary" && envelope
       ? (envelope.data.model.boundaries[selected.name] ?? null)
       : null,
+  );
+  const incomingRelations = $derived<readonly IncomingRelation[]>(
+    selectedElement && envelope
+      ? Object.values(envelope.data.model.elements).flatMap((el) =>
+          el.relations
+            .filter((rel) => rel.to === selectedElement.name)
+            .map((relation) => ({ from: el.name, relation })),
+        )
+      : [],
+  );
+  const selectedIssues = $derived<readonly ModelIssue[]>(
+    selected && envelope
+      ? envelope.data.issues.filter((issue) =>
+          selected.kind === "element"
+            ? issue.element === selected.name
+            : issue.boundary === selected.name,
+        )
+      : [],
   );
 
   const setEdgeStyle = (next: EdgeStyle): void => {
@@ -357,6 +410,9 @@
     properties: Readonly<Record<string, string>> | undefined,
   ): readonly (readonly [string, string])[] => Object.entries(properties ?? {});
 
+  const issueMessage = (issue: ModelIssue): string =>
+    issue.message ? `${issue.kind}: ${issue.message}` : issue.kind;
+
   const minimapNodeColor = (node: Node): string => {
     const kind = String((node.data as { kind?: string } | undefined)?.kind);
     const external = Boolean(
@@ -389,6 +445,7 @@
       {/if}
       <span class="status status-{status}">
         {#if status === "live"}● live
+        {:else if status === "error"}● reload error
         {:else if status === "lost"}● disconnected — retrying
         {:else}● connecting
         {/if}
@@ -522,6 +579,18 @@
         <span class="legend-row"><span class="swatch" style="background: #85bbf0;"></span>Component</span>
         <span class="legend-row"><span class="swatch" style="background: #475569;"></span>External</span>
       </aside>
+
+      {#if loadError}
+        <aside class="error-overlay" role="status" aria-live="polite">
+          <span class="error-kicker">Reload failed</span>
+          <p>{loadError.message}</p>
+          <div class="error-meta">
+            {#if loadError.source}<span>{loadError.source}</span>{/if}
+            <span>{new Date(loadError.at).toLocaleTimeString()}</span>
+            {#if loadError.durationMs > 0}<span>{loadError.durationMs} ms</span>{/if}
+          </div>
+        </aside>
+      {/if}
     </div>
 
     <aside class="details">
@@ -564,15 +633,36 @@
             </span>
           </div>
         {/if}
+        {#if selectedIssues.length}
+          <h4>Issues</h4>
+          <ul class="issues">
+            {#each selectedIssues as issue, i (i)}
+              <li>{issueMessage(issue)}</li>
+            {/each}
+          </ul>
+        {/if}
         {#if selectedElement.relations.length}
           <h4>Outgoing relations</h4>
           <ul class="relations">
-            {#each selectedElement.relations as rel (rel.to + (rel.description ?? "") + (rel.technology ?? ""))}
+            {#each selectedElement.relations as rel, i (i)}
               <li>
                 <span class="arrow">→</span>
                 <span class="to">{rel.to}</span>
                 {#if rel.description}<span class="rdesc">{rel.description}</span>{/if}
                 {#if rel.technology}<span class="rmeta">[{rel.technology}]</span>{/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if incomingRelations.length}
+          <h4>Incoming relations</h4>
+          <ul class="relations">
+            {#each incomingRelations as item, i (i)}
+              <li>
+                <span class="arrow">←</span>
+                <span class="to">{item.from}</span>
+                {#if item.relation.description}<span class="rdesc">{item.relation.description}</span>{/if}
+                {#if item.relation.technology}<span class="rmeta">[{item.relation.technology}]</span>{/if}
               </li>
             {/each}
           </ul>
@@ -617,6 +707,14 @@
             </span>
           </div>
         {/if}
+        {#if selectedIssues.length}
+          <h4>Issues</h4>
+          <ul class="issues">
+            {#each selectedIssues as issue, i (i)}
+              <li>{issueMessage(issue)}</li>
+            {/each}
+          </ul>
+        {/if}
         <p class="hint">
           {#if mode === "drill"}Double-click to enter this boundary.
           {:else if mode === "expand"}Double-click to {expanded.has(selectedBoundary.name) ? "collapse" : "expand"} this boundary.
@@ -638,6 +736,14 @@
               <div class="warn"><span class="num">{summary.issues}</span> loader issues</div>
             {/if}
           </div>
+        {/if}
+        {#if envelope.data.issues.length}
+          <h4>Loader issues</h4>
+          <ul class="issues">
+            {#each envelope.data.issues as issue, i (i)}
+              <li>{issueMessage(issue)}</li>
+            {/each}
+          </ul>
         {/if}
         <p class="hint">
           Click a node to inspect. Switch modes in the top bar to
@@ -716,6 +822,9 @@
   }
   .status-lost {
     color: #f87171;
+  }
+  .status-error {
+    color: #fbbf24;
   }
   .topbar-controls {
     display: inline-flex;
@@ -849,6 +958,43 @@
     height: 12px;
     border-radius: 3px;
   }
+  .error-overlay {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    z-index: 5;
+    max-width: min(520px, calc(100% - 36px));
+    padding: 14px 16px;
+    border-radius: 8px;
+    border: 1px solid #b45309;
+    background: rgba(69, 26, 3, 0.92);
+    box-shadow: 0 18px 50px -28px rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(6px);
+  }
+  .error-kicker {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #fbbf24;
+  }
+  .error-overlay p {
+    margin: 0;
+    color: #fff7ed;
+    font-size: 13px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .error-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 10px;
+    color: #fed7aa;
+  }
 
   .details {
     padding: 20px;
@@ -969,6 +1115,22 @@
     font-size: 10px;
     color: #64748b;
     font-style: italic;
+  }
+  .issues {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 12px;
+  }
+  .issues li {
+    margin: 6px 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #92400e;
+    background: rgba(69, 26, 3, 0.45);
+    color: #fed7aa;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
   }
   .stats {
     display: grid;

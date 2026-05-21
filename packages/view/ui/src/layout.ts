@@ -1,7 +1,7 @@
-import ELK from "elkjs/lib/elk.bundled.js";
 import { MarkerType, type Edge, type Node } from "@xyflow/svelte";
 
 import type { Boundary, Element, Model } from "./types.ts";
+import { runElkLayout } from "./layoutWorkerClient.ts";
 
 /**
  * Three layout strategies sharing one ELK pipeline:
@@ -26,8 +26,6 @@ import type { Boundary, Element, Model } from "./types.ts";
  * The id-prefix convention (`b:` for boundaries, `e:` for elements)
  * is exported so node components and click handlers can decode IDs.
  */
-const elk = new ELK();
-
 const LEAF_WIDTH = 220;
 const LEAF_HEIGHT = 110;
 const PERSON_WIDTH = 200;
@@ -85,6 +83,7 @@ export interface LayoutScope {
     readonly from: string;
     readonly to: string;
     readonly label?: string;
+    readonly count?: number;
     readonly fromKind?: "element" | "boundary";
     readonly toKind?: "element" | "boundary";
   }>;
@@ -111,6 +110,14 @@ const layeredOptions = {
   "elk.layered.spacing.edgeEdgeBetweenLayers": "20",
   "elk.layered.spacing.edgeNodeBetweenLayers": "30",
   "elk.padding": "[top=48, left=44, bottom=44, right=44]",
+};
+
+const formatEdgeLabel = (
+  label: string | undefined,
+  count: number | undefined,
+): string | undefined => {
+  if (!count || count <= 1) return label;
+  return label ? `${label} · ×${count}` : `×${count}`;
 };
 
 /** ----------------------------------------------------------------
@@ -143,7 +150,7 @@ export const layoutScope = async (
     return { id: `edge-${index}`, sources: [source], targets: [target] };
   });
 
-  const result = await elk.layout({
+  const result = await runElkLayout<ElkResultNode>({
     id: "root",
     layoutOptions: layeredOptions,
     children: elkChildren,
@@ -181,7 +188,7 @@ export const layoutScope = async (
       id: `edge-${index}`,
       source,
       target,
-      label: r.label,
+      label: formatEdgeLabel(r.label, r.count),
       type: "default",
       animated: false,
       // Drill mode aggregates by construction — every surviving
@@ -273,7 +280,14 @@ const buildScopeRelations = (
           : elementId(toOwner.name);
       if (fromKey === toKey) continue;
       const key = `${fromKey}->${toKey}`;
-      if (out.has(key)) continue;
+      const existing = out.get(key);
+      if (existing) {
+        out.set(key, {
+          ...existing,
+          count: (existing.count ?? 1) + 1,
+        });
+        continue;
+      }
       out.set(key, {
         from: fromOwner.name,
         to: toOwner.name,
@@ -283,6 +297,7 @@ const buildScopeRelations = (
             : rel.description,
         fromKind: fromOwner.kind,
         toKind: toOwner.kind,
+        count: 1,
       });
     }
   }
@@ -566,19 +581,40 @@ const collectVisibleEdges = (
       const to = visibleEndpoint(rel.to, "element", expanded, parentMap);
       if (from.id === to.id) continue;
       const key = `${from.id}->${to.id}`;
-      if (seen.has(key)) continue;
       const crossBoundary = isCrossBoundary(el.name, rel.to, parentMap);
+      const existing = seen.get(key);
+      if (existing) {
+        const data = existing.data as
+          | {
+              readonly crossBoundary?: boolean;
+              readonly primaryLabel?: string;
+              readonly relationCount?: number;
+            }
+          | undefined;
+        const relationCount = (data?.relationCount ?? 1) + 1;
+        seen.set(key, {
+          ...existing,
+          label: formatEdgeLabel(data?.primaryLabel, relationCount),
+          data: {
+            ...data,
+            crossBoundary: Boolean(data?.crossBoundary) || crossBoundary,
+            relationCount,
+          },
+        });
+        continue;
+      }
+      const primaryLabel =
+        from.kind === "element" && to.kind === "element"
+          ? rel.description
+          : undefined;
       seen.set(key, {
         id: `edge-${index++}`,
         source: from.id,
         target: to.id,
-        label:
-          from.kind === "element" && to.kind === "element"
-            ? rel.description
-            : undefined,
+        label: primaryLabel,
         type: "default",
         animated: false,
-        data: { crossBoundary },
+        data: { crossBoundary, primaryLabel, relationCount: 1 },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 24,
@@ -638,7 +674,7 @@ export const layoutNested = async (
     standalone,
     elkEdges,
   );
-  const result = await elk.layout(tree);
+  const result = await runElkLayout<ElkResultNode>(tree);
   const nodes = flattenElkResult(
     result.children ?? [],
     model,
