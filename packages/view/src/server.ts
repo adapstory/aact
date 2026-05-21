@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { H3, defineWebSocketHandler, toNodeHandler } from "h3";
-import { listen, type Listener } from "listhen";
+import { listen, type CrossWSOptions, type Listener } from "listhen";
 
 import type { ModelLoadResult } from "./load-model.js";
 
@@ -187,6 +187,19 @@ export const startServer = async (
 
   const app = new H3();
 
+  type H3WebSocketResponse = Response & {
+    readonly crossws?: Awaited<
+      ReturnType<NonNullable<CrossWSOptions["resolve"]>>
+    >;
+  };
+
+  const resolveWebSocketHooks: NonNullable<CrossWSOptions["resolve"]> = async (
+    request,
+  ) => {
+    const response = (await app.fetch(request)) as H3WebSocketResponse;
+    return response.crossws ?? {};
+  };
+
   app.get("/api/model", (event) => {
     const url = parseRequestUrl(event.req.url);
     if (!isAuthorized(url, event.req.headers)) return unauthorized();
@@ -278,7 +291,7 @@ export const startServer = async (
     showURL: false,
     qr: false,
     public: false,
-    ws: true,
+    ws: { resolve: resolveWebSocketHooks },
   });
 
   const url = authUrl(listener.url);

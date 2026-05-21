@@ -152,13 +152,8 @@ export const view = cliCommandWithConfig({
     },
   },
   renderText: renderViewText,
-  execute: async (ctx, config) => {
-    // `cliCommandWithConfig` doesn't surface the resolved
-    // configPath into execute today; the companion needs the path
-    // to anchor relative imports + chokidar watches. Re-derive
-    // from envelope.meta later if a third command needs the same
-    // information.
+  execute: async (ctx, config, execContext) => {
     const args = ctx.args as ViewArgs;
-    return executeView(config, args, null);
+    return executeView(config, args, execContext.configPath);
   },
 });

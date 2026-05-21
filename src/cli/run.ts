@@ -57,6 +57,11 @@ export interface PlainCommandOpts<
   ) => Promise<ExecuteResult<TData>>;
 }
 
+export interface ConfigExecutionContext {
+  readonly configPath: string | null;
+  readonly source: string;
+}
+
 export interface ConfigCommandOpts<
   TArgs extends ArgsDef,
   TData,
@@ -64,6 +69,7 @@ export interface ConfigCommandOpts<
   readonly execute: (
     ctx: CommandContext<TArgs>,
     config: AactConfig,
+    execContext: ConfigExecutionContext,
   ) => Promise<ExecuteResult<TData>>;
 }
 
@@ -232,7 +238,10 @@ export const cliCommandWithConfig = <TArgs extends ArgsDef, TData>(
       const resolvedSource = path.resolve(loadedConfig.source.path);
 
       try {
-        const exec = await opts.execute(ctx, loadedConfig);
+        const exec = await opts.execute(ctx, loadedConfig, {
+          configPath: resolvedConfigPath,
+          source: resolvedSource,
+        });
         const result = assembleResult({
           name: opts.name,
           exec,

@@ -164,7 +164,10 @@ describe("cliCommandWithConfig", () => {
 
     await runCommand(cmd, { rawArgs: [] });
 
-    expect(execute).toHaveBeenCalledWith(expect.anything(), fakeConfig);
+    expect(execute).toHaveBeenCalledWith(expect.anything(), fakeConfig, {
+      configPath: fakeLoaded.configPath,
+      source: path.resolve(fakeConfig.source.path),
+    });
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
