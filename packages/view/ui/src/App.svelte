@@ -255,24 +255,41 @@
       const incident =
         hoveredNodeId !== null &&
         (e.source === hoveredNodeId || e.target === hoveredNodeId);
-      const dimmedByFilter = edgeFilter === "cross-boundary" && !isCross(e);
+      const filterActive = edgeFilter === "cross-boundary";
+      const cross = isCross(e);
+      const intraInFilter = filterActive && !cross;
+      const crossInFilter = filterActive && cross;
 
-      // Layered decisions — filter beats hover for visibility:
-      //   1. Filter dims intra-boundary into the background regardless of hover
-      //   2. Without hover, edges render at full base style
-      //   3. With hover, incident edges pop, non-incident dim
-      if (dimmedByFilter && !incident) {
+      // Filter overrides default rendering: intra disappears almost
+      // entirely, cross gets thicker bright stroke so it visibly
+      // "lights up" as the interesting subgraph. Hover still wins
+      // for incident edges so dependency tracing keeps working.
+      if (intraInFilter && !incident) {
         return {
           ...e,
           type: edgeStyle,
           animated: false,
           label: undefined,
-          style: "stroke: #334155; stroke-width: 1; opacity: 0.18;",
+          style: "stroke: #1e293b; stroke-width: 0.8; opacity: 0.12;",
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            width: 24,
-            height: 24,
-            color: "#334155",
+            width: 16,
+            height: 16,
+            color: "#1e293b",
+          },
+        };
+      }
+      if (crossInFilter && !hoveredNodeId) {
+        return {
+          ...e,
+          type: edgeStyle,
+          animated: false,
+          style: "stroke: #38bdf8; stroke-width: 2.2; opacity: 1;",
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 26,
+            height: 26,
+            color: "#38bdf8",
           },
         };
       }
