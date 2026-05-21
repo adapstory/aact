@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { AactConfig } from "../../config";
 import type { Renderer } from "../output";
@@ -54,17 +55,42 @@ const isModuleNotFound = (error: unknown): boolean => {
   );
 };
 
-const companionInstallHint = [
-  `aact view requires the @aact/view companion package.`,
+/**
+ * The dist-tag the install hint and prompt target. Tied to the
+ * core's release channel — when aact graduates beta, change to
+ * `latest` (or drop the qualifier).
+ */
+const COMPANION_DIST_TAG = "beta";
+const COMPANION_INSTALL_SPEC = `@aact/view@${COMPANION_DIST_TAG}`;
+
+const fullCompanionInstallHint = [
+  `aact view needs the @aact/view companion package. Three ways to get it:`,
   ``,
-  `Install it once and re-run:`,
-  `  pnpm add -D aact@beta @aact/view@beta`,
-  `  (or: npm i -D aact@beta @aact/view@beta`,
-  `   /   yarn add -D aact@beta @aact/view@beta)`,
+  `1) Project-local (recommended):`,
+  `     pnpm add -D aact@${COMPANION_DIST_TAG} ${COMPANION_INSTALL_SPEC}`,
+  `     (or: npm i -D … / yarn add -D … )`,
+  `     then re-run \`npx aact view\` from the project root.`,
   ``,
-  `Then:`,
-  `  npx aact view`,
+  `2) One-off run (no install lingers):`,
+  `     npx -p aact@${COMPANION_DIST_TAG} -p ${COMPANION_INSTALL_SPEC} aact view`,
+  ``,
+  `3) Global (architect using aact across many repos):`,
+  `     npm i -g aact@${COMPANION_DIST_TAG} ${COMPANION_INSTALL_SPEC}`,
+  `     then \`aact view\` from any project with aact.config.ts.`,
 ].join("\n");
+
+/**
+ * `aact` was invoked from an npm/pnpm temp cache (`npx aact view`,
+ * `pnpm dlx aact view`). In that mode there is no project node
+ * tree we can install the companion into so it resolves on retry —
+ * a `pnpm add` in cwd writes to a different tree than the one the
+ * core CLI is being resolved from. Tell the user to use the
+ * multi-package one-off form instead.
+ */
+const isRunningFromTempCache = (): boolean => {
+  const here = fileURLToPath(import.meta.url);
+  return /[/\\](?:_npx|\.dlx)[/\\]/.test(here);
+};
 
 const importCompanion = async (): Promise<ViewCompanionModule> => {
   // Dynamic import via a string variable keeps the core build from
@@ -97,10 +123,10 @@ const detectPackageManager = (cwd: string): PackageManager => {
 };
 
 const installArgs = (pm: PackageManager): readonly string[] => {
-  if (pm === "pnpm") return ["add", "-D", "@aact/view"];
-  if (pm === "yarn") return ["add", "-D", "@aact/view"];
-  if (pm === "bun") return ["add", "-d", "@aact/view"];
-  return ["install", "--save-dev", "@aact/view"];
+  if (pm === "pnpm") return ["add", "-D", COMPANION_INSTALL_SPEC];
+  if (pm === "yarn") return ["add", "-D", COMPANION_INSTALL_SPEC];
+  if (pm === "bun") return ["add", "-d", COMPANION_INSTALL_SPEC];
+  return ["install", "--save-dev", COMPANION_INSTALL_SPEC];
 };
 
 /** Ask the user before installing. Non-TTY environments (CI,
@@ -151,13 +177,37 @@ const loadCompanion = async (): Promise<ViewCompanionModule> => {
       );
     }
 
-    // Module missing. Offer to install — only with the user's
-    // explicit yes; never auto-install (CI / scripted invocations
-    // shouldn't have node_modules surprise-mutated under them).
+    // Module missing. Auto-install never runs silently — we always
+    // require an explicit yes; and there are contexts where even
+    // an approved install doesn't help, so we skip prompting and
+    // give targeted instructions instead:
+    //   • npx / pnpm dlx temp cache — cwd's node tree is unrelated
+    //     to the one resolving our binary, so adding the companion
+    //     in cwd doesn't show up on retry import.
+    //   • cwd without package.json — no tree to install into.
+    if (isRunningFromTempCache()) {
+      throw new ToolError(
+        "view.companionMissing",
+        [
+          `aact was launched from an npx / pnpm dlx cache, so installing the`,
+          `companion into the current project would not be visible to the`,
+          `running CLI. Use one of these instead:`,
+          ``,
+          `  • One-off (no install lingers):`,
+          `      npx -p aact@${COMPANION_DIST_TAG} -p ${COMPANION_INSTALL_SPEC} aact view`,
+          `  • Project-local:`,
+          `      pnpm add -D aact@${COMPANION_DIST_TAG} ${COMPANION_INSTALL_SPEC}`,
+          `      then re-run \`npx aact view\` from the project root.`,
+          `  • Global:`,
+          `      npm i -g aact@${COMPANION_DIST_TAG} ${COMPANION_INSTALL_SPEC}`,
+        ].join("\n"),
+      );
+    }
+
     const cwd = process.cwd();
     const hasPackageJson = existsSync(path.join(cwd, "package.json"));
     if (!hasPackageJson) {
-      throw new ToolError("view.companionMissing", companionInstallHint);
+      throw new ToolError("view.companionMissing", fullCompanionInstallHint);
     }
     const pm = detectPackageManager(cwd);
     let approved = false;
@@ -168,7 +218,7 @@ const loadCompanion = async (): Promise<ViewCompanionModule> => {
       approved = false;
     }
     if (!approved) {
-      throw new ToolError("view.companionMissing", companionInstallHint);
+      throw new ToolError("view.companionMissing", fullCompanionInstallHint);
     }
     await runInstall(pm, cwd);
     return await importCompanion();

@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.22 — 2026-05-21
+
+`aact view` companion-missing flow no longer guides the user into
+a dead end when they invoked the CLI through `npx` / `pnpm dlx`.
+The binary is running from a temp cache there; installing
+`@aact/view` into the user's project lands the package in a node
+tree the cached `aact` cannot resolve from. We now detect that
+context and print three explicit options (project-local install
+
+- re-run, multi-package `npx -p`, or global install) instead of
+  prompting. When `aact` is installed locally, the prompt still
+  runs but the install spec finally includes the `@beta` dist-tag,
+  so `pnpm add -D @aact/view` no longer silently no-ops against a
+  non-existent `latest` release.
+
 ## v3.0.0-beta.21 — 2026-05-21
 
 Hotfix for `@aact/view` WebSocket upgrade crash. The CrossWS
