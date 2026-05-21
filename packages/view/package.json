@@ -1,6 +1,6 @@
 {
   "name": "@aact/view",
-  "version": "3.0.0-beta.19",
+  "version": "3.0.0-beta.20",
   "description": "Local architecture workbench for aact — browser-based live viewer of the normalised C4 Model.",
   "type": "module",
   "license": "GPL-3.0",
@@ -40,12 +40,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "peerDependencies": {
-    "aact": "workspace:*"
+    "aact": "workspace:^"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tsconfig/svelte": "^5.0.8",
-    "aact": "workspace:*",
+    "aact": "workspace:^",
     "svelte": "^5.55.8",
     "typescript": "5.9.3",
     "vite": "^8.0.13"

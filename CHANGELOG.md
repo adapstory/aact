@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.20 — 2026-05-21
+
+Re-publish of beta.19 with the `@aact/view` peerDependency on
+`aact` resolved from `workspace:*` to `^3.0.0-beta.20`. The
+beta.19 tarball leaked the pnpm workspace protocol because
+the publish ran through `npm publish` (which doesn't rewrite
+the marker) instead of `pnpm publish` — npm/yarn consumers
+could not install `@aact/view@beta.19` as a result.
+
 ## v3.0.0-beta.19 — 2026-05-21
 
 `aact view` ships as an experimental browser workbench. New
