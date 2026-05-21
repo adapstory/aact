@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+
 import type { AactConfig } from "../../config";
 import type { Renderer } from "../output";
 import { ToolError } from "../output";
@@ -60,33 +64,112 @@ const companionInstallHint = [
   `  pnpm dlx -p aact -p @aact/view aact view`,
 ].join("\n");
 
-const loadCompanion = async (): Promise<ViewCompanionModule> => {
-  try {
-    // Dynamic import via a string variable keeps the core build
-    // from trying to resolve @aact/view at bundle time — unbuild
-    // would otherwise either externalise it (fine) or warn. The
-    // companion is genuinely optional; the import happens only
-    // when the user invokes `aact view`.
-    const specifier = "@aact/view";
-    const mod = (await import(specifier)) as ViewCompanionModule;
-    if (typeof mod.runWorkbench !== "function") {
-      throw new ToolError(
-        "view.bootFailed",
-        "@aact/view is installed but does not export runWorkbench — version mismatch?",
-      );
-    }
-    return mod;
-  } catch (error) {
-    if (error instanceof ToolError) throw error;
-    if (isModuleNotFound(error)) {
-      throw new ToolError("view.companionMissing", companionInstallHint);
-    }
+const importCompanion = async (): Promise<ViewCompanionModule> => {
+  // Dynamic import via a string variable keeps the core build from
+  // trying to resolve @aact/view at bundle time — unbuild would
+  // otherwise either externalise it (fine) or warn. The companion
+  // is genuinely optional; the import happens only when the user
+  // invokes `aact view`.
+  const specifier = "@aact/view";
+  const mod = (await import(specifier)) as ViewCompanionModule;
+  if (typeof mod.runWorkbench !== "function") {
     throw new ToolError(
       "view.bootFailed",
-      `Failed to load @aact/view: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      "@aact/view is installed but does not export runWorkbench — version mismatch?",
     );
+  }
+  return mod;
+};
+
+type PackageManager = "pnpm" | "yarn" | "bun" | "npm";
+
+/** Detect the package manager the user's project already commits
+ *  to. Lockfile-first so a repo that ships pnpm-lock.yaml doesn't
+ *  accidentally splice an `npm install` against it. Falls back to
+ *  npm — universally available. */
+const detectPackageManager = (cwd: string): PackageManager => {
+  if (existsSync(path.join(cwd, "pnpm-lock.yaml"))) return "pnpm";
+  if (existsSync(path.join(cwd, "yarn.lock"))) return "yarn";
+  if (existsSync(path.join(cwd, "bun.lockb"))) return "bun";
+  return "npm";
+};
+
+const installArgs = (pm: PackageManager): readonly string[] => {
+  if (pm === "pnpm") return ["add", "-D", "@aact/view"];
+  if (pm === "yarn") return ["add", "-D", "@aact/view"];
+  if (pm === "bun") return ["add", "-d", "@aact/view"];
+  return ["install", "--save-dev", "@aact/view"];
+};
+
+/** Ask the user before installing. Non-TTY environments (CI,
+ *  piped output) skip the prompt and fall through to the install
+ *  hint — surprising a script with an interactive package install
+ *  would be worse than a clear error. */
+const promptInstall = async (pm: PackageManager): Promise<boolean> => {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+  const { default: consola } = await import("consola");
+  const answer = await consola.prompt(
+    `aact view needs @aact/view to render the workbench.\nInstall it now via \`${pm} ${installArgs(pm).join(" ")}\`?`,
+    { type: "confirm", initial: true, cancel: "reject" },
+  );
+  return answer === true;
+};
+
+const runInstall = (pm: PackageManager, cwd: string): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(pm, [...installArgs(pm)], {
+      stdio: "inherit",
+      cwd,
+      shell: process.platform === "win32",
+    });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) resolve();
+      else
+        reject(
+          new ToolError(
+            "view.bootFailed",
+            `${pm} install exited with code ${code ?? "?"}; install @aact/view manually and retry.`,
+          ),
+        );
+    });
+  });
+
+const loadCompanion = async (): Promise<ViewCompanionModule> => {
+  try {
+    return await importCompanion();
+  } catch (error) {
+    if (error instanceof ToolError) throw error;
+    if (!isModuleNotFound(error)) {
+      throw new ToolError(
+        "view.bootFailed",
+        `Failed to load @aact/view: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    // Module missing. Offer to install — only with the user's
+    // explicit yes; never auto-install (CI / scripted invocations
+    // shouldn't have node_modules surprise-mutated under them).
+    const cwd = process.cwd();
+    const hasPackageJson = existsSync(path.join(cwd, "package.json"));
+    if (!hasPackageJson) {
+      throw new ToolError("view.companionMissing", companionInstallHint);
+    }
+    const pm = detectPackageManager(cwd);
+    let approved = false;
+    try {
+      approved = await promptInstall(pm);
+    } catch {
+      // Prompt cancelled (Ctrl-C / Esc) — treat as decline.
+      approved = false;
+    }
+    if (!approved) {
+      throw new ToolError("view.companionMissing", companionInstallHint);
+    }
+    await runInstall(pm, cwd);
+    return await importCompanion();
   }
 };
 
