@@ -184,6 +184,10 @@ export const layoutScope = async (
       label: r.label,
       type: "default",
       animated: false,
+      // Drill mode aggregates by construction — every surviving
+      // relation crosses a Bounded Context boundary (intra-boundary
+      // relations were filtered out by buildScopeRelations).
+      data: { crossBoundary: true },
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 24,
@@ -528,6 +532,27 @@ const flattenElkResult = (
   return out;
 };
 
+/**
+ * "Cross-boundary" is a property of the original relation, not of
+ * its visible-endpoint resolution. We compute it from the elements'
+ * immediate boundary parents:
+ *   - both elements share a non-null immediate parent → intra
+ *   - everything else (different parents, one at root) → cross
+ *
+ * The flag travels with the edge as `data.crossBoundary` so
+ * App.svelte's "cross-boundary only" filter can dim intra edges
+ * without re-running ELK.
+ */
+const isCrossBoundary = (
+  fromName: string,
+  toName: string,
+  parentMap: ReadonlyMap<string, string>,
+): boolean => {
+  const fp = parentMap.get(fromName) ?? null;
+  const tp = parentMap.get(toName) ?? null;
+  return fp === null || tp === null || fp !== tp;
+};
+
 const collectVisibleEdges = (
   model: Model,
   expanded: ReadonlySet<string>,
@@ -542,6 +567,7 @@ const collectVisibleEdges = (
       if (from.id === to.id) continue;
       const key = `${from.id}->${to.id}`;
       if (seen.has(key)) continue;
+      const crossBoundary = isCrossBoundary(el.name, rel.to, parentMap);
       seen.set(key, {
         id: `edge-${index++}`,
         source: from.id,
@@ -550,8 +576,9 @@ const collectVisibleEdges = (
           from.kind === "element" && to.kind === "element"
             ? rel.description
             : undefined,
-        type: "smoothstep",
+        type: "default",
         animated: false,
+        data: { crossBoundary },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 24,

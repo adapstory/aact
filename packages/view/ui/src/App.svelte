@@ -34,19 +34,26 @@
 
   type ViewMode = "drill" | "expand" | "flat";
   type EdgeStyle = "bezier" | "smoothstep" | "step";
+  type EdgeFilter = "all" | "cross-boundary";
 
-  // Persist edge-style choice across page reloads — it's a personal
-  // preference, not a per-session decision, and the layout itself
-  // doesn't change between styles so there's no model coupling.
+  // Persist edge-style + edge-filter choices across page reloads —
+  // both are personal preferences with no model coupling, so we
+  // bring them back next session instead of resetting.
   const EDGE_STYLE_KEY = "aact-view:edge-style";
+  const EDGE_FILTER_KEY = "aact-view:edge-filter";
   const initialEdgeStyle =
     (typeof localStorage !== "undefined" &&
       (localStorage.getItem(EDGE_STYLE_KEY) as EdgeStyle | null)) ||
     "bezier";
+  const initialEdgeFilter =
+    (typeof localStorage !== "undefined" &&
+      (localStorage.getItem(EDGE_FILTER_KEY) as EdgeFilter | null)) ||
+    "all";
 
   let envelope = $state<ModelEnvelope | null>(null);
   let mode = $state<ViewMode>("drill");
   let edgeStyle = $state<EdgeStyle>(initialEdgeStyle);
+  let edgeFilter = $state<EdgeFilter>(initialEdgeFilter);
   let breadcrumb = $state<BreadcrumbEntry[]>([{ kind: "landscape" }]);
   let expanded = $state<Set<string>>(new Set());
   let selected = $state<
@@ -225,6 +232,12 @@
       localStorage.setItem(EDGE_STYLE_KEY, next);
     }
   };
+  const setEdgeFilter = (next: EdgeFilter): void => {
+    edgeFilter = next;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(EDGE_FILTER_KEY, next);
+    }
+  };
 
   // Dim edges that aren't incident to the hovered node so the user
   // can trace a single dependency through a crowded canvas. Strip
@@ -234,11 +247,35 @@
   // `stroke` from the referencing path. Override `type` so the
   // topbar style toggle applies to every edge without re-running
   // ELK.
+  const isCross = (e: Edge): boolean =>
+    Boolean((e.data as { crossBoundary?: boolean } | undefined)?.crossBoundary);
+
   const decoratedEdges = $derived<Edge[]>(
     edges.map((e) => {
       const incident =
         hoveredNodeId !== null &&
         (e.source === hoveredNodeId || e.target === hoveredNodeId);
+      const dimmedByFilter = edgeFilter === "cross-boundary" && !isCross(e);
+
+      // Layered decisions — filter beats hover for visibility:
+      //   1. Filter dims intra-boundary into the background regardless of hover
+      //   2. Without hover, edges render at full base style
+      //   3. With hover, incident edges pop, non-incident dim
+      if (dimmedByFilter && !incident) {
+        return {
+          ...e,
+          type: edgeStyle,
+          animated: false,
+          label: undefined,
+          style: "stroke: #334155; stroke-width: 1; opacity: 0.18;",
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 24,
+            height: 24,
+            color: "#334155",
+          },
+        };
+      }
       if (!hoveredNodeId) {
         return { ...e, type: edgeStyle };
       }
@@ -379,6 +416,22 @@
           onclick={() => setEdgeStyle("step")}
           title="Sharp 90° corners"
         >Step</button>
+      </div>
+      <div class="modes edge-modes" role="tablist" aria-label="Edge filter">
+        <button
+          role="tab"
+          class:active={edgeFilter === "all"}
+          aria-selected={edgeFilter === "all"}
+          onclick={() => setEdgeFilter("all")}
+          title="Show every relation"
+        >All</button>
+        <button
+          role="tab"
+          class:active={edgeFilter === "cross-boundary"}
+          aria-selected={edgeFilter === "cross-boundary"}
+          onclick={() => setEdgeFilter("cross-boundary")}
+          title="Highlight relations that cross a Bounded Context; intra-boundary stays faint"
+        >Cross-BC</button>
       </div>
     </div>
 
