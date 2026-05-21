@@ -96,12 +96,11 @@ export interface LayoutResult {
 }
 
 // Dense C4 landscapes routinely have 50+ relations passing through a
-// shared API gateway. ELK's default polyline routing produces
-// dozens of crossing diagonals that read like spaghetti. Bumping
-// `edgeEdge` / `edgeNode` spacing + asking layered for orthogonal
-// routing keeps parallel edges visually separated; combined with
-// smoothstep edges on the xyflow side, the resulting layout looks
-// like Structurizr / IcePanel rather than a hairball.
+// shared API gateway. Bumping `edgeEdge` / `edgeNode` spacing keeps
+// parallel edges visually separated while letting ELK pick the
+// routing strategy that works for the node layout. The xyflow-side
+// edge type (bezier / smoothstep / step) is chosen by the user from
+// the topbar — see `EdgeStyle` in App.svelte.
 const layeredOptions = {
   "elk.algorithm": "layered",
   "elk.direction": "RIGHT",
@@ -111,7 +110,6 @@ const layeredOptions = {
   "elk.spacing.edgeNode": "30",
   "elk.layered.spacing.edgeEdgeBetweenLayers": "20",
   "elk.layered.spacing.edgeNodeBetweenLayers": "30",
-  "elk.edgeRouting": "ORTHOGONAL",
   "elk.padding": "[top=48, left=44, bottom=44, right=44]",
 };
 
@@ -184,7 +182,7 @@ export const layoutScope = async (
       source,
       target,
       label: r.label,
-      type: "smoothstep",
+      type: "default",
       animated: false,
       markerEnd: {
         type: MarkerType.ArrowClosed,

@@ -33,9 +33,20 @@
   import { VIEW_ACTIONS, type ViewActions } from "./actions.ts";
 
   type ViewMode = "drill" | "expand" | "flat";
+  type EdgeStyle = "bezier" | "smoothstep" | "step";
+
+  // Persist edge-style choice across page reloads — it's a personal
+  // preference, not a per-session decision, and the layout itself
+  // doesn't change between styles so there's no model coupling.
+  const EDGE_STYLE_KEY = "aact-view:edge-style";
+  const initialEdgeStyle =
+    (typeof localStorage !== "undefined" &&
+      (localStorage.getItem(EDGE_STYLE_KEY) as EdgeStyle | null)) ||
+    "bezier";
 
   let envelope = $state<ModelEnvelope | null>(null);
   let mode = $state<ViewMode>("drill");
+  let edgeStyle = $state<EdgeStyle>(initialEdgeStyle);
   let breadcrumb = $state<BreadcrumbEntry[]>([{ kind: "landscape" }]);
   let expanded = $state<Set<string>>(new Set());
   let selected = $state<
@@ -208,34 +219,46 @@
       : null,
   );
 
+  const setEdgeStyle = (next: EdgeStyle): void => {
+    edgeStyle = next;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(EDGE_STYLE_KEY, next);
+    }
+  };
+
   // Dim edges that aren't incident to the hovered node so the user
   // can trace a single dependency through a crowded canvas. Strip
   // labels from non-incident edges as well — at 30+ relations the
   // label chips pile up faster than the lines do. Re-write
   // markerEnd color explicitly because SVG markers don't inherit
-  // `stroke` from the referencing path.
+  // `stroke` from the referencing path. Override `type` so the
+  // topbar style toggle applies to every edge without re-running
+  // ELK.
   const decoratedEdges = $derived<Edge[]>(
-    hoveredNodeId
-      ? edges.map((e) => {
-          const incident =
-            e.source === hoveredNodeId || e.target === hoveredNodeId;
-          const color = incident ? "#38bdf8" : "#475569";
-          return {
-            ...e,
-            animated: incident,
-            label: incident ? e.label : undefined,
-            style: incident
-              ? "stroke: #38bdf8; stroke-width: 2.4; opacity: 1;"
-              : "stroke: #475569; stroke-width: 1.2; opacity: 0.35;",
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 24,
-              height: 24,
-              color,
-            },
-          };
-        })
-      : edges,
+    edges.map((e) => {
+      const incident =
+        hoveredNodeId !== null &&
+        (e.source === hoveredNodeId || e.target === hoveredNodeId);
+      if (!hoveredNodeId) {
+        return { ...e, type: edgeStyle };
+      }
+      const color = incident ? "#38bdf8" : "#475569";
+      return {
+        ...e,
+        type: edgeStyle,
+        animated: incident,
+        label: incident ? e.label : undefined,
+        style: incident
+          ? "stroke: #38bdf8; stroke-width: 2.4; opacity: 1;"
+          : "stroke: #475569; stroke-width: 1.2; opacity: 0.35;",
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 24,
+          height: 24,
+          color,
+        },
+      };
+    }),
   );
 
   const summary = $derived<{
@@ -310,28 +333,53 @@
       </span>
     </div>
 
-    <div class="modes" role="tablist" aria-label="View mode">
-      <button
-        role="tab"
-        class:active={mode === "drill"}
-        aria-selected={mode === "drill"}
-        onclick={() => setMode("drill")}
-        title="Replace the canvas with the boundary you double-click"
-      >Drill</button>
-      <button
-        role="tab"
-        class:active={mode === "expand"}
-        aria-selected={mode === "expand"}
-        onclick={() => setMode("expand")}
-        title="Open boundaries inline — parents stay visible"
-      >Expand</button>
-      <button
-        role="tab"
-        class:active={mode === "flat"}
-        aria-selected={mode === "flat"}
-        onclick={() => setMode("flat")}
-        title="Render every level of the hierarchy at once"
-      >Flat</button>
+    <div class="topbar-controls">
+      <div class="modes" role="tablist" aria-label="View mode">
+        <button
+          role="tab"
+          class:active={mode === "drill"}
+          aria-selected={mode === "drill"}
+          onclick={() => setMode("drill")}
+          title="Replace the canvas with the boundary you double-click"
+        >Drill</button>
+        <button
+          role="tab"
+          class:active={mode === "expand"}
+          aria-selected={mode === "expand"}
+          onclick={() => setMode("expand")}
+          title="Open boundaries inline — parents stay visible"
+        >Expand</button>
+        <button
+          role="tab"
+          class:active={mode === "flat"}
+          aria-selected={mode === "flat"}
+          onclick={() => setMode("flat")}
+          title="Render every level of the hierarchy at once"
+        >Flat</button>
+      </div>
+      <div class="modes edge-modes" role="tablist" aria-label="Edge style">
+        <button
+          role="tab"
+          class:active={edgeStyle === "bezier"}
+          aria-selected={edgeStyle === "bezier"}
+          onclick={() => setEdgeStyle("bezier")}
+          title="Smooth bezier curves"
+        >Curve</button>
+        <button
+          role="tab"
+          class:active={edgeStyle === "smoothstep"}
+          aria-selected={edgeStyle === "smoothstep"}
+          onclick={() => setEdgeStyle("smoothstep")}
+          title="Rounded 90° corners — Structurizr-style"
+        >Smooth</button>
+        <button
+          role="tab"
+          class:active={edgeStyle === "step"}
+          aria-selected={edgeStyle === "step"}
+          onclick={() => setEdgeStyle("step")}
+          title="Sharp 90° corners"
+        >Step</button>
+      </div>
     </div>
 
     <div class="context">
@@ -375,7 +423,7 @@
           zoomOnDoubleClick={false}
           minZoom={0.1}
           maxZoom={2}
-          defaultEdgeOptions={{ type: "smoothstep", animated: false }}
+          defaultEdgeOptions={{ type: edgeStyle, animated: false }}
         >
           <Background />
           <Controls />
@@ -571,12 +619,21 @@
   .status-lost {
     color: #f87171;
   }
+  .topbar-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
   .modes {
     display: inline-flex;
     background: #0f172a;
     border: 1px solid #1e293b;
     border-radius: 999px;
     padding: 3px;
+  }
+  .edge-modes button {
+    padding: 5px 10px;
+    font-size: 11px;
   }
   .modes button {
     appearance: none;
