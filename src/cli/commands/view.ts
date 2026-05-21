@@ -89,7 +89,19 @@ const fullCompanionInstallHint = [
  */
 const isRunningFromTempCache = (): boolean => {
   const here = fileURLToPath(import.meta.url);
-  return /[/\\](?:_npx|\.dlx)[/\\]/.test(here);
+  // Match temp-cache markers that appear as path segments. Confirmed
+  // layouts as of 2026-05:
+  //   npm npx (any version): `~/.npm/_npx/<hash>/` or
+  //     `%LocalAppData%/npm-cache/_npx/` on Windows.
+  //   pnpm 10+: `~/Library/Caches/pnpm/dlx/<hash>/` (mac),
+  //     `~/.cache/pnpm/dlx/<hash>/` (Linux), `%LocalAppData%/pnpm/
+  //     Cache/dlx/<hash>/` (Windows).
+  //   pnpm ≤9: `~/.pnpm/.dlx/<hash>/`.
+  //   yarn berry: `$TMPDIR/xfs-XXX/dlx-XXX-RAND/` — `dlx` is a prefix
+  //     of the deepest segment, not its full value. The `\b` word
+  //     boundary lets us match `dlx`, `dlx-`, and `.dlx` while still
+  //     refusing accidental hits like `apt-build-dlxide`.
+  return /[/\\](?:_npx|\.?dlx)\b/.test(here);
 };
 
 const importCompanion = async (): Promise<ViewCompanionModule> => {
@@ -197,7 +209,8 @@ const loadCompanion = async (): Promise<ViewCompanionModule> => {
           `      npx -p aact@${COMPANION_DIST_TAG} -p ${COMPANION_INSTALL_SPEC} aact view`,
           `  • Project-local:`,
           `      pnpm add -D aact@${COMPANION_DIST_TAG} ${COMPANION_INSTALL_SPEC}`,
-          `      then re-run \`npx aact view\` from the project root.`,
+          `      then \`npx aact view\` (note: no @beta — drop the spec and npx`,
+          `      will prefer the locally-installed aact + companion).`,
           `  • Global:`,
           `      npm i -g aact@${COMPANION_DIST_TAG} ${COMPANION_INSTALL_SPEC}`,
         ].join("\n"),

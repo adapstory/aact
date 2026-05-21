@@ -6,85 +6,53 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-## v3.0.0-beta.22 — 2026-05-21
+## v3.0.0-beta.23 — 2026-05-21
 
-`aact view` companion-missing flow no longer guides the user into
-a dead end when they invoked the CLI through `npx` / `pnpm dlx`.
-The binary is running from a temp cache there; installing
-`@aact/view` into the user's project lands the package in a node
-tree the cached `aact` cannot resolve from. We now detect that
-context and print three explicit options (project-local install
-
-- re-run, multi-package `npx -p`, or global install) instead of
-  prompting. When `aact` is installed locally, the prompt still
-  runs but the install spec finally includes the `@beta` dist-tag,
-  so `pnpm add -D @aact/view` no longer silently no-ops against a
-  non-existent `latest` release.
-
-## v3.0.0-beta.21 — 2026-05-21
-
-Hotfix for `@aact/view` WebSocket upgrade crash. The CrossWS
-`resolve` hook added in beta.19 forwarded the upgrade request to
-`H3.fetch()`, which expects a standard Fetch `Request` while
-listhen passes a different upgrade-event shape — every WS
-connection threw `Cannot read properties of undefined (reading
-'pathname')` and tore the server down. The original
-`defineWebSocketHandler.upgrade` callback already enforces the
-auth token, so the extra resolver was removed.
-
-The install hint now points users at `pnpm add -D aact@beta
-@aact/view@beta` instead of the `pnpm dlx -p ... -p ...` form,
-which leaks `-p` arguments into the binary's argv on some pnpm
-versions.
-
-## v3.0.0-beta.20 — 2026-05-21
-
-Re-publish of beta.19 with the `@aact/view` peerDependency on
-`aact` resolved from `workspace:*` to `^3.0.0-beta.20`. The
-beta.19 tarball leaked the pnpm workspace protocol because
-the publish ran through `npm publish` (which doesn't rewrite
-the marker) instead of `pnpm publish` — npm/yarn consumers
-could not install `@aact/view@beta.19` as a result.
-
-## v3.0.0-beta.19 — 2026-05-21
-
-`aact view` ships as an experimental browser workbench. New
-companion package `@aact/view` publishes under the `beta` dist-tag
-alongside aact-core; core has zero direct dependency on it. When a
-user runs `aact view` and `@aact/view` is missing, the CLI now
-prompts to install via the project's existing package manager and
-boots the workbench on approval. Structurizr DSL loader bug that
-classified nested boundaries as root is also resolved.
+> Supersedes the rapid-iteration sequence beta.19 → beta.22. The
+> first four publishes shipped the same feature but stumbled on
+> packaging / runtime details discovered only on real installs
+> (workspace protocol leaking through `npm publish`; WebSocket
+> upgrade crash; missing `@beta` dist-tag in the auto-install
+> hint; the dead-end prompt under `npx` / `pnpm dlx`). Upgrade
+> directly from beta.18 to beta.23 — the intermediate tags
+> remain published but are not recommended.
 
 ### Added
 
 - **`aact view` — experimental browser workbench (`@aact/view`).**
-  Companion package, optional peer-dep on aact. `aact view` boots
-  a local h3 server with a Svelte 5 SPA on the model that
-  `aact.config.ts` resolves; ELK lays the graph out, Svelte Flow
-  renders it, chokidar pushes live re-layouts over WebSocket on
-  every source save. Three modes (Drill / Expand / Flat) match how
-  an architect navigates a C4 hierarchy. Edge filter highlights
-  Bounded-Context interactions when intra-context wiring would
-  obscure the diagram. Visual language follows the Simon Brown C4
-  reference palette; the details panel surfaces tags, technology,
-  properties, outgoing relations, and a source link that opens the
-  DSL line in the IDE configured via `AACT_FILE_OPENER`. A
-  per-session auth token guards `/api/model` and the WebSocket
-  upgrade so unrelated browser pages on the same machine cannot
-  read the graph. The subcommand lives in core; `@aact/view` is a
-  separate npm package so users who do not want a browser
-  dependency keep their install light. Full visual + interaction
-  spec in [`packages/view/DESIGN.md`](packages/view/DESIGN.md).
-- **Structurizr DSL loader: nested boundaries no longer surface as
-  root.** Previously every parsed boundary landed in
+  Companion package, optional dependency on aact. `aact view`
+  boots a local h3 server with a Svelte 5 SPA on the model
+  resolved from `aact.config.ts`; ELK lays the graph out, Svelte
+  Flow renders it, chokidar pushes live re-layouts over WebSocket
+  on every source save. Three modes (Drill / Expand / Flat) match
+  how an architect navigates a C4 hierarchy. Edge filter
+  highlights Bounded-Context interactions when intra-context
+  wiring obscures the diagram. Visual language follows the Simon
+  Brown C4 reference palette; the details panel surfaces tags,
+  technology, properties, outgoing relations, and a source link
+  that opens the DSL line in the IDE configured via
+  `AACT_FILE_OPENER`. A per-session auth token guards
+  `/api/model` and the WebSocket upgrade so unrelated browser
+  pages on the same machine cannot read the graph. The subcommand
+  lives in core; `@aact/view` ships as a separate npm package so
+  users who do not want a browser dependency keep their install
+  light. When the companion is missing, `aact view` either
+  prompts to install via the project's package manager (when the
+  binary is running from a real `node_modules`) or prints a
+  three-option hint covering project-local install, multi-package
+  `npx -p` one-off, and global install (when running from an
+  `_npx` / `dlx` cache where in-cwd installs are invisible to the
+  cached binary). Full visual + interaction spec in
+  [`packages/view/DESIGN.md`](packages/view/DESIGN.md).
+- **Structurizr DSL loader: nested boundaries no longer surface
+  as root.** Previously every parsed boundary landed in
   `model.rootBoundaryNames`, so a `softwareSystem` wrapping
   `container` groups produced both the System boundary AND its
-  child Container boundaries at the top level. Downstream consumers
-  (`aact view` Landscape, `aact model` text-summary, PlantUML
-  `generate`) all double-counted as a result. A boundary that any
-  other boundary lists in `boundaryNames` is now filtered out of
-  the root set.
+  child Container boundaries at the top level. Downstream
+  consumers (`aact view` Landscape, `aact model` text-summary,
+  PlantUML `generate`) all double-counted as a result. A boundary
+  that any other boundary lists in `boundaryNames` is now
+  filtered out of the root set.
 
 ## v3.0.0-beta.18 — 2026-05-21
 
