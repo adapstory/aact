@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.21 — 2026-05-21
+
+Hotfix for `@aact/view` WebSocket upgrade crash. The CrossWS
+`resolve` hook added in beta.19 forwarded the upgrade request to
+`H3.fetch()`, which expects a standard Fetch `Request` while
+listhen passes a different upgrade-event shape — every WS
+connection threw `Cannot read properties of undefined (reading
+'pathname')` and tore the server down. The original
+`defineWebSocketHandler.upgrade` callback already enforces the
+auth token, so the extra resolver was removed.
+
+The install hint now points users at `pnpm add -D aact@beta
+@aact/view@beta` instead of the `pnpm dlx -p ... -p ...` form,
+which leaks `-p` arguments into the binary's argv on some pnpm
+versions.
+
 ## v3.0.0-beta.20 — 2026-05-21
 
 Re-publish of beta.19 with the `@aact/view` peerDependency on

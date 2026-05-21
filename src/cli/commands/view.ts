@@ -57,11 +57,13 @@ const isModuleNotFound = (error: unknown): boolean => {
 const companionInstallHint = [
   `aact view requires the @aact/view companion package.`,
   ``,
-  `Install it locally so the dynamic import resolves:`,
-  `  pnpm add -D @aact/view@beta   (or: npm i -D / yarn add -D)`,
+  `Install it once and re-run:`,
+  `  pnpm add -D aact@beta @aact/view@beta`,
+  `  (or: npm i -D aact@beta @aact/view@beta`,
+  `   /   yarn add -D aact@beta @aact/view@beta)`,
   ``,
-  `Or run it one-off without polluting node_modules:`,
-  `  pnpm dlx -p aact -p @aact/view aact view`,
+  `Then:`,
+  `  npx aact view`,
 ].join("\n");
 
 const importCompanion = async (): Promise<ViewCompanionModule> => {
