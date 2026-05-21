@@ -1,3 +1,9 @@
+// Use Vite's `?worker` import suffix — the bundler returns a Worker
+// constructor with the chunk URL baked in, sidestepping `new URL(...,
+// import.meta.url)` which doubles the `/assets/` segment when
+// `base: "./"` and the importer itself lives in `/assets/`.
+import LayoutWorker from "./layout.worker.ts?worker";
+
 interface LayoutRequest {
   readonly id: number;
   readonly graph: unknown;
@@ -26,9 +32,7 @@ const rejectAll = (error: Error): void => {
 
 const getWorker = (): Worker => {
   if (worker) return worker;
-  worker = new Worker(new URL("./layout.worker.ts", import.meta.url), {
-    type: "module",
-  });
+  worker = new LayoutWorker();
   worker.addEventListener("message", (event: MessageEvent<LayoutResponse>) => {
     const callbacks = pending.get(event.data.id);
     if (!callbacks) return;
