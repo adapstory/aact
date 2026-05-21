@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.19 — 2026-05-21
+
+`aact view` ships as an experimental browser workbench. New
+companion package `@aact/view` publishes under the `beta` dist-tag
+alongside aact-core; core has zero direct dependency on it. When a
+user runs `aact view` and `@aact/view` is missing, the CLI now
+prompts to install via the project's existing package manager and
+boots the workbench on approval. Structurizr DSL loader bug that
+classified nested boundaries as root is also resolved.
+
 ### Added
 
 - **`aact view` — experimental browser workbench (`@aact/view`).**
