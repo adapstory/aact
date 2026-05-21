@@ -365,7 +365,7 @@
           {onnodepointerenter}
           {onnodepointerleave}
           fitView
-          fitViewOptions={{ padding: 0.18 }}
+          fitViewOptions={{ padding: 0.18, duration: 400 }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable
