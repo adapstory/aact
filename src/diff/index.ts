@@ -1,8 +1,9 @@
-export { computeDiff } from "./computeDiff";
+export { computeDiff, DEFAULT_RENAME_THRESHOLD } from "./computeDiff";
 export type {
   BoundaryChange,
   Change,
   ChangeAction,
+  ChangeGroup,
   ChangeSeverity,
   DiffData,
   DiffOptions,

@@ -10,6 +10,7 @@ export {
   type BoundaryChange,
   type Change,
   type ChangeAction,
+  type ChangeGroup,
   type ChangeSeverity,
   computeDiff,
   type DiffData,

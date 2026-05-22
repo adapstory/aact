@@ -75,6 +75,8 @@ const SEVERITY_PRECEDENCE: Record<ChangeSeverity, number> = {
   cosmetic: 2,
 };
 
+export const DEFAULT_RENAME_THRESHOLD = 0.65;
+
 const FIELD_SEVERITY: Record<FieldKind, ChangeSeverity> = {
   kind: "structural",
   external: "semantic",
@@ -464,7 +466,7 @@ const diffElements = (
     if (!baselineNames.has(name)) added.push(current.elements[name]);
   }
 
-  const threshold = options.renameThreshold ?? 0.65;
+  const threshold = options.renameThreshold ?? DEFAULT_RENAME_THRESHOLD;
   const renamePairs: RenamePair<Element>[] = options.disableRenameDetection
     ? []
     : iterativeRenameDetection(removed, added, renameMap, threshold);
@@ -572,7 +574,7 @@ const diffBoundaries = (
         removed,
         added,
         boundarySimilarity,
-        options.renameThreshold ?? 0.65,
+        options.renameThreshold ?? DEFAULT_RENAME_THRESHOLD,
       );
   const renamedRemoved = new Set(renamePairs.map((p) => p.removed));
   const renamedAdded = new Set(renamePairs.map((p) => p.added));

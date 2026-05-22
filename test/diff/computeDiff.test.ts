@@ -131,7 +131,7 @@ describe("computeDiff — rename detection", () => {
   });
 
   it("respects custom renameThreshold", () => {
-    // Names + labels too different — default 0.7 wouldn't match
+    // Names + labels too different — default threshold wouldn't match.
     const a = makeModel({ elements: [{ name: "alpha", label: "Alpha" }] });
     const b = makeModel({ elements: [{ name: "zeta", label: "Zeta" }] });
     const looseResult = diff(a, b, { renameThreshold: 0.1 });

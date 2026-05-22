@@ -5,7 +5,9 @@ import type { BoundaryKind, ElementKind } from "../model";
  * Terraform-style domain-grouped change log: every change identifies
  * an entity, an action, and the specific fields that moved. Optional
  * RFC 6902 `patch[]` rides along for tooling that wants to replay the
- * delta on a normalized Model JSON.
+ * delta on a normalized Model JSON. Optional `ChangeGroup[]` is the
+ * long-term extension point for higher-level architectural
+ * interpretations over primitive changes.
  *
  * Why domain-grouped and not pure JSON Patch? Agents reading the
  * envelope reason about "what architecturally changed" — `added
@@ -23,7 +25,7 @@ import type { BoundaryKind, ElementKind } from "../model";
  *    metadata.
  *
  * Renames are detected within the same `kind` only, with a similarity
- * score surfaced as `confidence`. Threshold defaults to 0.7; agents
+ * score surfaced as `confidence`. Threshold defaults to 0.65; agents
  * gate on `confidence` if they want stricter rename behaviour.
  */
 export type ChangeAction =
@@ -125,6 +127,23 @@ export type Change =
   | RelationChange
   | WorkspaceChange;
 
+export interface ChangeGroup {
+  /** Stable group id inside one diff result, e.g. `group:introducedRepository:orders`. */
+  readonly id: string;
+  /** Open-ended pattern key; consumers must ignore unknown values. */
+  readonly kind: string;
+  /** Template-generated human title, not LLM prose. */
+  readonly title: string;
+  /** Maximum severity of grouped primitive changes. */
+  readonly severity: ChangeSeverity;
+  /** Pattern confidence in [0,1]. */
+  readonly confidence: number;
+  /** Addresses of primitive `changes[]` entries this group explains. */
+  readonly changeAddresses: readonly string[];
+  /** Pattern-specific facts used to form the group and title. */
+  readonly evidence?: Readonly<Record<string, unknown>>;
+}
+
 export interface DiffSummary {
   /** One-liner reasoning seed for agents — `"+2 elements, -1 relation,
    *  1 technology change [structural]"`. First field they read. */
@@ -159,6 +178,10 @@ export interface DiffData {
    *  the highest-impact ones, so agents truncating to top-N never
    *  miss a structural change. */
   readonly changes: readonly Change[];
+  /** Optional higher-level architectural interpretations over
+   *  primitive changes. The primitive `changes[]` remain the source
+   *  of truth; groups are explanatory and do not affect exit codes. */
+  readonly groups?: readonly ChangeGroup[];
   /** RFC 6902 ops against the normalized Model JSON. Opt-in via
    *  `--with-patch` (CLI) or `{ withPatch: true }` (library). Omitted
    *  by default to keep payload size lean — agents reading the
@@ -169,7 +192,7 @@ export interface DiffData {
 }
 
 export interface DiffOptions {
-  /** Similarity threshold for rename detection (0..1). Default 0.7. */
+  /** Similarity threshold for rename detection (0..1). Default 0.65. */
   readonly renameThreshold?: number;
   /** Disable rename heuristic entirely — pure add/remove pairs. */
   readonly disableRenameDetection?: boolean;

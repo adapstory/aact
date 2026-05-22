@@ -1,7 +1,7 @@
 /**
  * Multi-feature similarity scoring for the rename detector. Replaces
  * the older `0.5 · max(label, name) + 0.5 · jaccard(relations)` formula
- * with a weighted combination of seven signals.
+ * with a weighted combination of eight signals.
  *
  * Weights are hand-picked from EMF Compare / SiDiff conventions plus
  * domain experience on C4 graphs — see the WHY column below. Tunable
@@ -9,24 +9,29 @@
  * `DiffOptions` to keep the public contract small. If a real user
  * wants to tune, we add a config surface then.
  *
- * | Weight       | Default | Why                                                                                                                                     |
- * | ------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------- |
- * | `name`       | 0.25    | Primary identifier. Changes on the very refactor we're detecting, but partial matches (`api` → `apiV2`) still anchor.                   |
- * | `label`      | 0.15    | Human-facing name; often correlates with `name`. Secondary signal — labels routinely tweak during refactor.                             |
- * | `technology` | 0.20    | Highly distinctive. `"Spring Boot"` rarely changes during rename — a hard-match is strong evidence "this IS the same thing". Raised from 0.15 after benchmark showed it carries chain-rename leaf cases (`db ↔ primaryDb` where name/label drift but tech anchors). |
- * | `external`   | 0.05    | Rarely toggled; mismatch is strong (internal service ≠ external partner) but contributes little when both equal.                        |
- * | `tags`       | 0.10    | Domain-specific signal. Some models tag heavily, some never. Jaccard over both gives partial credit for tag overlap.                    |
- * | `relations`  | 0.25    | Structural neighborhood — for an unrenamed element, every outgoing relation stays the same. Jaccard over `.to` names (after rename remap when caller supplies one). |
+ * | Weight        | Default | Why                                                                                                                                       |
+ * | ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+ * | `name`        | 0.20    | Primary identifier. Changes on the very refactor we're detecting, but partial matches (`api` → `apiV2`) still anchor.                     |
+ * | `label`       | 0.10    | Human-facing name; often correlates with `name`. Secondary signal — labels routinely tweak during refactor.                               |
+ * | `technology`  | 0.15    | Highly distinctive. `"Spring Boot"` rarely changes during rename — a hard-match is strong evidence "this IS the same thing".              |
+ * | `external`    | 0.05    | Rarely toggled; mismatch is strong (internal service ≠ external partner) but contributes little when both equal.                          |
+ * | `tags`        | 0.10    | Domain-specific signal. Some models tag heavily, some never. Jaccard over both gives partial credit for tag overlap.                      |
+ * | `relations`   | 0.20    | Structural neighborhood — for an unrenamed element, every outgoing relation stays the same. Jaccard over `.to` names (after rename remap when caller supplies one). |
+ * | `description` | 0.10    | Free-text description equality. Drops to 0 when prose was rewritten; sits at 1 when preserved verbatim. Cheap discriminator on clean renames where description survives the identifier change. |
+ * | `properties`  | 0.10    | Jaccard over `key=value` tokens. Catches Structurizr-style `group` membership and `perspective.<name>` continuity — the same logical element keeps its group/perspective set even when name/label drift. |
  *
  * `kind` is NOT a weighted feature — it's a hard gate: cross-kind
  * scores `Number.POSITIVE_INFINITY` cost (forbidden). When the
  * caller opts into `relaxKindFamilies`, within-family kind mismatches
  * (`Container` ↔ `ContainerDb`) drop to a soft penalty instead.
  *
- * `description` is intentionally excluded — long prose is fragile;
- * users routinely tweak descriptions during refactor, and short
- * descriptions don't carry enough signal to be worth the weight
- * slot.
+ * The design lesson behind including every available Model field:
+ * **don't ignore signal that's already there**. Excluding `description`
+ * and `properties` (the original v3 design) left borderline-confidence
+ * renames (`db ↔ customerDb`) in the LOW band even when the
+ * description and properties were verbatim-identical. Low weights
+ * (0.10 each) capture preservation when present without overwhelming
+ * the score when refactor legitimately rewrote them.
  */
 
 import type { Boundary, Element } from "../model";
@@ -38,15 +43,19 @@ export interface SimilarityWeights {
   readonly external: number;
   readonly tags: number;
   readonly relations: number;
+  readonly description: number;
+  readonly properties: number;
 }
 
 export const DEFAULT_ELEMENT_WEIGHTS: SimilarityWeights = {
-  name: 0.25,
-  label: 0.15,
-  technology: 0.2,
+  name: 0.2,
+  label: 0.1,
+  technology: 0.15,
   external: 0.05,
   tags: 0.1,
-  relations: 0.25,
+  relations: 0.2,
+  description: 0.1,
+  properties: 0.1,
 };
 
 /**
@@ -57,17 +66,21 @@ export const DEFAULT_ELEMENT_WEIGHTS: SimilarityWeights = {
 export interface BoundarySimilarityWeights {
   readonly name: number;
   readonly label: number;
+  readonly description: number;
   readonly tags: number;
   readonly elementNames: number;
   readonly boundaryNames: number;
+  readonly properties: number;
 }
 
 export const DEFAULT_BOUNDARY_WEIGHTS: BoundarySimilarityWeights = {
-  name: 0.3,
-  label: 0.25,
+  name: 0.25,
+  label: 0.2,
+  description: 0.05,
   tags: 0.1,
   elementNames: 0.25,
   boundaryNames: 0.1,
+  properties: 0.05,
 };
 
 /**
@@ -134,6 +147,34 @@ const jaccard = (a: readonly string[], b: readonly string[]): number => {
   return intersection / unionSize;
 };
 
+/**
+ * Properties similarity — Jaccard over `key=value` tokens. Treats
+ * both-empty as a perfect match (neutral signal, no discriminator
+ * either way), preserved-pair as a strong match, mismatched-value
+ * as a partial signal weighted by overlap.
+ *
+ * The `key=value` tokenisation means `{ group: "ops" }` vs
+ * `{ group: "platform" }` shares zero tokens — they're different
+ * properties even though they share the same key. This is the right
+ * call for our use case: `group` membership is a real architectural
+ * signal, and matching on the key alone would erase that.
+ */
+const propertiesSimilarity = (
+  a: Readonly<Record<string, string>> | undefined,
+  b: Readonly<Record<string, string>> | undefined,
+): number => {
+  const aEntries = Object.entries(a ?? {});
+  const bEntries = Object.entries(b ?? {});
+  if (aEntries.length === 0 && bEntries.length === 0) return 1;
+  const aTokens = new Set(aEntries.map(([k, v]) => `${k}=${v}`));
+  const bTokens = new Set(bEntries.map(([k, v]) => `${k}=${v}`));
+  let intersection = 0;
+  for (const t of aTokens) if (bTokens.has(t)) intersection++;
+  const unionSize = aTokens.size + bTokens.size - intersection;
+  if (unionSize === 0) return 1;
+  return intersection / unionSize;
+};
+
 // ─── Element similarity ──────────────────────────────────────────────
 
 /**
@@ -169,6 +210,8 @@ export const elementSimilarity = (
   const techEq = (a.technology ?? "") === (b.technology ?? "") ? 1 : 0;
   const extEq = a.external === b.external ? 1 : 0;
   const tagSim = jaccard(a.tags, b.tags);
+  const descSim = stringSimilarity(a.description, b.description);
+  const propSim = propertiesSimilarity(a.properties, b.properties);
 
   const renameMap = options.renameMap;
   const remappedTargets = renameMap
@@ -185,7 +228,9 @@ export const elementSimilarity = (
     weights.technology * techEq +
     weights.external * extEq +
     weights.tags * tagSim +
-    weights.relations * relSim;
+    weights.relations * relSim +
+    weights.description * descSim +
+    weights.properties * propSim;
 
   return score * kindPenalty;
 };
@@ -211,8 +256,11 @@ export const boundarySimilarity = (
   return (
     weights.name * stringSimilarity(a.name, b.name) +
     weights.label * stringSimilarity(a.label, b.label) +
+    weights.description *
+      stringSimilarity(a.description ?? "", b.description ?? "") +
     weights.tags * jaccard(a.tags, b.tags) +
     weights.elementNames * jaccard(remappedElems, b.elementNames) +
-    weights.boundaryNames * jaccard(a.boundaryNames, b.boundaryNames)
+    weights.boundaryNames * jaccard(a.boundaryNames, b.boundaryNames) +
+    weights.properties * propertiesSimilarity(a.properties, b.properties)
   );
 };

@@ -1,7 +1,7 @@
 import { defineCommand } from "citty";
 
 import type { DiffData, DiffOptions } from "../../../diff";
-import { computeDiff } from "../../../diff";
+import { computeDiff, DEFAULT_RENAME_THRESHOLD } from "../../../diff";
 import { knownFormatNames } from "../../../formats/registry";
 import { loadAndValidateConfig } from "../../loadConfig";
 import type { Reporter } from "../../output";
@@ -103,7 +103,7 @@ const resolveCurrentInput = async (
 };
 
 const parseRenameThreshold = (raw: number | string | undefined): number => {
-  if (raw === undefined) return 0.7;
+  if (raw === undefined) return DEFAULT_RENAME_THRESHOLD;
   const n = typeof raw === "number" ? raw : Number.parseFloat(raw);
   if (Number.isNaN(n) || n < 0 || n > 1) {
     throw new ToolError(
@@ -165,8 +165,7 @@ export const diff = defineCommand({
     },
     "rename-threshold": {
       type: "string",
-      description:
-        "Similarity threshold for rename detection in [0,1] (default 0.7)",
+      description: `Similarity threshold for rename detection in [0,1] (default ${DEFAULT_RENAME_THRESHOLD})`,
     },
     "no-rename-detection": {
       type: "boolean",
