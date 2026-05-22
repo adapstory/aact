@@ -53,7 +53,9 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
   {
     name: "compose",
     load: true,
-    generate: false, // Compose обычно writes-only (инфра-команда пишет, архитектор сверяет)
+    // generate — scaffold path (Model → starter compose.yml для dev-команды);
+    // round-trip покрытие также пригождается для тестов loader'а.
+    generate: true,
     fix: false, // YAML не имеет meaningful range semantics для C4 edits
     defaultPattern: "compose.{yml,yaml,json}",
   },
