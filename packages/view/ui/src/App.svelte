@@ -76,6 +76,7 @@
     "connecting",
   );
   let loadError = $state<ViewError | null>(null);
+  let layoutError = $state<ViewError | null>(null);
 
   const nodeTypes = {
     element: ElementNode,
@@ -84,6 +85,14 @@
     queue: QueueNode,
     boundary: BoundaryNode,
   } as const;
+
+  const clientError = (error: unknown): ViewError => ({
+    message: error instanceof Error ? error.message : String(error),
+    source: envelope?.meta.source ?? null,
+    configPath: envelope?.meta.configPath ?? null,
+    durationMs: 0,
+    at: new Date().toISOString(),
+  });
 
   // Re-layout whenever model, mode, breadcrumb, or expanded set
   // changes. Each branch hands a different ELK invocation back the
@@ -109,8 +118,14 @@
         nodes = result.nodes;
         edges = result.edges;
       }
+      layoutError = null;
+      if (!loadError && status === "error") status = "live";
     };
-    void run();
+    void run().catch((error: unknown) => {
+      if (cancelled) return;
+      layoutError = clientError(error);
+      status = "error";
+    });
     return () => {
       cancelled = true;
     };
@@ -135,18 +150,10 @@
     return `${proto}//${location.host}${withSessionToken("/api/ws")}`;
   })();
 
-  const clientError = (error: unknown): ViewError => ({
-    message: error instanceof Error ? error.message : String(error),
-    source: envelope?.meta.source ?? null,
-    configPath: envelope?.meta.configPath ?? null,
-    durationMs: 0,
-    at: new Date().toISOString(),
-  });
-
   const connect = (): void => {
     const ws = new WebSocket(wsUrl);
     ws.addEventListener("open", () => {
-      status = "live";
+      if (!loadError && !layoutError) status = "live";
     });
     ws.addEventListener("message", (ev) => {
       try {
@@ -154,7 +161,7 @@
         if (payload.type === "model-update") {
           envelope = payload.envelope;
           loadError = null;
-          status = "live";
+          if (!layoutError) status = "live";
         }
         if (payload.type === "model-error") {
           loadError = payload.error;
@@ -386,6 +393,10 @@
         }
       : null,
   );
+  const activeError = $derived<ViewError | null>(loadError ?? layoutError);
+  const activeErrorTitle = $derived<string>(
+    loadError ? "Reload failed" : "Layout failed",
+  );
 
   // Translate a SourceLocation into a deep link the OS knows. Vendor
   // schemes match aact's CLI link format so the IDE the user already
@@ -580,14 +591,14 @@
         <span class="legend-row"><span class="swatch" style="background: #475569;"></span>External</span>
       </aside>
 
-      {#if loadError}
+      {#if activeError}
         <aside class="error-overlay" role="status" aria-live="polite">
-          <span class="error-kicker">Reload failed</span>
-          <p>{loadError.message}</p>
+          <span class="error-kicker">{activeErrorTitle}</span>
+          <p>{activeError.message}</p>
           <div class="error-meta">
-            {#if loadError.source}<span>{loadError.source}</span>{/if}
-            <span>{new Date(loadError.at).toLocaleTimeString()}</span>
-            {#if loadError.durationMs > 0}<span>{loadError.durationMs} ms</span>{/if}
+            {#if activeError.source}<span>{activeError.source}</span>{/if}
+            <span>{new Date(activeError.at).toLocaleTimeString()}</span>
+            {#if activeError.durationMs > 0}<span>{activeError.durationMs} ms</span>{/if}
           </div>
         </aside>
       {/if}

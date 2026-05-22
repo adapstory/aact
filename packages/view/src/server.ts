@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { H3, defineWebSocketHandler, toNodeHandler } from "h3";
-import { listen, type Listener } from "listhen";
+import { listen, type CrossWSOptions, type Listener } from "listhen";
 
 import type { ModelLoadResult } from "./load-model.js";
 
@@ -185,6 +185,42 @@ export const startServer = async (
     }
   };
 
+  const webSocketHooks = {
+    upgrade(request: Request) {
+      const url = parseRequestUrl(request.url);
+      if (!isAuthorized(url, request.headers)) return unauthorized();
+    },
+    open(peer: { send: (data: string) => void }) {
+      peers.add(peer);
+      // Send the latest known envelope right away so a freshly
+      // opened tab doesn't have to wait for the next watcher event
+      // to populate.
+      peer.send(JSON.stringify({ type: "model-update", envelope: current }));
+    },
+    close(peer: { send: (data: string) => void }) {
+      peers.delete(peer);
+    },
+    error(peer: { send: (data: string) => void }) {
+      peers.delete(peer);
+    },
+  };
+
+  const resolveWebSocketHooks: NonNullable<CrossWSOptions["resolve"]> = (
+    request,
+  ) => {
+    const url = parseRequestUrl(request.url);
+    if (url.pathname !== "/api/ws") {
+      return {
+        upgrade: () =>
+          new Response("Not Found", {
+            status: 404,
+            headers: { "content-type": "text/plain; charset=utf-8" },
+          }),
+      };
+    }
+    return webSocketHooks;
+  };
+
   const app = new H3();
 
   app.get("/api/model", (event) => {
@@ -193,28 +229,7 @@ export const startServer = async (
     return current;
   });
 
-  app.get(
-    "/api/ws",
-    defineWebSocketHandler({
-      upgrade(request) {
-        const url = parseRequestUrl(request.url);
-        if (!isAuthorized(url, request.headers)) return unauthorized();
-      },
-      open(peer) {
-        peers.add(peer);
-        // Send the latest known envelope right away so a freshly
-        // opened tab doesn't have to wait for the next watcher event
-        // to populate.
-        peer.send(JSON.stringify({ type: "model-update", envelope: current }));
-      },
-      close(peer) {
-        peers.delete(peer);
-      },
-      error(peer) {
-        peers.delete(peer);
-      },
-    }),
-  );
+  app.get("/api/ws", defineWebSocketHandler(webSocketHooks));
 
   // Serve the pre-built Svelte SPA from `dist/ui/`. Resolve each
   // request path against the bundle dir, fall back to `index.html`
@@ -278,7 +293,7 @@ export const startServer = async (
     showURL: false,
     qr: false,
     public: false,
-    ws: true,
+    ws: { resolve: resolveWebSocketHooks },
   });
 
   const url = authUrl(listener.url);
