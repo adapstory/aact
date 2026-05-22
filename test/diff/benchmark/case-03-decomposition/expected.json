@@ -1,0 +1,30 @@
+{
+  "description": "Decomposition: one container split into two. Hungarian + multi-feature similarity should detect the closer of the two (orderApi) as the rename target with lowered confidence — both candidates share label/description/tech/db-relation similarity, the matcher picks the globally optimal pairing. The second container surfaces as `added`. Confidence on the rename stays in the LOW band (< 0.75) so PR review agents understand it's a probable split, not a clean rename.",
+  "knownGap": true,
+  "changes": [
+    {
+      "entity": "element",
+      "action": "renamed",
+      "severity": "structural",
+      "address": "element:orderApi",
+      "name": "orderApi",
+      "previousName": "orderService",
+      "confidenceHint": "low"
+    },
+    {
+      "entity": "element",
+      "action": "added",
+      "severity": "structural",
+      "address": "element:orderWorker",
+      "name": "orderWorker"
+    },
+    {
+      "entity": "relation",
+      "action": "added",
+      "severity": "structural",
+      "address": "relation:orderWorker→ordersDb",
+      "from": "orderWorker",
+      "to": "ordersDb"
+    }
+  ]
+}

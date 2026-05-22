@@ -1,0 +1,55 @@
+{
+  "description": "Mixed refactor — api renamed to customerApi, db renamed to customerDb (with label change), metrics gained a tag and moved to bank. Rename detection needs to be transitive (api→customerApi requires db→customerDb to remap relations.to). Metrics is a pure move + tag addition. Boundary lists shuffle.",
+  "knownGap": true,
+  "changes": [
+    {
+      "entity": "element",
+      "action": "renamed",
+      "severity": "structural",
+      "address": "element:customerApi",
+      "name": "customerApi",
+      "previousName": "api",
+      "confidenceHint": "high",
+      "fields": [{ "field": "label", "before": "API", "after": "Customer API" }]
+    },
+    {
+      "entity": "element",
+      "action": "renamed",
+      "severity": "structural",
+      "address": "element:customerDb",
+      "name": "customerDb",
+      "previousName": "db",
+      "confidenceHint": "high",
+      "fields": [
+        { "field": "label", "before": "Database", "after": "Customer Database" }
+      ]
+    },
+    {
+      "entity": "element",
+      "action": "modified",
+      "severity": "structural",
+      "address": "element:metrics",
+      "name": "metrics",
+      "fields": [
+        { "field": "tags", "before": [], "after": ["telemetry"] },
+        { "field": "boundary", "before": "ops", "after": "bank" }
+      ]
+    },
+    {
+      "entity": "boundary",
+      "action": "modified",
+      "severity": "structural",
+      "address": "boundary:bank",
+      "name": "bank",
+      "fields": [{ "field": "elementNames" }]
+    },
+    {
+      "entity": "boundary",
+      "action": "modified",
+      "severity": "structural",
+      "address": "boundary:ops",
+      "name": "ops",
+      "fields": [{ "field": "elementNames" }]
+    }
+  ]
+}

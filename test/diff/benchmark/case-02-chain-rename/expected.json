@@ -1,0 +1,33 @@
+{
+  "description": "Chain rename — all three containers renamed together. Without iterative similarity rescoring, the relation jaccard inside elementSimilarity sees raw .to names which all changed simultaneously, so transitive overlap = 0 and renames may fall below threshold. Multi-feature similarity with technology + description equality should rescue this case even in a single pass; full fixed-point converges in 2-3 iterations.",
+  "knownGap": true,
+  "changes": [
+    {
+      "entity": "element",
+      "action": "renamed",
+      "severity": "structural",
+      "address": "element:apiV2",
+      "name": "apiV2",
+      "previousName": "api",
+      "confidenceHint": "high"
+    },
+    {
+      "entity": "element",
+      "action": "renamed",
+      "severity": "structural",
+      "address": "element:databaseRepoV2",
+      "name": "databaseRepoV2",
+      "previousName": "dbRepo",
+      "confidenceHint": "high"
+    },
+    {
+      "entity": "element",
+      "action": "renamed",
+      "severity": "structural",
+      "address": "element:primaryStorageV2",
+      "name": "primaryStorageV2",
+      "previousName": "db",
+      "confidenceHint": "high"
+    }
+  ]
+}
