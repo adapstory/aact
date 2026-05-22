@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { AnalysisReport } from "aact";
 import { H3, defineWebSocketHandler, toNodeHandler } from "h3";
 import { listen, type CrossWSOptions, type Listener } from "listhen";
 
@@ -54,6 +55,12 @@ export interface ModelEnvelope {
   readonly data: {
     readonly model: ModelLoadResult["model"];
     readonly issues: readonly ModelLoadResult["issues"][number][];
+    /** Architecture metrics from `analyzeArchitecture(model,
+     *  config.analyze)`. The UI's optional "Analyze" overlay reads
+     *  this — when disabled, the field is still populated, just
+     *  hidden. Keeping it on the envelope avoids a second round-trip
+     *  to compute it from the SPA's worker. */
+    readonly analysis: AnalysisReport;
   };
   readonly diagnostics: readonly never[];
   readonly meta: {

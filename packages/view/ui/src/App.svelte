@@ -44,11 +44,12 @@
     readonly relation: Relation;
   }
 
-  // Persist edge-style + edge-filter choices across page reloads —
-  // both are personal preferences with no model coupling, so we
-  // bring them back next session instead of resetting.
+  // Persist edge-style + edge-filter + analyze-overlay choices across
+  // page reloads — all three are personal preferences with no model
+  // coupling, so we bring them back next session instead of resetting.
   const EDGE_STYLE_KEY = "aact-view:edge-style";
   const EDGE_FILTER_KEY = "aact-view:edge-filter";
+  const ANALYZE_KEY = "aact-view:analyze";
   const initialEdgeStyle =
     (typeof localStorage !== "undefined" &&
       (localStorage.getItem(EDGE_STYLE_KEY) as EdgeStyle | null)) ||
@@ -57,11 +58,15 @@
     (typeof localStorage !== "undefined" &&
       (localStorage.getItem(EDGE_FILTER_KEY) as EdgeFilter | null)) ||
     "all";
+  const initialAnalyzeOn =
+    typeof localStorage !== "undefined" &&
+    localStorage.getItem(ANALYZE_KEY) === "on";
 
   let envelope = $state<ModelEnvelope | null>(null);
   let mode = $state<ViewMode>("drill");
   let edgeStyle = $state<EdgeStyle>(initialEdgeStyle);
   let edgeFilter = $state<EdgeFilter>(initialEdgeFilter);
+  let analyzeOn = $state<boolean>(initialAnalyzeOn);
   let breadcrumb = $state<BreadcrumbEntry[]>([{ kind: "landscape" }]);
   let expanded = $state<Set<string>>(new Set());
   let selected = $state<
@@ -298,6 +303,22 @@
       localStorage.setItem(EDGE_FILTER_KEY, next);
     }
   };
+  const setAnalyze = (next: boolean): void => {
+    analyzeOn = next;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(ANALYZE_KEY, next ? "on" : "off");
+    }
+  };
+
+  /** Set of element names participating in the smallest detected
+   *  cycle, used by the cycles-overlay to outline nodes + thicken
+   *  edges. Empty when analyze is off, no cycles exist, or the
+   *  envelope hasn't loaded yet. */
+  const cycleMembers = $derived<Set<string>>(
+    analyzeOn && envelope?.data.analysis.cycles.smallest
+      ? new Set(envelope.data.analysis.cycles.smallest)
+      : new Set(),
+  );
 
   // Dim edges that aren't incident to the hovered node so the user
   // can trace a single dependency through a crowded canvas. Strip
@@ -310,6 +331,20 @@
   const isCross = (e: Edge): boolean =>
     Boolean((e.data as { crossBoundary?: boolean } | undefined)?.crossBoundary);
 
+  /** Decorate nodes with a cycle-overlay border when the Analyze
+   *  toggle is on and the node is part of the smallest cycle.
+   *  Reactive Flow's node `style` field accepts CSS as a string. */
+  const decoratedNodes = $derived<Node[]>(
+    nodes.map((n) => {
+      if (!cycleMembers.has(n.id)) return n;
+      const existingStyle = typeof n.style === "string" ? n.style : "";
+      return {
+        ...n,
+        style: `${existingStyle} box-shadow: 0 0 0 3px #ef4444; border-radius: 8px;`,
+      };
+    }),
+  );
+
   const decoratedEdges = $derived<Edge[]>(
     edges.map((e) => {
       const incident =
@@ -319,6 +354,25 @@
       const cross = isCross(e);
       const intraInFilter = filterActive && !cross;
       const crossInFilter = filterActive && cross;
+      const inCycle =
+        cycleMembers.has(e.source) && cycleMembers.has(e.target);
+
+      // Cycle edges win over filter/hover decoration — distributed
+      // monolith is the top signal the user toggled Analyze to spot.
+      if (inCycle && !incident) {
+        return {
+          ...e,
+          type: edgeStyle,
+          animated: false,
+          style: "stroke: #ef4444; stroke-width: 2.4; opacity: 1;",
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 24,
+            height: 24,
+            color: "#ef4444",
+          },
+        };
+      }
 
       // Filter overrides default rendering: intra disappears almost
       // entirely, cross gets thicker bright stroke so it visibly
@@ -526,6 +580,15 @@
           title="Highlight relations that cross a Bounded Context; intra-boundary stays faint"
         >Cross-BC</button>
       </div>
+      <div class="modes analyze-toggle" role="tablist" aria-label="Analyze overlay">
+        <button
+          role="tab"
+          class:active={analyzeOn}
+          aria-selected={analyzeOn}
+          onclick={() => setAnalyze(!analyzeOn)}
+          title="Highlight cycles on the graph and show architecture metrics in the sidebar"
+        >Analyze</button>
+      </div>
     </div>
 
     <div class="context">
@@ -554,7 +617,7 @@
     <div class="graph">
       <SvelteFlowProvider>
         <SvelteFlow
-          {nodes}
+          nodes={decoratedNodes}
           edges={decoratedEdges}
           {nodeTypes}
           {onnodeclick}
@@ -731,6 +794,58 @@
           {:else if mode === "expand"}Double-click to {expanded.has(selectedBoundary.name) ? "collapse" : "expand"} this boundary.
           {:else}This boundary is part of the full hierarchy.
           {/if}
+        </p>
+      {:else if analyzeOn && envelope}
+        {@const a = envelope.data.analysis}
+        <h2>Architecture metrics</h2>
+        <div class="stats">
+          <div><span class="num">{a.elementsCount}</span> elements</div>
+          <div><span class="num">{a.databases.count}</span> databases</div>
+          <div><span class="num">{a.relationsByStyle.sync + a.relationsByStyle.async + a.relationsByStyle.unspecified}</span> relations</div>
+          {#if a.cycles.count > 0}
+            <div class="warn"><span class="num">{a.cycles.count}</span> cycle{a.cycles.count === 1 ? "" : "s"}</div>
+          {/if}
+        </div>
+        {#if Object.keys(a.elementsByKind).length}
+          <h4>By kind</h4>
+          <ul class="metrics">
+            {#each Object.entries(a.elementsByKind).sort((x, y) => x[0].localeCompare(y[0])) as [kind, count] (kind)}
+              <li><span class="k">{kind}</span><span class="v">{count}</span></li>
+            {/each}
+          </ul>
+        {/if}
+        <h4>Relations by style</h4>
+        <ul class="metrics">
+          <li><span class="k">sync</span><span class="v">{a.relationsByStyle.sync}</span></li>
+          <li><span class="k">async</span><span class="v">{a.relationsByStyle.async}</span></li>
+          <li><span class="k">unspecified</span><span class="v">{a.relationsByStyle.unspecified}</span></li>
+        </ul>
+        {#if a.cycles.count > 0 && a.cycles.smallest}
+          <h4 class="warn-h">Cycles ⚠</h4>
+          <p class="cycle-list">
+            {a.cycles.count} detected. Shortest:
+            <span class="cycle-trail">{a.cycles.smallest.join(" → ")}</span>
+          </p>
+        {/if}
+        {#if a.fanOut.length}
+          <h4>Top fan-out</h4>
+          <ul class="metrics">
+            {#each a.fanOut as it (it.name)}
+              <li><span class="k">{it.name}</span><span class="v">{it.count}</span></li>
+            {/each}
+          </ul>
+        {/if}
+        {#if a.fanIn.length}
+          <h4>Top fan-in</h4>
+          <ul class="metrics">
+            {#each a.fanIn as it (it.name)}
+              <li><span class="k">{it.name}</span><span class="v">{it.count}</span></li>
+            {/each}
+          </ul>
+        {/if}
+        <p class="hint">
+          Cycles are highlighted red on the graph. Click a node to
+          inspect — Analyze stays on.
         </p>
       {:else if envelope?.data.model.workspace}
         <h2>Workspace</h2>
@@ -1256,5 +1371,58 @@
     border: 1px solid #1e293b;
     border-radius: 8px;
     overflow: hidden;
+  }
+
+  /* Analyze overlay — toggle button + sidebar metrics list. */
+  .analyze-toggle button {
+    /* Accent so the user spots the analytics-on state at a glance —
+       red ties it to the cycle highlight on the graph. */
+    border-color: #475569;
+  }
+  .analyze-toggle button.active {
+    background: #7f1d1d;
+    border-color: #ef4444;
+    color: #fee2e2;
+  }
+  .metrics {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px 0;
+    font-size: 0.78rem;
+  }
+  .metrics li {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+    border-bottom: 1px solid #1e293b;
+  }
+  .metrics li:last-child {
+    border-bottom: none;
+  }
+  .metrics .k {
+    color: #94a3b8;
+  }
+  .metrics .v {
+    color: #e2e8f0;
+    font-variant-numeric: tabular-nums;
+  }
+  .warn-h {
+    color: #fca5a5;
+  }
+  .cycle-list {
+    font-size: 0.78rem;
+    color: #fca5a5;
+    margin: 4px 0 12px 0;
+  }
+  .cycle-trail {
+    display: block;
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: #1e1010;
+    border-left: 3px solid #ef4444;
+    color: #fee2e2;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    word-break: break-all;
   }
 </style>

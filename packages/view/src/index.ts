@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import type { AactConfig } from "aact";
+import { analyzeArchitecture } from "aact";
 
 import { loadModelFromConfig } from "./load-model.js";
 import type { ModelEnvelope, ServerHandle, ViewError } from "./server.js";
@@ -53,12 +54,20 @@ const buildEnvelope = async (
 ): Promise<ModelEnvelope> => {
   const startedAt = performance.now();
   const { model, issues } = await loadModelFromConfig(options.config);
+  // Architecture metrics for the optional UI overlay. Same options
+  // path as the CLI (`src/cli/commands/analyze.ts`), so the user's
+  // `config.analyze.{syncTechnologies, asyncTechnologies, exclude,
+  // topN}` flows uniformly between `aact analyze` and the workbench.
+  const { report: analysis } = analyzeArchitecture(
+    model,
+    options.config.analyze,
+  );
   return {
     schemaVersion: 1,
     command: "view",
     ok: true,
     exitCode: 0,
-    data: { model, issues: [...issues] },
+    data: { model, issues: [...issues], analysis },
     diagnostics: [],
     meta: {
       aactVersion,

@@ -79,6 +79,42 @@ export interface ModelIssue {
   readonly boundary?: string;
 }
 
+/** Architecture metrics surfaced on the envelope so the SPA can
+ *  render an Analyze overlay without a second round-trip. Mirrors
+ *  the public `AnalysisReport` shape exported by aact core. */
+export interface AnalysisReport {
+  readonly elementsCount: number;
+  readonly elementsByKind: Readonly<Record<string, number>>;
+  readonly databases: { readonly count: number; readonly consumes: number };
+  readonly relationsByStyle: {
+    readonly sync: number;
+    readonly async: number;
+    readonly unspecified: number;
+  };
+  readonly boundaries: ReadonlyArray<{
+    readonly name: string;
+    readonly label: string;
+    readonly cohesion: number;
+    readonly coupling: number;
+    readonly syncCoupling: number;
+    readonly asyncCoupling: number;
+    readonly unspecifiedCoupling: number;
+    readonly ratio: number | null;
+  }>;
+  readonly fanIn: ReadonlyArray<{
+    readonly name: string;
+    readonly count: number;
+  }>;
+  readonly fanOut: ReadonlyArray<{
+    readonly name: string;
+    readonly count: number;
+  }>;
+  readonly cycles: {
+    readonly count: number;
+    readonly smallest: readonly string[] | null;
+  };
+}
+
 export interface ModelEnvelope {
   readonly schemaVersion: 1;
   readonly command: "view";
@@ -87,6 +123,7 @@ export interface ModelEnvelope {
   readonly data: {
     readonly model: Model;
     readonly issues: readonly ModelIssue[];
+    readonly analysis: AnalysisReport;
   };
   readonly meta: {
     readonly aactVersion: string;
