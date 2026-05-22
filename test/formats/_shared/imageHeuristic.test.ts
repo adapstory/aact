@@ -35,9 +35,7 @@ describe("DEFAULT_IMAGE_HEURISTIC", () => {
 
 describe("compileImageHeuristic", () => {
   it("returns defaults unchanged when no user patterns", () => {
-    // Required nullable param — explicit undefined hits the "no user override" branch.
-    // eslint-disable-next-line unicorn/no-useless-undefined
-    const compiled = compileImageHeuristic(undefined);
+    const compiled = compileImageHeuristic();
     const postgresEntry = compiled.find((c) => c.pattern === "postgres");
     expect(postgresEntry?.kind).toBe("ContainerDb");
   });
@@ -78,9 +76,7 @@ describe("compileImageHeuristic", () => {
 });
 
 describe("inferKindFromImage", () => {
-  // Required nullable param — explicit undefined to pin "default heuristic" path.
-  // eslint-disable-next-line unicorn/no-useless-undefined
-  const compiled = compileImageHeuristic(undefined);
+  const compiled = compileImageHeuristic();
 
   it("returns Container for empty baseName", () => {
     expect(inferKindFromImage("", "", compiled)).toBe("Container");

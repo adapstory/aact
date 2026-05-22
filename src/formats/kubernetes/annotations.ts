@@ -43,7 +43,7 @@ export const resolveAnnotationKeys = (
  * `aact.external: "true" | "1"` → boolean. Любое другое значение
  * (включая отсутствие annotation) → false.
  */
-export const parseExternalFlag = (raw: string | undefined): boolean => {
+export const parseExternalFlag = (raw?: string): boolean => {
   if (raw === undefined) return false;
   const trimmed = raw.trim().toLowerCase();
   return trimmed === "true" || trimmed === "1";
@@ -52,5 +52,4 @@ export const parseExternalFlag = (raw: string | undefined): boolean => {
 /**
  * `aact.skip: "true" | "1"` — explicit skip per workload.
  */
-export const parseSkipFlag = (raw: string | undefined): boolean =>
-  parseExternalFlag(raw);
+export const parseSkipFlag = (raw?: string): boolean => parseExternalFlag(raw);

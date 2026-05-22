@@ -181,7 +181,7 @@ const compilePattern = (
  * явно отключать default. Defaults в фиксированном порядке (insertion).
  */
 export const compileImageHeuristic = (
-  userPatterns: Readonly<Record<string, ElementKind>> | undefined,
+  userPatterns?: Readonly<Record<string, ElementKind>>,
 ): readonly CompiledPattern[] => {
   const userEntries = Object.entries(userPatterns ?? {});
   const userPatternSet = new Set(userEntries.map(([p]) => p));

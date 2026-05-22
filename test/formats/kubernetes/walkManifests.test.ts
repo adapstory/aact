@@ -83,7 +83,7 @@ describe("walkManifests — entry resolution", () => {
     expect(manifests).toHaveLength(1);
   });
 
-  it("emits loader-warning for kustomization.yaml (Phase 2 MVP)", async () => {
+  it("chases kustomization.yaml resources field", async () => {
     const dir = await make();
     await writeFile(
       join(dir, "kustomization.yaml"),
@@ -94,13 +94,9 @@ describe("walkManifests — entry resolution", () => {
       "apiVersion: apps/v1\nkind: Deployment\nmetadata: { name: app }",
     );
     const { manifests, issues } = await walkManifests(dir);
-    expect(manifests).toHaveLength(1);
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toMatchObject({
-      kind: "loader-warning",
-      source: "kubernetes",
-      code: "kustomize-unsupported",
-    });
+    expect(manifests.map((m) => m.metadata.name)).toEqual(["app"]);
+    // No advanced features used → no issues
+    expect(issues).toEqual([]);
   });
 
   it("throws on Helm template marker", async () => {
@@ -119,7 +115,10 @@ describe("walkManifests — entry resolution", () => {
     await writeFile(file, "apiVersion: apps/v1\nkind: Deployment\nspec: {}");
     const { manifests, issues } = await walkManifests(file);
     expect(manifests).toEqual([]);
-    expect(issues[0]?.code).toBe("missing-kind-or-name");
+    expect(issues[0]).toMatchObject({
+      kind: "loader-warning",
+      code: "missing-kind-or-name",
+    });
   });
 
   it("propagates ENOENT for missing entry path", async () => {

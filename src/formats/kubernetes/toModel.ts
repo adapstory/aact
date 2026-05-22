@@ -18,6 +18,8 @@ import {
   inferElementKindFromManifest,
   technologyFromManifest,
 } from "./inferKind";
+import { buildRelationsFor } from "./relations";
+import { buildServiceMap } from "./serviceMap";
 import type {
   KubernetesLoadOptions,
   ParsedManifest,
@@ -112,14 +114,23 @@ const isInNamespaceFilter = (
 /*  Element building                                                  */
 /* ------------------------------------------------------------------ */
 
+const deriveElementName = (
+  manifest: ParsedManifest,
+  resolved: ResolvedOptions,
+): string => {
+  const annot = manifest.metadata.annotations;
+  return annot[resolved.annotations.element]?.trim() ?? manifest.metadata.name;
+};
+
 const buildElement = (
   manifest: ParsedManifest,
   resolved: ResolvedOptions,
+  relations: readonly import("../../model").Relation[],
 ): Element => {
   const annot = manifest.metadata.annotations;
   const keys = resolved.annotations;
 
-  const elementName = annot[keys.element]?.trim() ?? manifest.metadata.name;
+  const elementName = deriveElementName(manifest, resolved);
   const label = annot[keys.label]?.trim() || humanize(elementName);
   const description = annot[keys.description] ?? "";
   const technology =
@@ -142,7 +153,7 @@ const buildElement = (
     description,
     ...(technology ? { technology } : {}),
     tags: Object.freeze(tags),
-    relations: Object.freeze([]),
+    relations: Object.freeze([...relations]),
     ...(link && link.length > 0 ? { link } : {}),
   } satisfies Element);
 };
@@ -177,23 +188,44 @@ export const toModel = (input: ToModelInput): ToModelOutput => {
     (m) => isInNamespaceFilter(m, resolved) && !isSkipped(m, resolved),
   );
 
+  // Pre-pass: derive element name для каждого visible workload'а, чтобы
+  // serviceMap резолвил selector → element name (не raw metadata.name).
+  // Это нужно потому что aact.element annotation может переименовать.
+  const workloadElementNames = new Map<ParsedManifest, string>();
+  const dedupedManifests: ParsedManifest[] = [];
   const seenNames = new Set<string>();
-  const elements: Element[] = [];
-  const namespaceMembers = new Map<string, string[]>();
-
   for (const manifest of visible) {
-    const element = buildElement(manifest, resolved);
-    if (seenNames.has(element.name)) {
+    const name = deriveElementName(manifest, resolved);
+    if (seenNames.has(name)) {
       issues.push({
         kind: "loader-warning",
         source: "kubernetes",
         code: "duplicate-element",
-        message: `Duplicate element "${element.name}" — ${manifest.kind} at ${manifest.filePath} ignored.`,
-        element: element.name,
+        message: `Duplicate element "${name}" — ${manifest.kind} at ${manifest.filePath} ignored.`,
+        element: name,
       });
       continue;
     }
-    seenNames.add(element.name);
+    seenNames.add(name);
+    workloadElementNames.set(manifest, name);
+    dedupedManifests.push(manifest);
+  }
+
+  const serviceMap = buildServiceMap(input.manifests, workloadElementNames);
+
+  const elements: Element[] = [];
+  const namespaceMembers = new Map<string, string[]>();
+
+  for (const manifest of dedupedManifests) {
+    const name = workloadElementNames.get(manifest);
+    if (name === undefined) continue;
+    const relations = buildRelationsFor(
+      manifest,
+      name,
+      serviceMap,
+      resolved.annotations,
+    );
+    const element = buildElement(manifest, resolved, relations);
     elements.push(element);
 
     // Только если namespace явно задан — группируем в Boundary.

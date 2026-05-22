@@ -297,6 +297,101 @@ describe("load — end-to-end k8s manifest → Model", () => {
     await expect(load(file)).rejects.toThrow(/helm template/i);
   });
 
+  it("builds relations via Service selector + env-var heuristic", async () => {
+    const dir = await makeTempDir();
+    const file = join(dir, "x.yaml");
+    await dump(
+      file,
+      [
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: api",
+        "spec:",
+        "  template:",
+        "    metadata: { labels: { app: api } }",
+        "    spec:",
+        "      containers:",
+        "        - name: app",
+        "          image: ghcr.io/org/api:v1",
+        "          env:",
+        "            - { name: ORDERS_HOST, value: orders-svc }",
+        "---",
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: orders",
+        "spec:",
+        "  template:",
+        "    metadata: { labels: { app: orders } }",
+        "    spec: { containers: [{ image: ghcr.io/org/orders:v1 }] }",
+        "---",
+        "apiVersion: v1",
+        "kind: Service",
+        "metadata: { name: orders-svc }",
+        "spec: { selector: { app: orders } }",
+      ].join("\n"),
+    );
+    const { model } = await load(file);
+    expect(model.elements.api.relations.map((r) => r.to)).toEqual(["orders"]);
+    expect(model.elements.orders.relations).toEqual([]);
+  });
+
+  it("honors aact.depends-on annotation over env-var heuristic", async () => {
+    const dir = await makeTempDir();
+    const file = join(dir, "x.yaml");
+    await dump(
+      file,
+      [
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: api",
+        '  annotations: { "aact.depends-on": "orders,cache" }',
+        "spec:",
+        "  template:",
+        "    spec:",
+        "      containers:",
+        "        - image: nginx",
+        "          env: [{ name: ORDERS_HOST, value: ignored }]",
+        "---",
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata: { name: orders }",
+        "spec: { template: { spec: { containers: [{ image: nginx }] } } }",
+        "---",
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata: { name: cache }",
+        "spec: { template: { spec: { containers: [{ image: redis }] } } }",
+      ].join("\n"),
+    );
+    const { model } = await load(file);
+    expect(model.elements.api.relations.map((r) => r.to).toSorted()).toEqual([
+      "cache",
+      "orders",
+    ]);
+  });
+
+  it("chases kustomization.yaml resources field", async () => {
+    const dir = await makeTempDir();
+    await dump(
+      join(dir, "kustomization.yaml"),
+      "resources:\n  - app.yaml\n  - db.yaml",
+    );
+    await dump(
+      join(dir, "app.yaml"),
+      "apiVersion: apps/v1\nkind: Deployment\nmetadata: { name: api }\nspec: { template: { spec: { containers: [{ image: nginx }] } } }",
+    );
+    await dump(
+      join(dir, "db.yaml"),
+      "apiVersion: apps/v1\nkind: StatefulSet\nmetadata: { name: db }\nspec: { template: { spec: { containers: [{ image: postgres }] } } }",
+    );
+    const { model } = await load(dir);
+    expect(Object.keys(model.elements).toSorted()).toEqual(["api", "db"]);
+    expect(model.elements.db.kind).toBe("ContainerDb");
+  });
+
   it("flags duplicate element names with loader-warning", async () => {
     const dir = await makeTempDir();
     const file = join(dir, "x.yaml");

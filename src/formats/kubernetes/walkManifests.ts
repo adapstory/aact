@@ -4,6 +4,7 @@ import path from "pathe";
 import { parseAllDocuments } from "yaml";
 
 import type { ModelIssue } from "../../model";
+import { resolveKustomization } from "./kustomize";
 import type { ParsedManifest, ParsedMetadata } from "./types";
 
 /**
@@ -36,22 +37,24 @@ const HELM_MARKER = /\{\{/;
 /**
  * Walk entry path (file или dir) → flat list manifests.
  *
- * Cycle protection не нужна — нет symlink-loops по design'у
- * (k8s manifests = static files, not transitively-linked).
+ * Kustomization chase: если встретили `kustomization.yaml` (как
+ * entry-point ИЛИ в директории) — читаем `resources` поле и chase'им
+ * каждый path рекурсивно. Cycle protection через `visited` set по
+ * absolute paths — kustomize allows overlay-references на base
+ * directories, потенциальный source циклов.
  */
 export const walkManifests = async (entryPath: string): Promise<WalkResult> => {
   const resolved = path.resolve(entryPath);
-  // Не оборачиваем `fs.stat` — ENOENT поднимается естественно и
-  // `loadModel.ts:isFileNotFound` его мапит в `model.sourceNotFound`.
   const stat = await fs.stat(resolved);
 
   const manifests: ParsedManifest[] = [];
   const issues: ModelIssue[] = [];
+  const visited = new Set<string>();
 
   if (stat.isFile()) {
-    await parseFile(resolved, manifests, issues);
+    await parseEntry(resolved, manifests, issues, visited);
   } else if (stat.isDirectory()) {
-    await walkDirectory(resolved, manifests, issues);
+    await walkDirectory(resolved, manifests, issues, visited);
   } else {
     throw new Error(
       `Kubernetes source must be a file or directory: ${entryPath}.`,
@@ -64,37 +67,87 @@ export const walkManifests = async (entryPath: string): Promise<WalkResult> => {
   };
 };
 
+/**
+ * Entry-point dispatcher: kustomization.yaml → resources chase,
+ * regular YAML → parse как manifest file. Используется И на entry
+ * level, И когда recursive directory walk натыкается на отдельный
+ * файл.
+ */
+const parseEntry = async (
+  absPath: string,
+  manifests: ParsedManifest[],
+  issues: ModelIssue[],
+  visited: Set<string>,
+): Promise<void> => {
+  if (visited.has(absPath)) return;
+  visited.add(absPath);
+
+  const base = path.basename(absPath).toLowerCase();
+  if (base === "kustomization.yaml" || base === "kustomization.yml") {
+    const result = await resolveKustomization(absPath);
+    issues.push(...result.issues);
+    for (const resourcePath of result.resourcePaths) {
+      try {
+        const stat = await fs.stat(resourcePath);
+        if (stat.isDirectory()) {
+          await walkDirectory(resourcePath, manifests, issues, visited);
+        } else if (stat.isFile()) {
+          await parseEntry(resourcePath, manifests, issues, visited);
+        }
+      } catch {
+        issues.push({
+          kind: "loader-warning",
+          source: "kubernetes",
+          code: "kustomize-resource-missing",
+          message: `Kustomize resource not found: ${resourcePath} (referenced from ${absPath}).`,
+        });
+      }
+    }
+    return;
+  }
+
+  await parseFile(absPath, manifests, issues);
+};
+
+/**
+ * Recursive YAML walker. Если в директории есть `kustomization.yaml`,
+ * следуем ТОЛЬКО за её `resources` field (kustomize convention —
+ * sibling файлы НЕ авто-applied, только referenced). Если нет —
+ * walk siblings + recurse в поддиректории как обычно.
+ */
 const walkDirectory = async (
   dir: string,
   manifests: ParsedManifest[],
   issues: ModelIssue[],
+  visited: Set<string>,
 ): Promise<void> => {
   const entries = await fs.readdir(dir, { withFileTypes: true });
+  const kustomization = entries.find(
+    (e) =>
+      e.isFile() &&
+      (e.name === "kustomization.yaml" || e.name === "kustomization.yml"),
+  );
+  if (kustomization) {
+    await parseEntry(
+      path.join(dir, kustomization.name),
+      manifests,
+      issues,
+      visited,
+    );
+    return;
+  }
+
   for (const entry of entries) {
     if (entry.name.startsWith(HIDDEN_DIR_PREFIX)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      await walkDirectory(full, manifests, issues);
+      await walkDirectory(full, manifests, issues, visited);
       continue;
     }
     if (!entry.isFile()) continue;
     const ext = path.extname(entry.name).toLowerCase();
     if (!YAML_EXT.has(ext)) continue;
-    // Kustomize: detect kustomization.yaml — skipping в Phase B
-    // (Phase C даст proper resources-chase). Surface as info issue.
-    if (
-      entry.name === "kustomization.yaml" ||
-      entry.name === "kustomization.yml"
-    ) {
-      issues.push({
-        kind: "loader-warning",
-        source: "kubernetes",
-        code: "kustomize-unsupported",
-        message: `Skipping kustomization.yaml at ${full} (basic kustomize support is Phase 2.5; for now load the manifest files directly or run \`kubectl kustomize\` first).`,
-      });
-      continue;
-    }
-    await parseFile(full, manifests, issues);
+    await parseEntry(full, manifests, issues, visited);
   }
 };
 
