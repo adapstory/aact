@@ -31,9 +31,10 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
   {
     name: "structurizr",
     load: true,
-    // generate намеренно отсутствует — Structurizr DSL renderer
-    // нетривиален, пользователи редактируют DSL и используют structurizr-cli.
-    generate: false,
+    // DSL emitter — see `src/formats/structurizr/generate.ts`. Out-of-scope
+    // bits (archetype compress, opaque round-trip) documented in
+    // `parser/README.md`; round-trip parity is covered by the generator tests.
+    generate: true,
     fix: true,
     defaultPattern: "workspace.json",
   },
