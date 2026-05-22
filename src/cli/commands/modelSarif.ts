@@ -39,6 +39,8 @@ const ISSUE_DESCRIPTIONS: Record<ModelIssue["kind"], string> = {
   "self-relation": "Element has a relation pointing at itself",
   "unknown-kind":
     "Element declares a kind outside the C4 stdlib (Person / System / Container / Component variants)",
+  "loader-warning":
+    "Format-specific loader emitted a warning (e.g. obsolete field, unsupported feature, malformed input)",
 };
 
 const issueMessage = (i: ModelIssue): string => {
@@ -69,6 +71,9 @@ const issueMessage = (i: ModelIssue): string => {
     }
     case "unknown-kind": {
       return `Element "${i.element}" has unknown kind "${i.raw}"`;
+    }
+    case "loader-warning": {
+      return `[${i.source}:${i.code}] ${i.message}`;
     }
   }
 };

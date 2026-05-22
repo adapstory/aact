@@ -18,6 +18,7 @@ const issueKindMap: Record<ModelIssue["kind"], DiagnosticKind> = {
   "duplicate-identifier": "model.duplicateIdentifier",
   "self-relation": "model.selfRelation",
   "unknown-kind": "model.unknownKind",
+  "loader-warning": "model.loaderWarning",
 };
 
 const issueContext = (issue: ModelIssue): Record<string, string> => {
@@ -46,6 +47,14 @@ const issueContext = (issue: ModelIssue): Record<string, string> => {
     }
     case "unknown-kind": {
       return { element: issue.element, raw: issue.raw };
+    }
+    case "loader-warning": {
+      const ctx: Record<string, string> = {
+        source: issue.source,
+        code: issue.code,
+      };
+      if (issue.element !== undefined) ctx.element = issue.element;
+      return ctx;
     }
   }
 };
@@ -78,6 +87,9 @@ const issueMessage = (issue: ModelIssue): string => {
     }
     case "unknown-kind": {
       return `Element "${issue.element}" has unknown kind "${issue.raw}"`;
+    }
+    case "loader-warning": {
+      return `[${issue.source}:${issue.code}] ${issue.message}`;
     }
   }
 };

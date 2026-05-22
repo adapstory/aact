@@ -50,6 +50,13 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
     fix: false, // JSON не имеет meaningful range semantics для C4 edits
     defaultPattern: "*.aact.json",
   },
+  {
+    name: "compose",
+    load: true,
+    generate: false, // Compose обычно writes-only (инфра-команда пишет, архитектор сверяет)
+    fix: false, // YAML не имеет meaningful range semantics для C4 edits
+    defaultPattern: "compose.{yml,yaml,json}",
+  },
 ];
 
 describe("Format registry — capability contracts", () => {

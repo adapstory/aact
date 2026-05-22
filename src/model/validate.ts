@@ -25,7 +25,22 @@ export type ModelIssue =
    * runs all rules but the user sees the collision. */
   | { kind: "duplicate-identifier"; identifier: string }
   | { kind: "self-relation"; element: string }
-  | { kind: "unknown-kind"; element: string; raw: string };
+  | { kind: "unknown-kind"; element: string; raw: string }
+  /**
+   * Generic loader-emitted warning — для format-specific сообщений
+   * которые не укладываются в фиксированные validation kinds выше.
+   * `source` — имя формата ("compose" / "kubernetes" / ...), `code` —
+   * sub-classification внутри формата ("version-obsolete" / "extends-
+   * unsupported" / etc). Не блокирующее, не приводит к exitCode 1
+   * автоматически — CLI текстовый рендер показывает как warn.
+   */
+  | {
+      kind: "loader-warning";
+      source: string;
+      code: string;
+      message: string;
+      element?: string;
+    };
 
 const KNOWN_KINDS = new Set<ElementKind>([
   "Person",

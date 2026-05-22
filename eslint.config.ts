@@ -100,7 +100,13 @@ export default tseslint.config(
         { type: "format-shared", pattern: "src/formats/_shared" },
         {
           type: "format",
-          pattern: "src/formats/(plantuml|structurizr|kubernetes|model-json)",
+          // Glob — любой непомеченный подпрефикс директории внутри
+          // `src/formats/`. Новые форматы (compose / backstage /
+          // terraform) не требуют правки этой регулярки. `_shared/`
+          // выше уже забран как `format-shared`; `types.ts` /
+          // `registry.ts` ниже забираются как `format-core` (файловые
+          // паттерны), не subdirectory'ями.
+          pattern: "src/formats/*",
           capture: ["formatName"],
         },
         {

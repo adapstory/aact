@@ -21,6 +21,7 @@ const formatLoaders: Readonly<Record<string, FormatLoader>> = Object.freeze({
   structurizr: () => import("./structurizr").then((m) => m.structurizrFormat),
   "model-json": () => import("./model-json").then((m) => m.modelJsonFormat),
   kubernetes: () => import("./kubernetes").then((m) => m.kubernetesFormat),
+  compose: () => import("./compose").then((m) => m.composeFormat),
 });
 
 /**

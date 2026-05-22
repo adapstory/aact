@@ -23,6 +23,7 @@ export type DiagnosticKind =
   | "model.duplicateIdentifier"
   | "model.selfRelation"
   | "model.unknownKind"
+  | "model.loaderWarning"
   // Model load-time errors
   | "model.sourceNotFound"
   | "model.parseError"
