@@ -5,9 +5,14 @@ import { buildModel } from "../../model";
 import { parseCsvTags } from "../_shared/tags";
 import { normalizeDependsOn } from "./dependsOn";
 import type { IncludedFile } from "./include";
-import { inferKindFromImage } from "./inferKind";
-import { normalizeLabels } from "./labels";
+import {
+  compileImageHeuristic,
+  inferKindFromImage,
+  matchesGlob,
+} from "./inferKind";
+import { normalizeLabels, resolveLabelKeys } from "./labels";
 import { buildAiModelElement, buildAiModelRelation } from "./models";
+import { resolveNamingTransform } from "./naming";
 import { parseImage, technologyLabel } from "./parseImage";
 import { buildProviderElement } from "./providers";
 import type { Document, OffsetTable } from "./sourceMap";
@@ -102,77 +107,33 @@ const humanize = (raw: string): string =>
     .replaceAll(/\b\w/g, (c) => c.toUpperCase())
     .trim();
 
-const DEFAULTS: ResolvedOptions = Object.freeze({
-  labels: Object.freeze({
-    element: "aact.element",
-    kind: "aact.kind",
-    label: "aact.label",
-    description: "aact.description",
-    technology: "aact.technology",
-    tags: "aact.tags",
-    external: "aact.external",
-    link: "aact.link",
-  }),
-  overrides: Object.freeze([]),
-  profiles: Object.freeze([]),
-  imageHeuristic: Object.freeze({
-    db: Object.freeze([] as readonly string[]),
-    queue: Object.freeze([] as readonly string[]),
-  }),
-  providers: Object.freeze({
-    defaultTags: Object.freeze(["provider"]),
-  }),
-  models: Object.freeze({
-    defaultTags: Object.freeze(["ai", "model"]),
-    relationDescription: "uses AI model",
-  }),
-});
+const DEFAULT_PROVIDER_TAGS: readonly string[] = Object.freeze(["provider"]);
+const DEFAULT_MODEL_TAGS: readonly string[] = Object.freeze(["ai", "model"]);
+const DEFAULT_MODEL_RELATION_DESC = "uses AI model";
 
 const resolveOptions = (
   user: ComposeLoadOptions | undefined,
-  defaultDbImages: readonly string[],
-  defaultQueueImages: readonly string[],
 ): ResolvedOptions => {
-  const labels = {
-    ...DEFAULTS.labels,
-    ...(user?.labels
-      ? Object.fromEntries(
-          Object.entries(user.labels).filter(([k, v]) => k !== "prefix" && v),
-        )
-      : {}),
-  };
-  const prefix = user?.labels?.prefix;
-  if (prefix && !user?.labels?.element) labels.element = `${prefix}.element`;
-  if (prefix && !user?.labels?.kind) labels.kind = `${prefix}.kind`;
-  if (prefix && !user?.labels?.label) labels.label = `${prefix}.label`;
-  if (prefix && !user?.labels?.description)
-    labels.description = `${prefix}.description`;
-  if (prefix && !user?.labels?.technology)
-    labels.technology = `${prefix}.technology`;
-  if (prefix && !user?.labels?.tags) labels.tags = `${prefix}.tags`;
-  if (prefix && !user?.labels?.external) labels.external = `${prefix}.external`;
-  if (prefix && !user?.labels?.link) labels.link = `${prefix}.link`;
-
+  const labels = resolveLabelKeys(user?.labels);
+  const imageHeuristic = compileImageHeuristic(user?.imageHeuristic);
   return Object.freeze({
-    labels: Object.freeze(labels),
-    overrides: Object.freeze(user?.overrides ?? []),
-    profiles: Object.freeze(user?.profiles ?? []),
-    imageHeuristic: Object.freeze({
-      db: Object.freeze(user?.imageHeuristic?.db ?? defaultDbImages),
-      queue: Object.freeze(user?.imageHeuristic?.queue ?? defaultQueueImages),
-    }),
+    applyNaming: resolveNamingTransform(user?.naming),
+    labels,
+    imageHeuristic,
+    skip: Object.freeze([...(user?.skip ?? [])]),
+    overrides: Object.freeze([...(user?.overrides ?? [])]),
+    profiles: Object.freeze([...(user?.profiles ?? [])]),
     providers: Object.freeze({
-      defaultTags: Object.freeze(
-        user?.providers?.defaultTags ?? DEFAULTS.providers.defaultTags,
-      ),
+      defaultTags: Object.freeze([
+        ...(user?.providers?.defaultTags ?? DEFAULT_PROVIDER_TAGS),
+      ]),
     }),
     models: Object.freeze({
-      defaultTags: Object.freeze(
-        user?.models?.defaultTags ?? DEFAULTS.models.defaultTags,
-      ),
+      defaultTags: Object.freeze([
+        ...(user?.models?.defaultTags ?? DEFAULT_MODEL_TAGS),
+      ]),
       relationDescription:
-        user?.models?.relationDescription ??
-        DEFAULTS.models.relationDescription,
+        user?.models?.relationDescription ?? DEFAULT_MODEL_RELATION_DESC,
     }),
   });
 };
@@ -181,8 +142,6 @@ interface ToModelInput {
   readonly entryFile: string;
   readonly files: readonly IncludedFile[];
   readonly options: ComposeLoadOptions | undefined;
-  readonly defaultDbImages: readonly string[];
-  readonly defaultQueueImages: readonly string[];
 }
 
 interface ToModelOutput {
@@ -227,10 +186,14 @@ const buildRelations = (
   const dependsOnMapNode = ctx.servicePair
     ? findKeyPair(ctx.servicePair.value as never, "depends_on")?.value
     : undefined;
-  const relations: Relation[] = dependsOnNames.map((to) => {
+  const relations: Relation[] = dependsOnNames.map((rawTo) => {
+    // Apply naming transform к target тоже — иначе depends_on
+    // `landing-app` указывает на element которого нет (потому что
+    // мы зарегистрировали его как `landingApp`).
+    const to = resolved.applyNaming(rawTo);
     const relLocation =
       ctx.table && dependsOnMapNode
-        ? valueLocationFor(ctx.table, dependsOnMapNode as never, to)
+        ? valueLocationFor(ctx.table, dependsOnMapNode as never, rawTo)
         : undefined;
     return Object.freeze({
       to,
@@ -240,7 +203,9 @@ const buildRelations = (
     } satisfies Relation);
   });
   for (const modelRef of ctx.service.models ?? []) {
-    relations.push(buildAiModelRelation(modelRef, resolved));
+    relations.push(
+      buildAiModelRelation(resolved.applyNaming(modelRef), resolved),
+    );
   }
   return Object.freeze(relations);
 };
@@ -256,6 +221,7 @@ const buildServiceElement = (
   const parsedImg = parseImage(imageRaw);
   const inferredKind = inferKindFromImage(
     parsedImg.baseName,
+    parsedImg.repo,
     resolved.imageHeuristic,
   );
   const overrideKind = labelsMap.map[resolved.labels.kind]?.trim();
@@ -299,6 +265,20 @@ interface ServiceProcessOutput {
   readonly issues: readonly ModelIssue[];
 }
 
+const isSkipped = (
+  rawName: string,
+  labelsMap: ReturnType<typeof normalizeLabels>,
+  resolved: ResolvedOptions,
+): boolean => {
+  // Per-service label override beats config-level skip patterns.
+  const skipLabel = labelsMap.map[resolved.labels.skip]?.trim().toLowerCase();
+  if (skipLabel === "true" || skipLabel === "1") return true;
+  for (const pattern of resolved.skip) {
+    if (matchesGlob(rawName, pattern)) return true;
+  }
+  return false;
+};
+
 const processService = (
   ctx: ServiceContext,
   resolved: ResolvedOptions,
@@ -315,9 +295,18 @@ const processService = (
     });
   }
 
+  if (isSkipped(ctx.rawName, labelsMap, resolved)) {
+    return { element: undefined, issues: Object.freeze(issues) };
+  }
+
+  // Explicit element-name label OVERRIDES naming transform — оба
+  // механизма decoupled: naming для массового convention'а, label
+  // для одного-двух edge case'ов.
   const overrideName = labelsMap.map[resolved.labels.element]?.trim();
   const name =
-    overrideName && overrideName.length > 0 ? overrideName : ctx.rawName;
+    overrideName && overrideName.length > 0
+      ? overrideName
+      : resolved.applyNaming(ctx.rawName);
 
   if (ctx.service.extends) {
     issues.push({
@@ -382,10 +371,11 @@ const processModel = (
   const modelLocation =
     table && modelPair ? keyLocation(table, modelPair) : undefined;
 
+  const transformedName = resolved.applyNaming(modelName);
   return buildAiModelElement(
     {
-      name: modelName,
-      label: humanize(modelName),
+      name: transformedName,
+      label: humanize(transformedName),
       parsed: modelDef,
       sourceLocation: modelLocation,
     },
@@ -395,11 +385,7 @@ const processModel = (
 
 export const toModel = (input: ToModelInput): ToModelOutput => {
   const issues: ModelIssue[] = [];
-  const resolved = resolveOptions(
-    input.options,
-    input.defaultDbImages,
-    input.defaultQueueImages,
-  );
+  const resolved = resolveOptions(input.options);
   const merged = mergeFiles(input.files);
   const lookup = buildFileLookup(input.files);
 

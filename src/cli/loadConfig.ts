@@ -199,6 +199,10 @@ export const loadAndValidateConfig = async (
     "writePath" in rawSource && rawSource.writePath !== undefined
       ? resolveConfigRelativePath(rawSource.writePath, configBase)
       : undefined;
+  const sourceOptions =
+    "options" in rawSource && rawSource.options !== undefined
+      ? rawSource.options
+      : undefined;
 
   // Validate explicit type against registry — fail fast вместо deferred
   // "Unknown format" из loadModel. Inferred type гарантированно валиден.
@@ -222,6 +226,7 @@ export const loadAndValidateConfig = async (
         path: sourcePath,
         type,
         ...(writePath === undefined ? {} : { writePath }),
+        ...(sourceOptions === undefined ? {} : { options: sourceOptions }),
       },
     },
     configPath: configFile,

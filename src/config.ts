@@ -48,6 +48,14 @@ export const AactConfigSchema = v.strictObject({
       type: v.optional(v.string()),
       /** Structurizr only: куда писать fix'ы (workspace.dsl). */
       writePath: v.optional(v.string()),
+      /**
+       * Per-Format опции. Shape специфичен для каждого Format'а
+       * (например `ComposeLoadOptions` / `KubernetesLoadOptions`)
+       * — valibot не валидирует shape глубже потому что Format
+       * registry динамический. Format-loader сам типизирует и
+       * валидирует свои options.
+       */
+      options: v.optional(v.any()),
     }),
   ]),
   rules: v.optional(
@@ -169,6 +177,9 @@ export interface AactConfigInput<
         readonly path: string;
         readonly type?: string;
         readonly writePath?: string;
+        /** Per-Format опции. Shape специфичен для каждого формата
+         *  (см. `ComposeLoadOptions` / `KubernetesLoadOptions` и т.д.). */
+        readonly options?: unknown;
       };
   readonly rules?: AactRulesConfig<C>;
   readonly customRules?: C;
@@ -183,6 +194,8 @@ export interface AactConfig {
     readonly path: string;
     readonly type: string;
     readonly writePath?: string;
+    /** Per-Format опции (`ComposeLoadOptions` / `KubernetesLoadOptions` / ...). */
+    readonly options?: unknown;
   };
   readonly rules?: BuiltinRulesConfig & Readonly<Record<string, unknown>>;
   readonly customRules?: readonly RuleDefinition[];

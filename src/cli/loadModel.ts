@@ -133,7 +133,7 @@ export const loadModel = async (config: AactConfig): Promise<LoadResult> => {
         { format: format.name },
       );
     }
-    return await format.load(resolvedPath);
+    return await format.load(resolvedPath, config.source.options);
   } catch (error) {
     if (error instanceof ToolError) throw error;
     if (isFileNotFound(error)) {

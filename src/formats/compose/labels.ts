@@ -88,6 +88,7 @@ export const resolveLabelKeys = (
     readonly tags?: string;
     readonly external?: string;
     readonly link?: string;
+    readonly skip?: string;
   } = {},
 ): {
   readonly element: string;
@@ -98,6 +99,7 @@ export const resolveLabelKeys = (
   readonly tags: string;
   readonly external: string;
   readonly link: string;
+  readonly skip: string;
 } => {
   const prefix = user.prefix ?? "aact";
   return Object.freeze({
@@ -109,5 +111,6 @@ export const resolveLabelKeys = (
     tags: user.tags ?? `${prefix}.tags`,
     external: user.external ?? `${prefix}.external`,
     link: user.link ?? `${prefix}.link`,
+    skip: user.skip ?? `${prefix}.skip`,
   });
 };
