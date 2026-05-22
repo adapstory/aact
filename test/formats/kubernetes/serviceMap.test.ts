@@ -138,4 +138,50 @@ describe("buildServiceMap — selector → workload resolution", () => {
     const map = buildServiceMap([a, svc], new Map([[a, "a"]]));
     expect(map.byName.size).toBe(0);
   });
+
+  it("ignores Service whose selector contains non-string values", () => {
+    // Defensive: selector { app: 42 } → отбрасывается, не матчит ничего.
+    const a = workload("a", { app: "orders" });
+    const svc: ParsedManifest = {
+      filePath: "x.yaml",
+      docIndex: 0,
+      apiVersion: "v1",
+      kind: "Service",
+      metadata: { name: "svc", labels: {}, annotations: {} },
+      spec: { selector: { app: 42, tier: null } },
+      raw: {},
+    };
+    const map = buildServiceMap([a, svc], new Map([[a, "a"]]));
+    expect(map.byName.size).toBe(0);
+  });
+
+  it("workload without spec returns empty labels (no match)", () => {
+    const noSpec: ParsedManifest = {
+      filePath: "x.yaml",
+      docIndex: 0,
+      apiVersion: "apps/v1",
+      kind: "Deployment",
+      metadata: { name: "x", labels: {}, annotations: {} },
+      spec: undefined,
+      raw: {},
+    };
+    const svc = service("svc", { app: "orders" });
+    const map = buildServiceMap([noSpec, svc], new Map([[noSpec, "x"]]));
+    expect(map.byName.get("svc")).toBeUndefined();
+  });
+
+  it("workload with non-object labels (typeof !== object) returns empty", () => {
+    const malformed: ParsedManifest = {
+      filePath: "x.yaml",
+      docIndex: 0,
+      apiVersion: "apps/v1",
+      kind: "Deployment",
+      metadata: { name: "x", labels: {}, annotations: {} },
+      spec: { template: { metadata: { labels: "not-a-map" }, spec: {} } },
+      raw: {},
+    };
+    const svc = service("svc", { app: "orders" });
+    const map = buildServiceMap([malformed, svc], new Map([[malformed, "x"]]));
+    expect(map.byName.get("svc")).toBeUndefined();
+  });
 });

@@ -112,6 +112,58 @@ describe("buildRelationsFor — env-var heuristic", () => {
     const svc = makeServiceMap({});
     expect(buildRelationsFor(m, "api", svc, keys)).toEqual([]);
   });
+
+  it("handles empty env value gracefully (extractServiceCandidates early-return)", () => {
+    const m = makeManifest("api", [{ name: "ORDERS_HOST", value: "" }]);
+    const svc = makeServiceMap({});
+    expect(buildRelationsFor(m, "api", svc, keys)).toEqual([]);
+  });
+
+  it("ignores env value that strips to empty host (path-only)", () => {
+    const m = makeManifest("api", [
+      { name: "ORDERS_URL", value: "/just/path" },
+    ]);
+    const svc = makeServiceMap({});
+    expect(buildRelationsFor(m, "api", svc, keys)).toEqual([]);
+  });
+
+  it("skips containers without env arrays (defensive)", () => {
+    const manifest: import("../../../src/formats/kubernetes/types").ParsedManifest =
+      {
+        filePath: "x.yaml",
+        docIndex: 0,
+        apiVersion: "apps/v1",
+        kind: "Deployment",
+        metadata: { name: "api", labels: {}, annotations: {} },
+        spec: {
+          template: {
+            spec: {
+              containers: [
+                null, // malformed entry
+                "string-not-object", // type-wrong entry
+                { image: "nginx" }, // no env
+                { image: "nginx", env: "should-be-array" }, // env wrong type
+                {
+                  image: "nginx",
+                  env: [
+                    null,
+                    "string",
+                    { name: 42, value: "x" }, // name wrong type
+                    { name: "ORDERS_HOST", value: 42 }, // value wrong type
+                    { name: "OK_HOST", value: "orders-svc" }, // valid
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        raw: {},
+      };
+    const svc = makeServiceMap({ "orders-svc": ["orders"] });
+    expect(
+      buildRelationsFor(manifest, "api", svc, keys).map((r) => r.to),
+    ).toEqual(["orders"]);
+  });
 });
 
 describe("buildRelationsFor — aact.depends-on annotation", () => {

@@ -85,6 +85,24 @@ describe("resolveKustomization — resources extraction", () => {
     ).toHaveLength(2);
   });
 
+  it.each([
+    "git@github.com:org/repo.git",
+    "ssh://git@gitlab.com/team/manifests",
+  ])("warns + skips git/ssh remote ref %s", async (ref) => {
+    const dir = await make();
+    const file = join(dir, "kustomization.yaml");
+    await writeFile(file, `resources:\n  - ${ref}`);
+    const { resourcePaths, issues } = await resolveKustomization(file);
+    expect(resourcePaths).toEqual([]);
+    expect(
+      issues.some(
+        (i) =>
+          i.kind === "loader-warning" &&
+          i.code === "kustomize-remote-unsupported",
+      ),
+    ).toBe(true);
+  });
+
   it("ignores non-string entries in resources array", async () => {
     const dir = await make();
     const file = join(dir, "kustomization.yaml");

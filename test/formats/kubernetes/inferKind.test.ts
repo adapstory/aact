@@ -97,4 +97,28 @@ describe("technologyFromManifest", () => {
   it("returns undefined when image absent", () => {
     expect(technologyFromManifest(make("Deployment"))).toBeUndefined();
   });
+
+  it("returns undefined when container has empty image string", () => {
+    // line 31 + 46-49: image present but empty → fall through to undefined
+    expect(technologyFromManifest(make("Deployment", ""))).toBeUndefined();
+    expect(inferElementKindFromManifest(make("Deployment", ""), compiled)).toBe(
+      "Container",
+    );
+  });
+
+  it("returns Container when primary container has non-string image", () => {
+    // Defensive: malformed manifest где image: 42 (typeof !== "string")
+    const malformed: import("../../../src/formats/kubernetes/types").ParsedManifest =
+      {
+        filePath: "x.yaml",
+        docIndex: 0,
+        apiVersion: "apps/v1",
+        kind: "Deployment",
+        metadata: { name: "x", labels: {}, annotations: {} },
+        spec: { template: { spec: { containers: [{ image: 42 }] } } },
+        raw: {},
+      };
+    expect(inferElementKindFromManifest(malformed, compiled)).toBe("Container");
+    expect(technologyFromManifest(malformed)).toBeUndefined();
+  });
 });

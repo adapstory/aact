@@ -138,6 +138,49 @@ describe("walkManifests — entry resolution", () => {
     expect(manifests).toHaveLength(1);
   });
 
+  it("emits kustomize-resource-missing when resources entry doesn't exist", async () => {
+    const dir = await make();
+    await writeFile(
+      join(dir, "kustomization.yaml"),
+      "resources:\n  - ./missing.yaml",
+    );
+    const { manifests, issues } = await walkManifests(dir);
+    expect(manifests).toEqual([]);
+    expect(
+      issues.some(
+        (i) =>
+          i.kind === "loader-warning" &&
+          i.code === "kustomize-resource-missing",
+      ),
+    ).toBe(true);
+  });
+
+  it("kustomization.yaml entry-point (file directly, not dir)", async () => {
+    const dir = await make();
+    const kustomization = join(dir, "kustomization.yaml");
+    await writeFile(kustomization, "resources:\n  - deploy.yaml");
+    await writeFile(
+      join(dir, "deploy.yaml"),
+      "apiVersion: apps/v1\nkind: Deployment\nmetadata: { name: app }",
+    );
+    const { manifests } = await walkManifests(kustomization);
+    expect(manifests.map((m) => m.metadata.name)).toEqual(["app"]);
+  });
+
+  it("avoids cycles via visited set when kustomization references same file twice", async () => {
+    const dir = await make();
+    await writeFile(
+      join(dir, "kustomization.yaml"),
+      "resources:\n  - deploy.yaml\n  - deploy.yaml",
+    );
+    await writeFile(
+      join(dir, "deploy.yaml"),
+      "apiVersion: apps/v1\nkind: Deployment\nmetadata: { name: app }",
+    );
+    const { manifests } = await walkManifests(dir);
+    expect(manifests).toHaveLength(1);
+  });
+
   it("extracts metadata.namespace + labels + annotations", async () => {
     const dir = await make();
     await writeFile(
