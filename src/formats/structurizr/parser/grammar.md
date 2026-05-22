@@ -26,14 +26,14 @@ plus three boundary cases (hard parse error / tokenize-ignore / in-scope
 minimal). See `docs/v3-parser-phase-0-inventory.md` for the reasoning
 behind the primary three.
 
-| Category                                         | Goes to                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Examples                                                                                                                                                                                                                                                                   |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **In scope**                                     | `Model` via the AST → toModel mapping                                                                                                                                                                                                                                                                                                                                                                                                                                            | workspace, model, elements, relationships, properties, perspectives, !include, !const, !identifiers                                                                                                                                                                        |
-| **Opaque**                                       | `LoadResult.raw` verbatim (round-trip without interpretation)                                                                                                                                                                                                                                                                                                                                                                                                                    | views, styles, configuration, themes, branding, terminology, !docs, !adrs, !plugin, !script                                                                                                                                                                                |
-| **Parsed-then-info-issue**                       | parsed only for syntactic correctness (so a legal DSL file does not crash); emits `ModelIssue` severity=info; never reaches Model or raw                                                                                                                                                                                                                                                                                                                                         | deploymentEnvironment, deploymentNode, infrastructureNode, softwareSystemInstance, containerInstance, deploymentGroup, instanceOf, healthCheck                                                                                                                             |
-| **Hard parse error**                             | reference parser throws `RuntimeException`; aact must match to stay aligned                                                                                                                                                                                                                                                                                                                                                                                                      | `!ref`, `!extend`, `!constant`, `enterprise { ... }` — all four were deprecated and **then removed**; the reference now errors on them with a message pointing to the replacement. Silent-skip would diverge from the reference (we'd accept files the reference rejects). |
-| **Tokenize-ignore at lex**                       | lexer recognises the token, parser skips the block as untyped opaque content (no info-issue, no warning)                                                                                                                                                                                                                                                                                                                                                                         | `!components` (component finder + family — note the actual token is `!components`, not `componentFinder`), `findElement(s)`, `findRelationship(s)`, `customElement` (`element` keyword in model).                                                                          |
-| **In-scope but minimal — alias extraction only** | `archetypes { ... }` — load-bearing because once an archetype is declared, its name becomes an alias for the base keyword (e.g. `archetypes { db = container { ... } }` then `db myDb "..."` uses `db` as an alias for `container`). The parser must extract the keyword→base-type mapping; the archetype body's defaults (description, technology, tags) MAY be applied during toModel or dropped — TBD. NOT tokenize-ignore (silent-skip breaks all DSLs that use archetypes). |
+| Category                   | Goes to                                                                                                                                                                                                                                                     | Examples                                                                                                                                                                                                                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **In scope**               | `Model` via the AST → toModel mapping                                                                                                                                                                                                                       | workspace, model, elements, relationships, properties, perspectives, !include, !const, !identifiers                                                                                                                                                                        |
+| **Opaque**                 | stripped from the token stream pre-parse (`preParse.ts`); keyword + source range surfaced on `ChevrotainParseResult.opaqueBlocks` so a future writer can re-emit them. Inner text not captured today — no rule, analyzer, or generator reads from these.    | views, styles, configuration, themes, branding, terminology, archetypes, !docs, !adrs, !plugin, !script                                                                                                                                                                    |
+| **Parsed-then-info-issue** | parsed only for syntactic correctness (so a legal DSL file does not crash); emits `ModelIssue` severity=info; never reaches Model or raw                                                                                                                    | deploymentEnvironment, deploymentNode, infrastructureNode, softwareSystemInstance, containerInstance, deploymentGroup, instanceOf, healthCheck                                                                                                                             |
+| **Hard parse error**       | reference parser throws `RuntimeException`; aact must match to stay aligned                                                                                                                                                                                 | `!ref`, `!extend`, `!constant`, `enterprise { ... }` — all four were deprecated and **then removed**; the reference now errors on them with a message pointing to the replacement. Silent-skip would diverge from the reference (we'd accept files the reference rejects). |
+| **Tokenize-ignore at lex** | lexer recognises the token, parser skips the block as untyped opaque content (no info-issue, no warning)                                                                                                                                                    | `!components` (component finder + family — note the actual token is `!components`, not `componentFinder`), `findElement(s)`, `findRelationship(s)`, `customElement` (`element` keyword in model).                                                                          |
+| **Archetypes (deferred)**  | declaration block stripped opaque today — alias usage (`db myDb "..."` and `a --https-> b`) is a documented gap in "Remaining gaps". When alias support lands, archetype defaults will be applied at toModel time and the category will move to "In scope". | `archetypes { db = container { ... } }`                                                                                                                                                                                                                                    |
 
 The chevrotain grammar is the **union** of categories 1–3. Category 4 is
 handled at lex time.
@@ -103,11 +103,20 @@ group "Layer" }` sets `Component.properties.group = "Layer"`.
   `duplicate-identifier` ModelIssue (case-insensitive).
 - **Workspace name/description/extends** — surfaced in
   `Model.workspace` as `{ name?, description?, extendsTarget? }`.
+  Workspace-body `name "..."` / `description "..."` overrides win
+  over the header positionals (last-wins).
 - **Archetypes block** — declaration is stripped opaque so
   archetype-bearing fixtures parse cleanly.
 - **Selectors `!element`/`!elements`/`!relationship`/
   `!relationships`** — declaration blocks are stripped opaque so
   selector-bearing fixtures parse cleanly.
+- **Bare `impliedRelationships`** — accepted alongside
+  `!impliedRelationships` (reference uses case-insensitive
+  bang-stripping). Both feed the same toModel strategy.
+- **`Element` keyword as identifier** — `element` is accepted in
+  `assignedIdentifier` / `source` / `destination` slots so symmetric
+  forms like `element = element "X"` parse identically to
+  `softwareSystem = softwareSystem "Y"`.
 
 ### Remaining gaps (deliberate)
 
@@ -265,8 +274,8 @@ dispatch.
 | `url "<url>"`                   | All element bodies.                                                                                                                                                                                                                                                                                                                        |
 | `properties { ... }`            | All element bodies. Block of `<key> <value>` lines — value can be unquoted bare token OR quoted string (only quote when the value contains whitespace).                                                                                                                                                                                    |
 | `perspectives { ... }`          | All element bodies. Block of `<name> <description> [value]` lines — exactly 2 or 3 tokens per line.                                                                                                                                                                                                                                        |
-| `!docs <path> [fqn]`            | Valid inside `softwareSystem` / `container` / `component` bodies (per their `getPermittedTokens()`), in addition to the workspace-scope form covered in §2. Element-scoped docs route to `raw.docs[elementId]` for round-trip.                                                                                                             |
-| `!decisions <path> <type\|fqn>` | Same as `!docs` — element-scoped variant alongside the workspace-scope form.                                                                                                                                                                                                                                                               |
+| `!docs <path> [fqn]`            | Valid inside `softwareSystem` / `container` / `component` bodies (per their `getPermittedTokens()`), in addition to the workspace-scope form covered in §2. **aact strips the directive at pre-parse** (`stripInlineDirectives`) — there is no Model field for documentation paths today and no round-trip writer that would re-emit them. |
+| `!decisions <path> <type\|fqn>` | Same as `!docs` — element-scoped variant alongside the workspace-scope form. Pre-parse strip; no Model surface.                                                                                                                                                                                                                            |
 
 Element bodies may also contain nested elements (per the hierarchy):
 
@@ -286,29 +295,37 @@ Workspace body (inside `workspace "..." { ... }`) also accepts
 valid only inside archetype definitions and element-style blocks
 (neither of which is in scope for aact's Model).
 
-## 2. Opaque productions (round-trip via `LoadResult.raw`)
+## 2. Opaque productions (stripped pre-parse)
 
-The parser must accept these as syntactically valid blocks and preserve
-their **raw source text** without interpretation. The `toModel` step
-routes them to slots in `LoadResult.raw` so a future Structurizr
-generator can re-emit them verbatim. No rule, analyzer, or generator
-inside aact reads from these.
+These constructs are recognised at the lexical level and stripped from
+the token stream by `preParse.ts` before the grammar runs. Their
+keyword + source range are surfaced on `ChevrotainParseResult.opaqueBlocks`
+(views/styles/configuration/branding/terminology/themes) or
+consumed silently by `stripInlineDirectives` (`!docs`/`!decisions`/
+`!adrs`) / `stripDeploymentBlocks` (deployment family — see §3). No
+rule, analyzer, or generator inside aact reads from these.
 
-| Construct     | Form                                                                                                                                                                       | Raw destination                   |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | --------------- |
-| Views         | `views { ... }`                                                                                                                                                            | `raw.views`                       |
-| Styles        | `styles { ... }` (inside `views { ... }` in current DSL)                                                                                                                   | `raw.styles`                      |
-| Configuration | `configuration { ... }`                                                                                                                                                    | `raw.configuration`               |
-| Branding      | `branding { ... }`                                                                                                                                                         | `raw.branding`                    |
-| Terminology   | `terminology { ... }`                                                                                                                                                      | `raw.terminology`                 |
-| Themes        | `themes ...`                                                                                                                                                               | `raw.themes`                      |
-| Docs          | `!docs <path> <fqn>` (`DocsParser.GRAMMAR`; `<fqn>` is verbatim-mandatory in GRAMMAR but semantically optional at parse time — defaults to `DefaultDocumentationImporter`) | `raw.docs`                        |
-| Decisions     | `!decisions <path> <type                                                                                                                                                   | fqn>` (`DecisionsParser.GRAMMAR`) | `raw.decisions` |
-| Plugin        | `!plugin <fqn>`                                                                                                                                                            | `raw.plugins[]`                   |
-| Script        | `!script <filename>` / `!script <language> { ... }`                                                                                                                        | `raw.scripts[]`                   |
+| Construct        | Form                                                                 | Stripped by             |
+| ---------------- | -------------------------------------------------------------------- | ----------------------- |
+| Views            | `views { ... }`                                                      | `stripOpaqueBlocks`     |
+| Styles           | `styles { ... }` (inside `views { ... }` in current DSL)             | `stripOpaqueBlocks`     |
+| Configuration    | `configuration { ... }`                                              | `stripOpaqueBlocks`     |
+| Branding         | `branding { ... }`                                                   | `stripOpaqueBlocks`     |
+| Terminology      | `terminology { ... }`                                                | `stripOpaqueBlocks`     |
+| Themes / Theme   | `themes ...` / `theme ...`                                           | `stripOpaqueBlocks`     |
+| Archetypes       | `archetypes { ... }`                                                 | `stripOpaqueBlocks`     |
+| Docs             | `!docs <path> [fqn]`                                                 | `stripInlineDirectives` |
+| Decisions        | `!decisions <path> <type\|fqn>`                                      | `stripInlineDirectives` |
+| ADRs             | `!adrs <path>`                                                       | `stripInlineDirectives` |
+| Plugin           | `!plugin <fqn>` / `!plugin <fqn> { ... }`                            | `stripOpaqueBlocks`     |
+| Script           | `!script <filename>` / `!script <language> { ... }`                  | `stripOpaqueBlocks`     |
+| Component finder | `!components { ... }`                                                | `stripOpaqueBlocks`     |
+| Selectors        | `!element` / `!elements` / `!relationship` / `!relationships` blocks | `stripOpaqueBlocks`     |
 
-The parser preserves enough source-range info that re-emit is faithful
-character-for-character.
+The intent is a future round-trip writer that re-emits stripped blocks
+verbatim. Until that writer exists, only the block range is preserved
+— the inner text is not captured on the AST and `LoadResult` has no
+`raw` slot.
 
 ## 3. Parsed-then-info-issue
 

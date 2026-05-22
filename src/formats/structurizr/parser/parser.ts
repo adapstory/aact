@@ -1,34 +1,37 @@
 /**
  * Structurizr DSL parser (chevrotain CstParser).
  *
- * Recognises the subset of `grammar.md` needed to take a real-world
- * fixture's model section through to a populated Model:
+ * The accepted surface is the union of grammar.md §1 ("In scope")
+ * minus the documented gaps in `grammar.md` ("Remaining gaps") —
+ * archetype alias usage and selector body propagation. Everything in
+ * §2 (opaque), §3 (deployment), §4 (tokenize-ignore), and §4a (hard-
+ * removed) is stripped from the token stream pre-parse (`preParse.ts`)
+ * and never reaches the rules below — the grammar stays narrow.
+ *
+ * Productions in this file:
  *
  *   - workspace [name] [description] [extends "..."] { body }
+ *       body: nameOverride | descriptionOverride | modelBlock |
+ *             directive | propertiesBlock
  *   - model { body }
- *   - person / softwareSystem / container / component / group element
- *     declarations (optional `id =` prefix, optional `{ body }`)
+ *       body: elementDeclaration | reopenDeclaration | relationship |
+ *             directive | propertiesBlock
+ *   - element declarations (person / softwareSystem / container /
+ *     component / group / element), with optional `id =` prefix and
+ *     optional `{ body }`
  *   - element body statements (description / technology / tags / tag /
- *     url / properties / perspectives)
- *   - <id> -> <id> [description] [technology] [tags] explicit relationships
- *   - `!include` / `!const` / `!var` / `!identifiers` /
- *     `!impliedRelationships` directives at workspace/model scope
- *
- * Not yet recognised (tracked in grammar.md):
- *
- *   - Implicit-source `-> <id> ...` form inside element bodies
- *   - The `-/>` no-relationship form (deployment-scope only)
- *   - Archetypes alias declarations
- *   - Opaque blocks (views / styles / configuration / branding /
- *     terminology / themes) — balance-brace skip lands next
- *   - Deployment family (parsed-then-info-issue)
- *   - Hard-removed reference errors (!ref / !extend / !constant / enterprise)
+ *     url / properties / perspectives) and nested elements
+ *   - explicit `[id =] src -> dst [desc] [tech] [tags]` and
+ *     implicit-source `-> dst ...` relationships, plus the `-/>`
+ *     no-relationship marker
+ *   - directives: `!include` / `!const` / `!var` / `!identifiers` /
+ *     `!impliedRelationships` (and bare `impliedRelationships`)
  *
  * Adding a rule:
  *   1. Add `this.RULE("name", () => { ... })`.
  *   2. Reference via `this.SUBRULE(this.name)`.
  *   3. Cover with a smoke test.
- *   4. Update the grammar.md "what's parsed today" section.
+ *   4. Update grammar.md.
  */
 
 import type { IToken } from "chevrotain";
@@ -50,8 +53,10 @@ import {
   Extends,
   Group,
   Identifier,
+  ImpliedRelationships,
   LBrace,
   Model,
+  Name,
   NoRelationship,
   Person,
   Perspectives,
@@ -109,19 +114,37 @@ class StructurizrParser extends CstParser {
       ]);
     });
     this.CONSUME(LBrace);
-    // Workspace-scope body — directives, `properties { ... }`, and
-    // `model { ... }` blocks may appear in any order. Reference
-    // fixtures put workspace-level directives before `model {}` to
-    // declare constants used inside the model.
+    // Workspace-scope body — directives, `properties { ... }`,
+    // `model { ... }`, and `name "..."` / `description "..."`
+    // overrides may appear in any order. Reference parser
+    // (`WorkspaceParser.parseName` / `parseDescription`) treats them
+    // as last-wins.
     this.MANY(() => {
       this.OR2([
         { ALT: () => this.SUBRULE(this.modelBlock) },
+        { ALT: () => this.SUBRULE(this.workspaceNameStmt) },
+        { ALT: () => this.SUBRULE(this.workspaceDescriptionStmt) },
         { ALT: () => this.SUBRULE(this.directive) },
         { ALT: () => this.SUBRULE(this.propertiesBlock) },
       ]);
     });
     this.CONSUME(RBrace);
   });
+
+  /** `name "<text>"` — workspace body override (last-wins). */
+  private workspaceNameStmt = this.RULE("workspaceNameStmt", () => {
+    this.CONSUME(Name);
+    this.CONSUME(StringLiteral);
+  });
+
+  /** `description "<text>"` — workspace body override (last-wins). */
+  private workspaceDescriptionStmt = this.RULE(
+    "workspaceDescriptionStmt",
+    () => {
+      this.CONSUME(Description);
+      this.CONSUME(StringLiteral);
+    },
+  );
 
   // ── model { ... } ──────────────────────────────────────────────────
 
@@ -179,6 +202,7 @@ class StructurizrParser extends CstParser {
       { ALT: () => this.CONSUME(Container) },
       { ALT: () => this.CONSUME(Component) },
       { ALT: () => this.CONSUME(Group) },
+      { ALT: () => this.CONSUME(Element) },
     ]);
   });
 
@@ -370,8 +394,16 @@ class StructurizrParser extends CstParser {
   private impliedRelationshipsDirective = this.RULE(
     "impliedRelationshipsDirective",
     () => {
-      this.CONSUME(BangImpliedRelationships);
+      // Reference (`StructurizrDslParser.java`) accepts both
+      // `!impliedRelationships` and bare `impliedRelationships` via
+      // case-insensitive equality with bang-stripping. We surface the
+      // bare form as the dedicated `ImpliedRelationships` keyword
+      // token so the lexer doesn't collide with identifier slots.
       this.OR([
+        { ALT: () => this.CONSUME(BangImpliedRelationships) },
+        { ALT: () => this.CONSUME(ImpliedRelationships) },
+      ]);
+      this.OR1([
         { ALT: () => this.CONSUME(StringLiteral, { LABEL: "value" }) },
         { ALT: () => this.CONSUME1(Identifier, { LABEL: "value" }) },
       ]);

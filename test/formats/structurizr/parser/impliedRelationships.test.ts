@@ -88,4 +88,28 @@ describe("Structurizr parser — !impliedRelationships true", () => {
     expect(parseErrors).toEqual([]);
     expect(model.elements["ext"]?.relations).toEqual([]);
   });
+
+  it("accepts bare `impliedRelationships true` (no `!` prefix)", () => {
+    // Reference dispatch matches both spellings via case-insensitive
+    // bang-stripping (`StructurizrDslParser.java`). aact surfaces the
+    // bare form as a dedicated keyword token; semantics identical.
+    const src = `workspace {
+      model {
+        impliedRelationships true
+        s = softwareSystem "S" {
+          a = container "A"
+          b = container "B"
+        }
+        a -> b "uses"
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    // The bare form should produce the same implied edge as `!impliedRelationships true`.
+    expect(
+      model.elements["a"]?.relations.some(
+        (r) => r.to === "b" && r.description === "uses",
+      ),
+    ).toBe(true);
+  });
 });

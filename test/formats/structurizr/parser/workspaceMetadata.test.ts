@@ -29,4 +29,43 @@ describe("Structurizr parser — workspace metadata", () => {
     const { model } = parse(src);
     expect(model.workspace).toBeUndefined();
   });
+
+  it("workspace body `name` / `description` overrides win over the header", () => {
+    const src = `workspace "Header Name" "Header Desc" {
+      name "Body Name"
+      description "Body Desc"
+      model {}
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.workspace).toEqual({
+      name: "Body Name",
+      description: "Body Desc",
+    });
+  });
+
+  it("workspace body `name` / `description` apply when the header omits them", () => {
+    const src = `workspace {
+      name "Body Only"
+      description "Body Only Desc"
+      model {}
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.workspace).toEqual({
+      name: "Body Only",
+      description: "Body Only Desc",
+    });
+  });
+
+  it("last `name` override wins when repeated", () => {
+    const src = `workspace {
+      name "First"
+      name "Second"
+      model {}
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.workspace?.name).toBe("Second");
+  });
 });

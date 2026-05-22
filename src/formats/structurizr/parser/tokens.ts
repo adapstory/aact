@@ -238,6 +238,16 @@ export const Theme = keyword("Theme", "theme");
 // Hard-removed (reference throws; we match to keep aligned)
 export const EnterpriseHardError = keyword("EnterpriseHardError", "enterprise");
 
+/** Bare `impliedRelationships <value>` form — `!impliedRelationships`
+ *  is the `BangImpliedRelationships` directive token above. The
+ *  reference dispatch (`StructurizrDslParser.java`) accepts both
+ *  spellings via `equalsIgnoreCase` against `!impliedRelationships`
+ *  and its bang-stripped variant. */
+export const ImpliedRelationships = keyword(
+  "ImpliedRelationships",
+  "impliedRelationships",
+);
+
 // ── Token order matters — longest-match-first ─────────────────────────
 
 /**
@@ -334,6 +344,7 @@ export const allTokens = [
   Themes,
   Theme,
   EnterpriseHardError,
+  ImpliedRelationships,
 
   // Identifier last among text tokens
   Identifier,

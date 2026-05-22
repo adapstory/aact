@@ -18,6 +18,7 @@ import type { CstNode, IToken } from "chevrotain";
 
 import type { SourceLocation, SourcePosition } from "../../../model";
 import type {
+  DescriptionOverride,
   ElementBodyNode,
   ElementNode,
   GroupNode,
@@ -25,8 +26,10 @@ import type {
   IdentifierRef,
   ModelChildNode,
   ModelNode,
+  NameOverride,
   RelationshipNode,
   StringLiteral as AstStringLiteral,
+  WorkspaceBodyNode,
   WorkspaceNode,
 } from "./ast";
 import { parserInstance } from "./parser";
@@ -238,20 +241,53 @@ class StructurizrCstToAst extends BaseVisitor {
     const extendsTarget = ctx.extendsTarget
       ? this.stringFromToken(ctx.extendsTarget[0])
       : undefined;
-    const modelBlocks = (ctx.modelBlock ?? []).map(
-      (m) => this.visit(m) as ModelNode,
-    );
+    const body: WorkspaceBodyNode[] = [];
+    for (const m of ctx.modelBlock ?? []) {
+      body.push(this.visit(m) as ModelNode);
+    }
+    for (const n of ctx.workspaceNameStmt ?? []) {
+      body.push(this.visit(n) as NameOverride);
+    }
+    for (const d of ctx.workspaceDescriptionStmt ?? []) {
+      body.push(this.visit(d) as DescriptionOverride);
+    }
     return {
       kind: "workspace",
       name,
       description,
       extendsTarget,
-      body: modelBlocks,
+      body,
       range:
         workspaceToken && closeToken
           ? rangeFromTokens(workspaceToken, closeToken, this.file)
           : zeroRange(this.file),
       ...(recovered ? { recovered: true as const } : {}),
+    };
+  }
+
+  workspaceNameStmt(ctx: {
+    Name: [IToken];
+    StringLiteral: [IToken];
+  }): NameOverride {
+    const keyword = ctx.Name[0];
+    const value = ctx.StringLiteral[0];
+    return {
+      kind: "nameOverride",
+      value: this.stringFromToken(value),
+      range: rangeFromTokens(keyword, value, this.file),
+    };
+  }
+
+  workspaceDescriptionStmt(ctx: {
+    Description: [IToken];
+    StringLiteral: [IToken];
+  }): DescriptionOverride {
+    const keyword = ctx.Description[0];
+    const value = ctx.StringLiteral[0];
+    return {
+      kind: "descriptionOverride",
+      value: this.stringFromToken(value),
+      range: rangeFromTokens(keyword, value, this.file),
     };
   }
 
@@ -535,6 +571,13 @@ class StructurizrCstToAst extends BaseVisitor {
     if (ctx.perspectivesBlock?.[0]) {
       return this.visit(ctx.perspectivesBlock[0]) as ElementBodyNode;
     }
+    // Element-body directives (`!const X "Y"` / `!var ...` etc.) are
+    // accepted by the parser (reference allows them at any scope) but
+    // dropped here intentionally — `${NAME}` substitutions are
+    // resolved by the pre-lex pass in `index.ts:expandSubstitutions`,
+    // so by the time the visitor runs the directive has no Model
+    // impact. Reintroduce a return here only if a directive starts
+    // affecting the Model from inside an element body.
     return undefined;
   }
 
@@ -788,10 +831,15 @@ class StructurizrCstToAst extends BaseVisitor {
   }
 
   impliedRelationshipsDirective(ctx: {
-    BangImpliedRelationships: [IToken];
+    BangImpliedRelationships?: [IToken];
+    ImpliedRelationships?: [IToken];
     value: [IToken];
   }) {
-    const keyword = ctx.BangImpliedRelationships[0];
+    // Both `!impliedRelationships` and bare `impliedRelationships`
+    // land here; the visitor doesn't distinguish — toModel reads the
+    // value and applies the same strategy either way.
+    const keyword = (ctx.BangImpliedRelationships ??
+      ctx.ImpliedRelationships)![0];
     const valueToken = ctx.value[0];
     const valueText =
       valueToken.tokenType.name === "StringLiteral"
@@ -799,7 +847,6 @@ class StructurizrCstToAst extends BaseVisitor {
         : valueToken.image;
     return {
       kind: "impliedRelationships" as const,
-      bangPrefix: true,
       value: {
         kind: "string" as const,
         value: valueText,
@@ -921,6 +968,8 @@ interface WorkspaceBlockCtx {
   readonly description?: readonly [IToken];
   readonly extendsTarget?: readonly [IToken];
   readonly modelBlock?: readonly CstNode[];
+  readonly workspaceNameStmt?: readonly CstNode[];
+  readonly workspaceDescriptionStmt?: readonly CstNode[];
   readonly LBrace?: readonly [IToken];
   readonly RBrace?: readonly [IToken];
 }

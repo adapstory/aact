@@ -1,20 +1,16 @@
 /**
  * AST → Model mapping for the Structurizr DSL chevrotain parser.
  *
- * Maps the subset of AST nodes the parser emits today (workspace +
- * model + elements + element body statements + directives + explicit
- * relationships) into the canonical `Model` shape. Source positions
- * captured by the lexer propagate to `sourceLocation` on every
- * Container / Boundary / Relation that lands in the Model.
+ * Maps every AST node the parser emits (workspace metadata + model
+ * elements + body statements + relationships + directives) into the
+ * canonical `Model` shape. Source positions captured by the lexer
+ * propagate to `sourceLocation` on every Container / Boundary /
+ * Relation that lands in the Model.
  *
- * Open work (tracked in grammar.md):
- *   - Boundary-form body aggregation (today the `softwareSystem "X" {
- *     description "..." ...; nested } ` path drops body statements
- *     because aggregateBody is leaf-only)
- *   - Implicit-source relationships inside element bodies
- *   - Archetype default propagation
- *   - Opaque blocks → `LoadResult.raw`
- *   - Deployment family → ModelIssue severity=info
+ * Out of scope, tracked in grammar.md "Remaining gaps":
+ *   - Archetype alias usage (`db myDb "Orders"` shorthand) and
+ *     default propagation
+ *   - Selector body propagation (`!element <ref> { tag "x" }`)
  */
 
 import type {
@@ -112,8 +108,11 @@ const findRootBoundaryNames = (boundaries: readonly Boundary[]): string[] => {
 /**
  * Surface workspace-level metadata from the AST so the Model carries
  * `Workspace.getName()` / `getDescription()` info the reference
- * parser exposes. Returns undefined when nothing useful was set, so
- * the Model object stays terse.
+ * parser exposes. Header positionals (`workspace "Name" "Desc"`)
+ * are the base values; workspace-body `name "..."` / `description
+ * "..."` overrides win (last-wins) per
+ * `WorkspaceParser.parseName` / `parseDescription`. Returns undefined
+ * when nothing useful was set so the Model object stays terse.
  */
 const workspaceMetadata = (
   workspace: WorkspaceNode,
@@ -124,6 +123,11 @@ const workspaceMetadata = (
     {};
   if (workspace.name) meta.name = workspace.name.value;
   if (workspace.description) meta.description = workspace.description.value;
+  for (const node of workspace.body) {
+    if (node.kind === "nameOverride") meta.name = node.value.value;
+    else if (node.kind === "descriptionOverride")
+      meta.description = node.value.value;
+  }
   if (workspace.extendsTarget)
     meta.extendsTarget = workspace.extendsTarget.value;
   if (Object.keys(meta).length === 0) return undefined;

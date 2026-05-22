@@ -14,9 +14,10 @@
  *   2. The AST is a discriminated union on `kind`. Every node has a
  *      unique `kind` string; the `toModel` mapper switches on it.
  *   3. AST → Model mapping is 1-to-1 with the field matrix in
- *      `docs/v3-parser-phase-0-inventory.md`. Anything that does not
- *      feed `Model` lives under `OpaqueBlock` (round-trips through
- *      `LoadResult.raw`) or `InfoIssueBlock` (parsed-then-info-issue).
+ *      `docs/v3-parser-phase-0-inventory.md`. Constructs the linter
+ *      does not model (`views` / `styles` / deployment blocks, etc.)
+ *      are stripped from the token stream pre-parse and never reach
+ *      the AST — see `preParse.ts`.
  *   4. Identifiers are kept as written. Identifier resolution
  *      (hierarchical vs flat scopes, archetype-alias lookup,
  *      `structurizr.dsl.identifier` property) is a `toModel` concern,
@@ -75,8 +76,7 @@ export type WorkspaceBodyNode =
   | ModelNode
   | NameOverride
   | DescriptionOverride
-  | DirectiveNode
-  | OpaqueBlock;
+  | DirectiveNode;
 
 export interface NameOverride extends AstNodeBase {
   readonly kind: "nameOverride";
@@ -95,13 +95,13 @@ export interface DescriptionOverride extends AstNodeBase {
  * in any order (the reference parser dispatches line by line); the AST
  * preserves source order.
  *
- * `archetypes` is captured here separately because its declarations
- * are load-bearing for the rest of the file's parse (every archetype
- * name becomes an alias keyword). See grammar.md §1.x Archetypes.
+ * `archetypes { ... }` blocks are stripped opaque at lex time so their
+ * declarations never reach the AST. Archetype usage forms (`<alias>
+ * <id> "name"`, `a --<alias>-> b`) are documented gaps — see
+ * grammar.md "Remaining gaps".
  */
 export interface ModelNode extends RecoverableNode {
   readonly kind: "model";
-  readonly archetypes?: ArchetypesBlock;
   readonly children: readonly ModelChildNode[];
 }
 
@@ -119,8 +119,7 @@ export type ModelChildNode =
   | RelationshipNode
   | ReopenNode
   | DirectiveNode
-  | PropertiesBlock
-  | InfoIssueBlock; // deploymentEnvironment, etc.
+  | PropertiesBlock;
 
 /**
  * Re-open a previously declared element to attach more body
@@ -139,7 +138,6 @@ export interface ReopenNode extends RecoverableNode {
   readonly kind: "reopen";
   readonly target: IdentifierRef;
   readonly body: readonly ElementBodyNode[];
-  readonly range: SourceLocation;
 }
 
 // ── Elements ────────────────────────────────────────────────────────────
@@ -234,12 +232,15 @@ export interface GroupNode extends RecoverableNode {
  * The reference treats it as a 6th element kind with a tag set of
  * just `["Element"]` (no kind-specific second tag). We map it to a
  * Model Container with kind = "Container".
+ *
+ * The `[metadata]` positional slot has no Model field today and is
+ * dropped by the visitor — reintroduce a `headerMetadata?` field
+ * here when a rule or generator needs it.
  */
 export interface CustomElementNode extends RecoverableNode {
   readonly kind: "element";
   readonly assignedIdentifier?: Identifier;
   readonly name: StringLiteral;
-  readonly headerMetadata?: StringLiteral;
   readonly headerDescription?: StringLiteral;
   readonly headerTags?: StringLiteral;
   readonly body: readonly ElementBodyNode[];
@@ -262,9 +263,6 @@ export type ElementBodyNode =
   | UrlStatement
   | PropertiesBlock
   | PerspectivesBlock
-  // Element-scoped directives
-  | ElementDocsDirective
-  | ElementDecisionsDirective
   // Nested elements (any kind — toModel enforces nesting rules)
   | ElementNode
   // Relationships within the element body (`-> other` implicit or
@@ -297,28 +295,6 @@ export interface TagStatement extends AstNodeBase {
 export interface UrlStatement extends AstNodeBase {
   readonly kind: "url";
   readonly value: StringLiteral;
-}
-
-/**
- * Element-scoped `!docs <path> [fqn]`. Distinguished from the
- * workspace-scope form (which is captured as a top-level
- * `DirectiveNode`) so `toModel` can route to
- * `raw.docs[elementId]`.
- */
-export interface ElementDocsDirective extends AstNodeBase {
-  readonly kind: "elementDocs";
-  readonly path: StringLiteral;
-  readonly fqn?: StringLiteral;
-}
-
-/**
- * Element-scoped `!decisions <path> <type|fqn>`. Same distinction as
- * `ElementDocsDirective`.
- */
-export interface ElementDecisionsDirective extends AstNodeBase {
-  readonly kind: "elementDecisions";
-  readonly path: StringLiteral;
-  readonly typeOrFqn: StringLiteral;
 }
 
 // ── Relationships ───────────────────────────────────────────────────────
@@ -394,45 +370,6 @@ export interface PerspectiveEntry extends AstNodeBase {
   readonly value?: StringLiteral;
 }
 
-// ── Archetypes ──────────────────────────────────────────────────────────
-
-/**
- * `archetypes { <alias> = <baseKeyword> { <defaults?> } ... }`. Each
- * declaration introduces a keyword alias used by subsequent element
- * lines. Defaults inside the body (description, technology, tags,
- * etc.) are stored verbatim; `toModel` decides whether to apply them
- * as initial values for elements declared via the alias.
- *
- * See grammar.md §1.x Archetypes for the full grammar and rationale.
- */
-export interface ArchetypesBlock extends AstNodeBase {
-  readonly kind: "archetypes";
-  readonly declarations: readonly ArchetypeDeclaration[];
-}
-
-/**
- * The set of accepted archetype base keywords. Verified against
- * grammar.md §1.x Archetypes and the reference parser's archetype
- * dispatch.
- */
-export type ArchetypeBaseKeyword =
-  | "group"
-  | "element"
-  | "person"
-  | "softwareSystem"
-  | "container"
-  | "component"
-  | "deploymentNode"
-  | "infrastructureNode"
-  | "relationship";
-
-export interface ArchetypeDeclaration extends AstNodeBase {
-  readonly kind: "archetype";
-  readonly alias: Identifier;
-  readonly baseKeyword: ArchetypeBaseKeyword;
-  readonly defaults: readonly ElementBodyNode[];
-}
-
 // ── Top-level directives ────────────────────────────────────────────────
 
 export type DirectiveNode =
@@ -484,53 +421,19 @@ export interface IdentifiersDirective extends AstNodeBase {
  */
 export interface ImpliedRelationshipsDirective extends AstNodeBase {
   readonly kind: "impliedRelationships";
-  /** Whether the user wrote `!impliedRelationships` (with !) or `impliedRelationships`. */
-  readonly bangPrefix: boolean;
   readonly value: StringLiteral;
-}
-
-// ── Opaque and info-issue blocks ────────────────────────────────────────
-
-/**
- * A block matched by the parser as syntactically valid but kept
- * opaque. The content is preserved as raw source text for round-trip
- * and not interpreted. Used for `views` / `styles` / `themes` /
- * `configuration` / `branding` / `terminology` / `!docs` / `!decisions`
- * / `!plugin` / `!script`. See grammar.md §2.
- *
- * `name` is the keyword that opened the block (`"views"`, `"styles"`,
- * etc.) so `toModel` can route the block to the correct slot in
- * `LoadResult.raw`.
- */
-export interface OpaqueBlock extends AstNodeBase {
-  readonly kind: "opaqueBlock";
-  readonly name: string;
-  readonly rawContent: string;
-}
-
-/**
- * A construct that the reference DSL supports but aact deliberately
- * does not model — `deploymentEnvironment` / `deploymentNode` /
- * `infrastructureNode` / `softwareSystemInstance` / `containerInstance`
- * / `deploymentGroup` / `instanceOf` / `healthCheck`. The parser
- * accepts the syntax so a legal DSL file does not crash; `toModel`
- * emits a `ModelIssue` severity=info. Not surfaced in Model, not
- * surfaced in raw. See grammar.md §3.
- */
-export interface InfoIssueBlock extends AstNodeBase {
-  readonly kind: "infoIssueBlock";
-  readonly name: string;
-  readonly rawContent: string;
 }
 
 // ── Leaves ──────────────────────────────────────────────────────────────
 
 /**
  * A string literal in source. Double-quoted by Structurizr DSL
- * convention; the parser also accepts `"""text blocks"""` and unwraps
- * them into the same `StringLiteral` shape. `value` holds the
- * unescaped string; `range` spans the opening to closing quote
- * inclusive.
+ * convention; `!const` / `!var` value slots additionally accept
+ * `"""text blocks"""`, which the visitor unwraps into the same
+ * `StringLiteral` shape. Element headers, body statements, and
+ * relationship slots only accept the regular `"..."` form. `value`
+ * holds the unescaped string; `range` spans the opening to closing
+ * quote inclusive.
  */
 export interface StringLiteral extends AstNodeBase {
   readonly kind: "string";
@@ -538,10 +441,14 @@ export interface StringLiteral extends AstNodeBase {
 }
 
 /**
- * A bare identifier — declared name on the LHS of `=`, archetype
- * alias, perspective name, etc. Identifiers match
- * `\w[a-zA-Z0-9_-]*` (no `.`); hierarchical references compose
- * identifiers with `.` as a separator at lookup time.
+ * A bare identifier — declared name on the LHS of `=`, perspective
+ * name, etc. Reference DSL forbids `.` inside an identifier
+ * (`IdentifiersRegister.IDENTIFIER_PATTERN = \w[a-zA-Z0-9_-]*`), but
+ * our lexer (`tokens.ts:Identifier`) deliberately widens the pattern
+ * to `\w[a-zA-Z0-9_./-]*` so hierarchical references (`bank.api.controller`)
+ * and bare paths (`path/to/file.dsl`) tokenise as a single token —
+ * context downstream disambiguates. `name` is therefore the raw image
+ * and MAY contain `.` or `/`.
  */
 export interface Identifier extends AstNodeBase {
   readonly kind: "identifier";
