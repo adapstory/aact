@@ -39,9 +39,24 @@ import { load } from "./load";
  *  - networks / volumes / configs / secrets / develop — silently ignored
  *  - `version` top-level — info ModelIssue (obsolete in current spec)
  */
+/**
+ * 4 канонических имени по Compose Spec (auto-discovery приоритет
+ * соответствует docker docs): `compose.yaml` > `compose.yml` >
+ * `docker-compose.yaml` > `docker-compose.yml`. Override-файлы
+ * (`compose.override.yaml`, env-specific `compose.prod.yaml` и т.д.)
+ * пользователь подключает через `source.type: "compose"` явно —
+ * auto-detect не угадывает их потому что они не stand-alone проекты.
+ */
+const COMPOSE_FILENAMES: readonly string[] = Object.freeze([
+  "compose.yaml",
+  "compose.yml",
+  "docker-compose.yaml",
+  "docker-compose.yml",
+]);
+
 export const composeFormat: Format = {
   name: "compose",
-  defaultPattern: "compose.{yml,yaml,json}",
+  defaultPattern: COMPOSE_FILENAMES,
   load,
   generate,
 };

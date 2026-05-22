@@ -19,7 +19,7 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
   load: boolean;
   generate: boolean;
   fix: boolean;
-  defaultPattern?: string;
+  defaultPattern?: string | readonly string[];
 }> = [
   {
     name: "plantuml",
@@ -57,7 +57,12 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
     // round-trip покрытие также пригождается для тестов loader'а.
     generate: true,
     fix: false, // YAML не имеет meaningful range semantics для C4 edits
-    defaultPattern: "compose.{yml,yaml,json}",
+    defaultPattern: [
+      "compose.yaml",
+      "compose.yml",
+      "docker-compose.yaml",
+      "docker-compose.yml",
+    ],
   },
 ];
 
@@ -76,7 +81,10 @@ describe("Format registry — capability contracts", () => {
       // Format identity
       expect(fmt.name).toBe(name);
       if (defaultPattern !== undefined) {
-        expect(fmt.defaultPattern).toBe(defaultPattern);
+        // Format может объявить string ИЛИ readonly string[] — для
+        // массивов `toBe` не сработает (identity check), используем
+        // `toEqual` который покрывает оба случая.
+        expect(fmt.defaultPattern).toEqual(defaultPattern);
       }
 
       // Capability presence

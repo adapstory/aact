@@ -15,14 +15,20 @@ import { ToolError } from "./output";
  *   - "workspace.json" → basename exact match
  *
  * Полноценный glob-engine не нужен — patterns в registry короткие и
- * предсказуемые. Когда appearance Mermaid / Compose потребуют что-то
- * сложнее — заменим на picomatch.
+ * предсказуемые. Format может объявить массив patterns (compose
+ * shipит 4 канонических имени), iterate'ируем и матчим первый
+ * подходящий.
  */
-const matchesPattern = (filePath: string, pattern: string): boolean => {
-  if (pattern.startsWith("*")) {
-    return filePath.endsWith(pattern.slice(1));
-  }
-  return basename(filePath) === pattern;
+const matchesPattern = (
+  filePath: string,
+  pattern: string | readonly string[],
+): boolean => {
+  const patterns = typeof pattern === "string" ? [pattern] : pattern;
+  return patterns.some((p) =>
+    p.startsWith("*")
+      ? filePath.endsWith(p.slice(1))
+      : basename(filePath) === p,
+  );
 };
 
 /**

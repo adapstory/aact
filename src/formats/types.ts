@@ -81,14 +81,20 @@ export interface LoadResult {
  *  - Hypothetical read-only: только load
  *
  * `name` — уникальный идентификатор в Format registry (config.source.type).
- * `defaultPattern` — glob для CLI `init` шаблонов и автодетекта.
+ * `defaultPattern` — glob (или массив globs) для CLI `init` шаблонов и
+ * автодетекта по path. Compose шипится с `["compose.yaml",
+ * "compose.yml", "docker-compose.yaml", "docker-compose.yml"]` —
+ * Compose Spec разрешает все 4 канонических имени, и в реальных
+ * репах ещё много `docker-compose.*` legacy. Формат с единственным
+ * каноническим именем (PlantUML / Structurizr / model-json)
+ * объявляет просто строку.
  *
  * Structurizr load/write asymmetry (load workspace.json → fix workspace.dsl)
  * решается через `AactConfig.source.writePath`, не через Format type.
  */
 export interface Format {
   readonly name: string;
-  readonly defaultPattern?: string;
+  readonly defaultPattern?: string | readonly string[];
   /**
    * `options` — per-Format escape hatch (annotation prefix для k8s,
    * `composeFile` для compose и т.д.). Каждый Format типизирует

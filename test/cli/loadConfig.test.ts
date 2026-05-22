@@ -126,6 +126,17 @@ describe("loadAndValidateConfig", () => {
       expect(config.source.type).toBe("model-json");
     });
 
+    it.each([
+      "./compose.yaml",
+      "./compose.yml",
+      "./docker-compose.yaml",
+      "./docker-compose.yml",
+    ])("infers compose from canonical basename %s", async (sourcePath) => {
+      mockLoadConfig.mockResolvedValue({ config: { source: sourcePath } });
+      const { config } = await loadAndValidateConfig();
+      expect(config.source.type).toBe("compose");
+    });
+
     it("falls back to plantuml-style positional shape when no pattern matches and explicit type is missing", async () => {
       mockLoadConfig.mockResolvedValue({
         config: { source: { type: "model-json", path: "./my-arch.json" } },

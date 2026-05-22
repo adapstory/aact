@@ -90,6 +90,13 @@ const scratchExt = (arg: string, formatHint: string): string => {
  * names (`my-arch.json`, `topology.txt`) require an explicit
  * `--baseline-format` flag.
  */
+const COMPOSE_BASES = new Set([
+  "compose.yaml",
+  "compose.yml",
+  "docker-compose.yaml",
+  "docker-compose.yml",
+]);
+
 const detectFormatFromPath = (filePath: string): string | undefined => {
   const base = path.basename(filePath).toLowerCase();
   const ext = path.extname(base);
@@ -99,6 +106,7 @@ const detectFormatFromPath = (filePath: string): string | undefined => {
   if (ext === ".dsl") return "structurizr";
   if (base === "workspace.json") return "structurizr";
   if (base.endsWith(".aact.json")) return "model-json";
+  if (COMPOSE_BASES.has(base)) return "compose";
   return undefined;
 };
 
