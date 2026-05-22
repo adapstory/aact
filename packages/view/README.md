@@ -26,6 +26,7 @@ configuration plumbing.
 npx aact view                    # uses aact.config.ts in cwd
 npx aact view --port 4321        # pin port (defaults to 3000 with auto-fallback)
 npx aact view --no-open          # skip auto-opening the browser
+npx aact view --diff main:architecture.dsl
 ```
 
 The console prints a URL with a per-session auth token:
@@ -38,6 +39,12 @@ The console prints a URL with a per-session auth token:
 Open that URL. Saving the source file re-parses through aact-core
 and pushes the new model over WebSocket — the graph re-layouts in
 place.
+
+`--diff <baseline>` loads the baseline once at boot (file path, git
+ref, or stdin with `--diff-format`) and keeps the current side live
+from `aact.config.ts`. The canvas colors changed nodes / relations;
+the right panel shows the diff summary, grouped architectural changes,
+and primitive changes.
 
 ## What you see
 

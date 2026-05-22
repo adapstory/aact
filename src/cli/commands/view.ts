@@ -41,6 +41,14 @@ interface ViewCompanionModule {
     readonly configPath: string | null;
     readonly port?: number;
     readonly noOpen?: boolean;
+    /** Baseline input for diff mode: file path, git ref
+     *  (`main:arch.dsl`), or `-` for stdin. When provided, the
+     *  workbench loads two models, computes the diff, and exposes
+     *  it on the envelope so the SPA can render a diff overlay. */
+    readonly diffBaseline?: string;
+    /** Optional explicit format hint for the baseline — useful for
+     *  stdin input or non-canonical extensions. */
+    readonly diffBaselineFormat?: string;
   }) => Promise<{ readonly exitCode: 0 | 2; readonly url?: string | null }>;
 }
 
@@ -242,6 +250,8 @@ interface ViewArgs {
   readonly config?: string;
   readonly port?: string;
   readonly "no-open"?: boolean;
+  readonly diff?: string;
+  readonly "diff-format"?: string;
 }
 
 export const executeView = async (
@@ -262,6 +272,8 @@ export const executeView = async (
     configPath,
     ...(port === undefined ? {} : { port }),
     noOpen: args["no-open"] === true,
+    ...(args.diff ? { diffBaseline: args.diff } : {}),
+    ...(args["diff-format"] ? { diffBaselineFormat: args["diff-format"] } : {}),
   });
   return {
     data: {
@@ -297,6 +309,16 @@ export const view = cliCommandWithConfig({
       type: "boolean",
       description:
         "Print the URL instead of auto-opening a browser (CI / headless)",
+    },
+    diff: {
+      type: "string",
+      description:
+        "Baseline for diff mode (file path, git ref `main:arch.dsl`, or `-` for stdin). Workbench shows the architectural diff on top of the current model.",
+    },
+    "diff-format": {
+      type: "string",
+      description:
+        "Format hint for the diff baseline (required for stdin or non-canonical extensions)",
     },
   },
   renderText: renderViewText,

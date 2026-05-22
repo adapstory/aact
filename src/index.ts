@@ -13,6 +13,7 @@ export {
   type ChangeGroup,
   type ChangeSeverity,
   computeDiff,
+  DEFAULT_RENAME_THRESHOLD,
   type DiffData,
   type DiffOptions,
   type DiffSide,
@@ -90,6 +91,11 @@ export type {
   CheckSummary,
   CheckViolation,
 } from "./cli/commands/check";
+export {
+  loadBaseline,
+  type LoadBaselineInput,
+  type LoadBaselineResult,
+} from "./cli/commands/diff/baseline";
 export type {
   GenerateData,
   GeneratedFileInfo,

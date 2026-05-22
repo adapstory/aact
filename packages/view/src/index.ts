@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
-import type { AactConfig } from "aact";
-import { analyzeArchitecture } from "aact";
+import type { AactConfig, DiffData, Model } from "aact";
+import { analyzeArchitecture, computeDiff, loadBaseline } from "aact";
 
 import { loadModelFromConfig } from "./load-model.js";
 import type { ModelEnvelope, ServerHandle, ViewError } from "./server.js";
@@ -27,6 +27,14 @@ export interface RunWorkbenchOptions {
   /** Suppress the automatic browser-open. The URL still prints to
    *  stdout so CI / headless flows can pick it up. */
   readonly noOpen?: boolean;
+  /** Baseline input for diff mode (file path, git ref, or `-`).
+   *  When set, the workbench loads two models, runs `computeDiff`,
+   *  and exposes the result on the envelope so the SPA renders a
+   *  diff overlay. Current side stays the configured source. */
+  readonly diffBaseline?: string;
+  /** Explicit format hint for the diff baseline — required for
+   *  stdin input or non-canonical file extensions. */
+  readonly diffBaselineFormat?: string;
 }
 
 export interface RunWorkbenchResult {
@@ -45,12 +53,44 @@ const sourceOf = (config: AactConfig): string =>
 
 const createAuthToken = (): string => randomBytes(24).toString("base64url");
 
+/**
+ * Loaded diff baseline kept in closure for the lifetime of the
+ * workbench process. Baseline is immutable per session — a git ref
+ * never moves, and even a file path is taken at boot time. The
+ * watcher only re-reads the current side; we never need to reload
+ * the baseline.
+ */
+interface CachedBaseline {
+  readonly model: Model;
+  readonly source: string;
+  readonly format: string;
+}
+
+const loadDiffBaseline = async (
+  options: RunWorkbenchOptions,
+): Promise<CachedBaseline | undefined> => {
+  if (!options.diffBaseline) return undefined;
+  const result = await loadBaseline({
+    arg: options.diffBaseline,
+    sideLabel: "baseline",
+    ...(options.diffBaselineFormat
+      ? { formatOverride: options.diffBaselineFormat }
+      : {}),
+  });
+  return {
+    model: result.model,
+    source: result.side.source,
+    format: result.side.format,
+  };
+};
+
 /** Build a `ModelEnvelope` from a single in-process loadModel call.
  *  Mirrors the wider `aact model --json` envelope so the SPA can
  *  reuse aact's contract — schemaVersion stays at `1`. */
 const buildEnvelope = async (
   options: RunWorkbenchOptions,
   aactVersion: string,
+  baseline: CachedBaseline | undefined,
 ): Promise<ModelEnvelope> => {
   const startedAt = performance.now();
   const { model, issues } = await loadModelFromConfig(options.config);
@@ -62,12 +102,33 @@ const buildEnvelope = async (
     model,
     options.config.analyze,
   );
+  // Compute diff against the cached baseline when diff mode is on.
+  // Reuses the same `computeDiff` the CLI runs — no second pipeline.
+  let diff: { baselineModel: Model; data: DiffData } | undefined;
+  if (baseline) {
+    const data = computeDiff(
+      baseline.model,
+      model,
+      { source: baseline.source, format: baseline.format },
+      { source: sourceOf(options.config), format: options.config.source.type },
+      // Diff options come at defaults for the workbench — the user
+      // can tune via `aact diff` for CLI workflows; the workbench is
+      // optimised for "show me what changed" rather than threshold
+      // tuning.
+    );
+    diff = { baselineModel: baseline.model, data };
+  }
   return {
     schemaVersion: 1,
     command: "view",
     ok: true,
     exitCode: 0,
-    data: { model, issues: [...issues], analysis },
+    data: {
+      model,
+      issues: [...issues],
+      analysis,
+      ...(diff ? { diff } : {}),
+    },
     diagnostics: [],
     meta: {
       aactVersion,
@@ -124,7 +185,11 @@ export const runWorkbench = async (
 
   try {
     const authToken = createAuthToken();
-    const envelope = await buildEnvelope(options, aactVersion);
+    // Load the diff baseline once at boot — git refs are immutable
+    // and file paths are taken at session start. The watcher only
+    // tracks the current side; baseline never reloads.
+    const baseline = await loadDiffBaseline(options);
+    const envelope = await buildEnvelope(options, aactVersion, baseline);
     server = await startServer({
       ...(options.port === undefined ? {} : { port: options.port }),
       ...(options.noOpen === undefined ? {} : { noOpen: options.noOpen }),
@@ -138,6 +203,10 @@ export const runWorkbench = async (
       // eslint-disable-next-line no-console
       console.log(`  open it manually — --no-open suppressed auto-launch`);
     }
+    if (baseline) {
+      // eslint-disable-next-line no-console
+      console.log(`  diff baseline: ${baseline.source} (${baseline.format})`);
+    }
     // eslint-disable-next-line no-console
     console.log(
       `  watching ${sourceOf(options.config)} for changes (Ctrl-C to stop)`,
@@ -148,7 +217,7 @@ export const runWorkbench = async (
       onChange: async () => {
         const startedAt = performance.now();
         try {
-          const next = await buildEnvelope(options, aactVersion);
+          const next = await buildEnvelope(options, aactVersion, baseline);
           server?.broadcast(next);
           // eslint-disable-next-line no-console
           console.log(

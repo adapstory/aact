@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { AnalysisReport } from "aact";
+import type { AnalysisReport, DiffData, Model } from "aact";
 import { H3, defineWebSocketHandler, toNodeHandler } from "h3";
 import { listen, type CrossWSOptions, type Listener } from "listhen";
 
@@ -61,6 +61,14 @@ export interface ModelEnvelope {
      *  hidden. Keeping it on the envelope avoids a second round-trip
      *  to compute it from the SPA's worker. */
     readonly analysis: AnalysisReport;
+    /** Diff result against the baseline loaded at boot. Present
+     *  only when `aact view --diff <baseline>` is in effect. The
+     *  SPA colors current graph nodes/relations and keeps removed
+     *  baseline-only items visible in the sidebar change list. */
+    readonly diff?: {
+      readonly baselineModel: Model;
+      readonly data: DiffData;
+    };
   };
   readonly diagnostics: readonly never[];
   readonly meta: {

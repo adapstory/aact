@@ -115,6 +115,88 @@ export interface AnalysisReport {
   };
 }
 
+/** Minimal mirror of aact's `Change` / `ChangeGroup` / `DiffData`
+ *  shapes — UI only reads the fields it needs to render the overlay.
+ *  Renaming/adding fields on the aact side must keep these in sync. */
+export interface FieldChange {
+  readonly field: string;
+  readonly before?: unknown;
+  readonly after?: unknown;
+  readonly added?: readonly string[];
+  readonly removed?: readonly string[];
+}
+
+export type ChangeAction =
+  | "added"
+  | "removed"
+  | "modified"
+  | "renamed"
+  | "moved";
+export type ChangeSeverity = "structural" | "semantic" | "cosmetic";
+
+interface ChangeBase {
+  readonly action: ChangeAction;
+  readonly severity: ChangeSeverity;
+  readonly address: string;
+  readonly fields: readonly FieldChange[];
+}
+
+export interface ElementDiffChange extends ChangeBase {
+  readonly entity: "element";
+  readonly name: string;
+  readonly previousName?: string;
+  readonly confidence?: number;
+  readonly kind: ElementKind;
+}
+
+export interface BoundaryDiffChange extends ChangeBase {
+  readonly entity: "boundary";
+  readonly name: string;
+  readonly previousName?: string;
+  readonly confidence?: number;
+  readonly kind: BoundaryKind;
+}
+
+export interface RelationDiffChange extends ChangeBase {
+  readonly entity: "relation";
+  readonly from: string;
+  readonly to: string;
+  readonly technology?: string;
+}
+
+export interface WorkspaceDiffChange extends ChangeBase {
+  readonly entity: "workspace";
+}
+
+export type DiffChange =
+  | ElementDiffChange
+  | BoundaryDiffChange
+  | RelationDiffChange
+  | WorkspaceDiffChange;
+
+export interface DiffChangeGroup {
+  readonly id: string;
+  readonly kind: string;
+  readonly title: string;
+  readonly severity: ChangeSeverity;
+  readonly confidence: number;
+  readonly changeAddresses: readonly string[];
+  readonly evidence?: Readonly<Record<string, unknown>>;
+}
+
+export interface DiffSummary {
+  readonly headline: string;
+  readonly bySeverity: Readonly<Record<ChangeSeverity, number>>;
+  readonly byAction: Readonly<Record<ChangeAction, number>>;
+  readonly byEntity: Readonly<Record<string, number>>;
+}
+
+export interface DiffData {
+  readonly summary: DiffSummary;
+  readonly changes: readonly DiffChange[];
+  readonly groups?: readonly DiffChangeGroup[];
+}
+
 export interface ModelEnvelope {
   readonly schemaVersion: 1;
   readonly command: "view";
@@ -124,6 +206,13 @@ export interface ModelEnvelope {
     readonly model: Model;
     readonly issues: readonly ModelIssue[];
     readonly analysis: AnalysisReport;
+    /** Present when the workbench is in diff mode (booted with
+     *  `aact view --diff <baseline>`). UI renders status colours on
+     *  current nodes/relations plus a sidebar list for removed items. */
+    readonly diff?: {
+      readonly baselineModel: Model;
+      readonly data: DiffData;
+    };
   };
   readonly meta: {
     readonly aactVersion: string;

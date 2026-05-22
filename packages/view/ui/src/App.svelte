@@ -26,6 +26,9 @@
   } from "./layout.ts";
   import type {
     BreadcrumbEntry,
+    ChangeAction,
+    DiffChange,
+    DiffChangeGroup,
     Element,
     Boundary,
     ModelIssue,
@@ -150,6 +153,17 @@
     return (await res.json()) as ModelEnvelope;
   };
 
+  let diffAutoModeApplied = $state(false);
+  const acceptEnvelope = (env: ModelEnvelope): void => {
+    envelope = env;
+    if (!diffAutoModeApplied && env.data.diff) {
+      mode = "flat";
+      selected = null;
+      breadcrumb = [{ kind: "landscape" }];
+      diffAutoModeApplied = true;
+    }
+  };
+
   const wsUrl = (() => {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${location.host}${withSessionToken("/api/ws")}`;
@@ -164,7 +178,7 @@
       try {
         const payload = JSON.parse(ev.data) as ServerMessage;
         if (payload.type === "model-update") {
-          envelope = payload.envelope;
+          acceptEnvelope(payload.envelope);
           loadError = null;
           if (!layoutError) status = "live";
         }
@@ -184,7 +198,7 @@
   };
 
   void fetchModel().then((env) => {
-    envelope = env;
+    acceptEnvelope(env);
     loadError = null;
     connect();
   }).catch((error: unknown) => {
@@ -320,6 +334,141 @@
       : new Set(),
   );
 
+  const diffData = $derived(envelope?.data.diff?.data ?? null);
+  const diffGroups = $derived<readonly DiffChangeGroup[]>(
+    diffData?.groups ?? [],
+  );
+  const topDiffChanges = $derived<readonly DiffChange[]>(
+    (diffData?.changes ?? []).slice(0, 10),
+  );
+
+  /** Whether we're in diff mode — set by the server when the
+   *  workbench was booted with `aact view --diff <baseline>`. */
+  const diffMode = $derived<boolean>(diffData !== null);
+
+  /** Element-name → diff status. Only entries for elements that
+   *  changed; unchanged elements are not in the map. Both `added` and
+   *  `renamed` keys land here under the *current* name (so the graph
+   *  node renders coloured); `removed` keys carry the baseline name
+   *  and stay visible in the sidebar list. */
+  const elementDiffStatus = $derived.by<Map<string, ChangeAction>>(() => {
+    const out = new Map<string, ChangeAction>();
+    for (const change of diffData?.changes ?? []) {
+      if (change.entity !== "element") continue;
+      out.set(change.name, change.action);
+    }
+    return out;
+  });
+
+  /** Boundary-name → diff status. Same pattern as `elementDiffStatus`
+   *  but for boundary nodes (Bounded Contexts). */
+  const boundaryDiffStatus = $derived.by<Map<string, ChangeAction>>(() => {
+    const out = new Map<string, ChangeAction>();
+    for (const change of diffData?.changes ?? []) {
+      if (change.entity !== "boundary") continue;
+      out.set(change.name, change.action);
+    }
+    return out;
+  });
+
+  const relationDiffKey = (from: string, to: string): string => `${from}->${to}`;
+
+  /** Relation address (`from->to`) → diff status. Edges use this to
+   *  pick up the status colour without re-walking the diff every
+   *  render. Address includes technology only when relations are
+   *  multiset-distinguished by it; we drop the tech qualifier here
+   *  because the edge model in the graph already collapses by
+   *  `(from, to)`. */
+  const relationDiffStatus = $derived.by<Map<string, ChangeAction>>(() => {
+    const out = new Map<string, ChangeAction>();
+    for (const change of diffData?.changes ?? []) {
+      if (change.entity !== "relation") continue;
+      out.set(relationDiffKey(change.from, change.to), change.action);
+    }
+    return out;
+  });
+
+  /** Colour mapping for diff status overlays. Tied to the bordering
+   *  style in `decoratedNodes` / `decoratedEdges` below — keep in
+   *  sync with the visual key shown next to the diff banner. */
+  const DIFF_COLOR: Readonly<Record<ChangeAction, string>> = {
+    added: "#22c55e", // green
+    removed: "#ef4444", // red
+    modified: "#eab308", // yellow
+    renamed: "#3b82f6", // blue
+    moved: "#a855f7", // purple
+  };
+
+  const diffGlyph = (action: ChangeAction): string => {
+    switch (action) {
+      case "added":
+        return "+";
+      case "removed":
+        return "-";
+      case "modified":
+        return "~";
+      case "renamed":
+        return "R";
+      case "moved":
+        return "M";
+    }
+  };
+
+  const nodeDiffStatus = (node: Node): ChangeAction | undefined => {
+    const name = node.id.slice(2);
+    if (node.id.startsWith("e:")) return elementDiffStatus.get(name);
+    if (node.id.startsWith("b:")) return boundaryDiffStatus.get(name);
+    return undefined;
+  };
+
+  const edgeDiffStatus = (edge: Edge): ChangeAction | undefined => {
+    if (!edge.source.startsWith("e:") || !edge.target.startsWith("e:")) {
+      return undefined;
+    }
+    return relationDiffStatus.get(
+      relationDiffKey(edge.source.slice(2), edge.target.slice(2)),
+    );
+  };
+
+  const evidenceString = (value: unknown): string | null =>
+    typeof value === "string" && value.length > 0 ? value : null;
+
+  const groupSubtitle = (group: DiffChangeGroup): string => {
+    const ev = group.evidence ?? {};
+    const service = evidenceString(ev.service);
+    const repository = evidenceString(ev.repository);
+    const database = evidenceString(ev.database);
+    if (service && repository && database) {
+      return `${service} → ${repository} → ${database}`;
+    }
+    const from = evidenceString(ev.from);
+    const to = evidenceString(ev.to);
+    const before = evidenceString(ev.before);
+    const after = evidenceString(ev.after);
+    if (from && to && before && after) {
+      return `${from} → ${to}: ${before} → ${after}`;
+    }
+    return `${group.changeAddresses.length} change${group.changeAddresses.length === 1 ? "" : "s"}`;
+  };
+
+  const changeTitle = (change: DiffChange): string => {
+    switch (change.entity) {
+      case "element":
+        return `${change.name}${change.previousName ? ` ← ${change.previousName}` : ""}`;
+      case "boundary":
+        return `${change.name}${change.previousName ? ` ← ${change.previousName}` : ""}`;
+      case "relation":
+        return `${change.from} → ${change.to}`;
+      case "workspace":
+        return "workspace";
+    }
+  };
+
+  const changeSubtitle = (change: DiffChange): string =>
+    change.fields.length
+      ? change.fields.map((f) => f.field).join(", ")
+      : change.severity;
+
   // Dim edges that aren't incident to the hovered node so the user
   // can trace a single dependency through a crowded canvas. Strip
   // labels from non-incident edges as well — at 30+ relations the
@@ -331,17 +480,33 @@
   const isCross = (e: Edge): boolean =>
     Boolean((e.data as { crossBoundary?: boolean } | undefined)?.crossBoundary);
 
-  /** Decorate nodes with a cycle-overlay border when the Analyze
-   *  toggle is on and the node is part of the smallest cycle.
-   *  Reactive Flow's node `style` field accepts CSS as a string. */
+  /** Decorate nodes with overlays. Diff-mode status wins over cycle
+   *  highlight when both apply (diff is the user's primary signal —
+   *  they booted with `--diff`); analyze-mode cycle highlight applies
+   *  when the node isn't already diff-coloured. Reactive Flow's node
+   *  `style` field accepts CSS as a string. */
   const decoratedNodes = $derived<Node[]>(
     nodes.map((n) => {
-      if (!cycleMembers.has(n.id)) return n;
       const existingStyle = typeof n.style === "string" ? n.style : "";
-      return {
-        ...n,
-        style: `${existingStyle} box-shadow: 0 0 0 3px #ef4444; border-radius: 8px;`,
-      };
+      const diffStatus = nodeDiffStatus(n);
+      if (diffStatus) {
+        const color = DIFF_COLOR[diffStatus];
+        return {
+          ...n,
+          data: {
+            ...(n.data as Record<string, unknown> | undefined),
+            diffAction: diffStatus,
+          },
+          style: `${existingStyle} outline: 3px solid ${color}; outline-offset: 5px; border-radius: 8px;`,
+        };
+      }
+      if (cycleMembers.has(n.id)) {
+        return {
+          ...n,
+          style: `${existingStyle} box-shadow: 0 0 0 3px #ef4444; border-radius: 8px;`,
+        };
+      }
+      return n;
     }),
   );
 
@@ -356,6 +521,31 @@
       const crossInFilter = filterActive && cross;
       const inCycle =
         cycleMembers.has(e.source) && cycleMembers.has(e.target);
+      const diffStatus = edgeDiffStatus(e);
+
+      // Diff status wins when present — the user booted with `--diff`
+      // explicitly to spot architecture deltas. Hover/filter still
+      // takes over for incident edges so dependency tracing keeps
+      // working when the user wants to inspect a specific node.
+      if (diffStatus && !incident) {
+        const color = DIFF_COLOR[diffStatus];
+        return {
+          ...e,
+          type: edgeStyle,
+          animated: diffStatus !== "removed",
+          data: {
+            ...(e.data as Record<string, unknown> | undefined),
+            diffAction: diffStatus,
+          },
+          style: `stroke: ${color}; stroke-width: 2.8; opacity: 1;`,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 26,
+            height: 26,
+            color,
+          },
+        };
+      }
 
       // Cycle edges win over filter/hover decoration — distributed
       // monolith is the top signal the user toggled Analyze to spot.
@@ -478,8 +668,11 @@
   const issueMessage = (issue: ModelIssue): string =>
     issue.message ? `${issue.kind}: ${issue.message}` : issue.kind;
 
-  const minimapNodeColor = (node: Node): string => {
-    const kind = String((node.data as { kind?: string } | undefined)?.kind);
+	  const minimapNodeColor = (node: Node): string => {
+	    const diffAction = (node.data as { diffAction?: ChangeAction } | undefined)
+	      ?.diffAction;
+	    if (diffAction) return DIFF_COLOR[diffAction];
+	    const kind = String((node.data as { kind?: string } | undefined)?.kind);
     const external = Boolean(
       (node.data as { external?: boolean } | undefined)?.external,
     );
@@ -515,6 +708,12 @@
         {:else}● connecting
         {/if}
       </span>
+      {#if diffMode && envelope?.data.diff}
+        <span class="sep" aria-hidden="true">·</span>
+        <span class="diff-pill" title={envelope.data.diff.data.summary.headline}>
+          diff: {envelope.data.diff.data.summary.headline}
+        </span>
+      {/if}
     </div>
 
     <div class="topbar-controls">
@@ -649,10 +848,16 @@
       <aside class="legend" aria-label="C4 element palette">
         <span class="legend-row"><span class="swatch" style="background: #08427b;"></span>Person</span>
         <span class="legend-row"><span class="swatch" style="background: #1168bd;"></span>System</span>
-        <span class="legend-row"><span class="swatch" style="background: #438dd5;"></span>Container</span>
-        <span class="legend-row"><span class="swatch" style="background: #85bbf0;"></span>Component</span>
-        <span class="legend-row"><span class="swatch" style="background: #475569;"></span>External</span>
-      </aside>
+	        <span class="legend-row"><span class="swatch" style="background: #438dd5;"></span>Container</span>
+	        <span class="legend-row"><span class="swatch" style="background: #85bbf0;"></span>Component</span>
+	        <span class="legend-row"><span class="swatch" style="background: #475569;"></span>External</span>
+	        {#if diffMode}
+	          <span class="legend-rule"></span>
+	          <span class="legend-row"><span class="swatch" style="background: #22c55e;"></span>Added</span>
+	          <span class="legend-row"><span class="swatch" style="background: #eab308;"></span>Modified</span>
+	          <span class="legend-row"><span class="swatch" style="background: #ef4444;"></span>Removed</span>
+	        {/if}
+	      </aside>
 
       {#if activeError}
         <aside class="error-overlay" role="status" aria-live="polite">
@@ -789,14 +994,53 @@
             {/each}
           </ul>
         {/if}
-        <p class="hint">
-          {#if mode === "drill"}Double-click to enter this boundary.
-          {:else if mode === "expand"}Double-click to {expanded.has(selectedBoundary.name) ? "collapse" : "expand"} this boundary.
-          {:else}This boundary is part of the full hierarchy.
-          {/if}
-        </p>
-      {:else if analyzeOn && envelope}
-        {@const a = envelope.data.analysis}
+	        <p class="hint">
+	          {#if mode === "drill"}Double-click to enter this boundary.
+	          {:else if mode === "expand"}Double-click to {expanded.has(selectedBoundary.name) ? "collapse" : "expand"} this boundary.
+	          {:else}This boundary is part of the full hierarchy.
+	          {/if}
+	        </p>
+	      {:else if diffData}
+	        <h2>Diff</h2>
+	        <h3 class="title">{diffData.summary.headline}</h3>
+	        <div class="stats">
+	          <div><span class="num">{diffData.summary.bySeverity.structural}</span> structural</div>
+	          <div><span class="num">{diffData.summary.bySeverity.semantic}</span> semantic</div>
+	          <div><span class="num">{diffData.summary.bySeverity.cosmetic}</span> cosmetic</div>
+	          <div><span class="num">{diffData.changes.length}</span> changes</div>
+	        </div>
+	        {#if diffGroups.length}
+	          <h4>Change groups</h4>
+	          <ul class="change-list">
+	            {#each diffGroups as group (group.id)}
+	              <li class="change-row group-row">
+	                <span class="change-mark group-mark">{group.kind.slice(0, 1).toUpperCase()}</span>
+	                <span class="change-body">
+	                  <span class="change-title">{group.title}</span>
+	                  <span class="change-subtitle">{groupSubtitle(group)} · confidence {Math.round(group.confidence * 100)}%</span>
+	                </span>
+	              </li>
+	            {/each}
+	          </ul>
+	        {/if}
+	        {#if topDiffChanges.length}
+	          <h4>Primitive changes</h4>
+	          <ul class="change-list">
+	            {#each topDiffChanges as change (change.address)}
+	              <li class="change-row change-{change.action}">
+	                <span class="change-mark" style={`background: ${DIFF_COLOR[change.action]};`}>
+	                  {diffGlyph(change.action)}
+	                </span>
+	                <span class="change-body">
+	                  <span class="change-title">{changeTitle(change)}</span>
+	                  <span class="change-subtitle">{change.entity} · {change.action} · {changeSubtitle(change)}</span>
+	                </span>
+	              </li>
+	            {/each}
+	          </ul>
+	        {/if}
+	      {:else if analyzeOn && envelope}
+	        {@const a = envelope.data.analysis}
         <h2>Architecture metrics</h2>
         <div class="stats">
           <div><span class="num">{a.elementsCount}</span> elements</div>
@@ -949,12 +1193,22 @@
   .status-lost {
     color: #f87171;
   }
-  .status-error {
-    color: #fbbf24;
-  }
-  .topbar-controls {
-    display: inline-flex;
-    align-items: center;
+	  .status-error {
+	    color: #fbbf24;
+	  }
+	  .diff-pill {
+	    display: inline-block;
+	    max-width: 360px;
+	    overflow: hidden;
+	    text-overflow: ellipsis;
+	    white-space: nowrap;
+	    font-size: 11px;
+	    font-weight: 700;
+	    color: #fde68a;
+	  }
+	  .topbar-controls {
+	    display: inline-flex;
+	    align-items: center;
     gap: 8px;
   }
   .modes {
@@ -1079,11 +1333,17 @@
     align-items: center;
     gap: 8px;
   }
-  .swatch {
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
-  }
+	  .swatch {
+	    width: 12px;
+	    height: 12px;
+	    border-radius: 3px;
+	  }
+	  .legend-rule {
+	    display: block;
+	    height: 1px;
+	    margin: 4px 0;
+	    background: #1e293b;
+	  }
   .error-overlay {
     position: absolute;
     top: 18px;
@@ -1248,18 +1508,67 @@
     margin: 0;
     font-size: 12px;
   }
-  .issues li {
-    margin: 6px 0;
-    padding: 8px 10px;
-    border-radius: 8px;
+	  .issues li {
+	    margin: 6px 0;
+	    padding: 8px 10px;
+	    border-radius: 8px;
     border: 1px solid #92400e;
     background: rgba(69, 26, 3, 0.45);
     color: #fed7aa;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
-  }
-  .stats {
-    display: grid;
+	    line-height: 1.35;
+	    overflow-wrap: anywhere;
+	  }
+	  .change-list {
+	    list-style: none;
+	    padding: 0;
+	    margin: 0;
+	    display: grid;
+	    gap: 8px;
+	  }
+	  .change-row {
+	    display: grid;
+	    grid-template-columns: 24px minmax(0, 1fr);
+	    gap: 10px;
+	    align-items: start;
+	    padding: 9px 10px;
+	    border: 1px solid #1e293b;
+	    border-radius: 8px;
+	    background: #0f172a;
+	  }
+	  .change-mark {
+	    display: inline-grid;
+	    place-items: center;
+	    width: 22px;
+	    height: 22px;
+	    border-radius: 6px;
+	    color: #020617;
+	    font-size: 12px;
+	    font-weight: 900;
+	  }
+	  .group-mark {
+	    background: #38bdf8;
+	  }
+	  .change-body {
+	    min-width: 0;
+	    display: grid;
+	    gap: 3px;
+	  }
+	  .change-title {
+	    overflow: hidden;
+	    text-overflow: ellipsis;
+	    white-space: nowrap;
+	    color: #f8fafc;
+	    font-size: 12px;
+	    font-weight: 800;
+	  }
+	  .change-subtitle {
+	    overflow-wrap: anywhere;
+	    color: #94a3b8;
+	    font-size: 11px;
+	    line-height: 1.3;
+	  }
+	  .stats {
+	    display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
     margin: 14px 0;

@@ -161,6 +161,25 @@ describe("executeView — happy path", () => {
     );
   });
 
+  it("forwards --diff baseline and --diff-format to runWorkbench", async () => {
+    const runWorkbench = vi.fn().mockResolvedValue({ exitCode: 0, url: "u" });
+    companionState.runWorkbench = runWorkbench;
+    const { executeView } = await loadView();
+
+    await executeView(
+      baseConfig,
+      { diff: "main:architecture.puml", "diff-format": "plantuml" },
+      null,
+    );
+
+    expect(runWorkbench).toHaveBeenCalledWith(
+      expect.objectContaining({
+        diffBaseline: "main:architecture.puml",
+        diffBaselineFormat: "plantuml",
+      }),
+    );
+  });
+
   it("handles url null cleanly when companion never bound a port", async () => {
     companionState.runWorkbench = vi
       .fn()
