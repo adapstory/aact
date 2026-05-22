@@ -30,17 +30,25 @@ import type {
  * algorithm itself stays at the model layer so library users can
  * compute diffs without booting the CLI surface.
  *
- * Algorithm in three passes (no side effects, no I/O):
+ * Algorithm in four passes (no side effects, no I/O):
  *
  *  1. Element / Boundary / Relation identity match — name-based for
  *     elements / boundaries, `(from, to, technology)` tuple for
  *     relations. Matched pairs land in `modified` with per-field
  *     deltas; unmatched go to `added` / `removed`.
  *  2. Rename detection — for each removed/added pair of the same
- *     `kind`, compute similarity (label edit-distance + relations
- *     Jaccard). Pairs scoring ≥ threshold (default 0.7) collapse
- *     into a single `renamed` change with `confidence`.
- *  3. Relation pair-collapse — `(from, to)` groups with exactly one
+ *     `kind`, compute multi-feature similarity (`./similarity.ts`),
+ *     build a cost matrix, run Hungarian (`./hungarian.ts`) for
+ *     globally-optimal assignment, threshold-filter (default 0.65).
+ *     Wrapped in a monotonic fixed-point loop so chain renames
+ *     converge — the leaf's rename feeds back into the
+ *     middle-of-chain's relation jaccard, which then crosses
+ *     threshold for the head.
+ *  3. Relation diff with rename remap — `Relation.to` strings on
+ *     the baseline side are rewritten through the renameMap from
+ *     pass 2 before identity matching, so edges touching renamed
+ *     elements still match their post-rename counterparts.
+ *  4. Relation pair-collapse — `(from, to)` groups with exactly one
  *     removed and one added entry mean the technology was swapped
  *     in place; surface as `modified` with `field: "technology"`,
  *     not noisy add+remove pair. Easier to read on PR review.
@@ -183,6 +191,58 @@ const detectRenames = <T>(
     });
   }
   return pairs;
+};
+
+/**
+ * Fixed-point rename detection for elements. Runs `detectRenames`
+ * repeatedly, feeding the accumulated `renameMap` back into the
+ * similarity function so chain renames converge — when the leaf of
+ * a chain is detected first, its rename re-keys relation targets
+ * for the middle pair's scoring, which then crosses threshold for
+ * the head pair's scoring.
+ *
+ * Monotonic: each iteration only ADDS pairs. Termination is
+ * guaranteed by the strictly-decreasing unmatched set, but we cap at
+ * `MAX_ITERATIONS` defensively in case future similarity changes
+ * introduce oscillation under bipartite re-optimisation. Chains
+ * longer than 5 elements are rare enough that this cap is safe.
+ *
+ * `renameMap` is mutated in place — the caller relies on the
+ * post-iteration state for downstream relation diffing.
+ */
+const MAX_RENAME_ITERATIONS = 5;
+
+const iterativeRenameDetection = (
+  removed: readonly Element[],
+  added: readonly Element[],
+  renameMap: Map<string, string>,
+  threshold: number,
+): RenamePair<Element>[] => {
+  const allPairs: RenamePair<Element>[] = [];
+  let unmatchedRemoved: Element[] = [...removed];
+  let unmatchedAdded: Element[] = [...added];
+
+  for (let iter = 0; iter < MAX_RENAME_ITERATIONS; iter++) {
+    if (unmatchedRemoved.length === 0 || unmatchedAdded.length === 0) break;
+    const sim = (a: Element, b: Element): number =>
+      elementSimilarity(a, b, { renameMap });
+    const pairs = detectRenames(
+      unmatchedRemoved,
+      unmatchedAdded,
+      sim,
+      threshold,
+    );
+    if (pairs.length === 0) break;
+    for (const pair of pairs) {
+      renameMap.set(pair.removed.name, pair.added.name);
+      allPairs.push(pair);
+    }
+    const takenRemoved = new Set(pairs.map((p) => p.removed));
+    const takenAdded = new Set(pairs.map((p) => p.added));
+    unmatchedRemoved = unmatchedRemoved.filter((e) => !takenRemoved.has(e));
+    unmatchedAdded = unmatchedAdded.filter((e) => !takenAdded.has(e));
+  }
+  return allPairs;
 };
 
 // -----------------------------------------------------------------------------
@@ -404,19 +464,12 @@ const diffElements = (
     if (!baselineNames.has(name)) added.push(current.elements[name]);
   }
 
+  const threshold = options.renameThreshold ?? 0.65;
   const renamePairs: RenamePair<Element>[] = options.disableRenameDetection
     ? []
-    : detectRenames(
-        removed,
-        added,
-        elementSimilarity,
-        options.renameThreshold ?? 0.7,
-      );
+    : iterativeRenameDetection(removed, added, renameMap, threshold);
   const renamedRemoved = new Set(renamePairs.map((p) => p.removed));
   const renamedAdded = new Set(renamePairs.map((p) => p.added));
-  for (const pair of renamePairs) {
-    renameMap.set(pair.removed.name, pair.added.name);
-  }
 
   for (const pair of renamePairs) {
     const fields = diffElementFields(
@@ -519,7 +572,7 @@ const diffBoundaries = (
         removed,
         added,
         boundarySimilarity,
-        options.renameThreshold ?? 0.7,
+        options.renameThreshold ?? 0.65,
       );
   const renamedRemoved = new Set(renamePairs.map((p) => p.removed));
   const renamedAdded = new Set(renamePairs.map((p) => p.added));

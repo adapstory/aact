@@ -12,8 +12,8 @@
  * | Weight       | Default | Why                                                                                                                                     |
  * | ------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------- |
  * | `name`       | 0.25    | Primary identifier. Changes on the very refactor we're detecting, but partial matches (`api` → `apiV2`) still anchor.                   |
- * | `label`      | 0.20    | Human-facing name; often correlates with `name`. Together with `name` makes the dominant signal pair.                                   |
- * | `technology` | 0.15    | Highly distinctive. `"Spring Boot"` rarely changes during rename — a hard-mismatch is strong evidence "this is NOT a rename".           |
+ * | `label`      | 0.15    | Human-facing name; often correlates with `name`. Secondary signal — labels routinely tweak during refactor.                             |
+ * | `technology` | 0.20    | Highly distinctive. `"Spring Boot"` rarely changes during rename — a hard-match is strong evidence "this IS the same thing". Raised from 0.15 after benchmark showed it carries chain-rename leaf cases (`db ↔ primaryDb` where name/label drift but tech anchors). |
  * | `external`   | 0.05    | Rarely toggled; mismatch is strong (internal service ≠ external partner) but contributes little when both equal.                        |
  * | `tags`       | 0.10    | Domain-specific signal. Some models tag heavily, some never. Jaccard over both gives partial credit for tag overlap.                    |
  * | `relations`  | 0.25    | Structural neighborhood — for an unrenamed element, every outgoing relation stays the same. Jaccard over `.to` names (after rename remap when caller supplies one). |
@@ -42,8 +42,8 @@ export interface SimilarityWeights {
 
 export const DEFAULT_ELEMENT_WEIGHTS: SimilarityWeights = {
   name: 0.25,
-  label: 0.2,
-  technology: 0.15,
+  label: 0.15,
+  technology: 0.2,
   external: 0.05,
   tags: 0.1,
   relations: 0.25,

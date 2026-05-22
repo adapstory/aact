@@ -8,21 +8,21 @@
       "description": "Public API",
       "technology": "Node.js",
       "tags": [],
-      "relations": [{ "to": "databaseRepoV2", "tags": [] }]
+      "relations": [{ "to": "primaryDbRepo", "tags": [] }]
     },
-    "databaseRepoV2": {
-      "name": "databaseRepoV2",
-      "label": "Database Repo V2",
+    "primaryDbRepo": {
+      "name": "primaryDbRepo",
+      "label": "Primary DB Repo",
       "kind": "Container",
       "external": false,
       "description": "Database access layer",
       "technology": "Node.js",
       "tags": ["repo"],
-      "relations": [{ "to": "primaryStorageV2", "tags": [] }]
+      "relations": [{ "to": "primaryDb", "tags": [] }]
     },
-    "primaryStorageV2": {
-      "name": "primaryStorageV2",
-      "label": "Primary Storage V2",
+    "primaryDb": {
+      "name": "primaryDb",
+      "label": "Primary Database",
       "kind": "ContainerDb",
       "external": false,
       "description": "Primary store",

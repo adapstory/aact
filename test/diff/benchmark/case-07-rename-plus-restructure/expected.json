@@ -1,6 +1,5 @@
 {
-  "description": "Mixed refactor — api renamed to customerApi, db renamed to customerDb (with label change), metrics gained a tag and moved to bank. Rename detection needs to be transitive (api→customerApi requires db→customerDb to remap relations.to). Metrics is a pure move + tag addition. Boundary lists shuffle.",
-  "knownGap": true,
+  "description": "Mixed refactor — api renamed to customerApi, db renamed to customerDb (with label change), metrics gained a tag and moved to bank. Chain transitivity (api→customerApi requires db→customerDb to remap relations.to) is closed by the fixed-point iteration; confidence on both renames lands in the LOW band because name and label drifted substantially (\"API\" → \"Customer API\", short identifier becoming long descriptive one). Useful signal for PR review agents — \"we think this is a rename but it's not super-confident, double-check\".",
   "changes": [
     {
       "entity": "element",
@@ -9,7 +8,6 @@
       "address": "element:customerApi",
       "name": "customerApi",
       "previousName": "api",
-      "confidenceHint": "high",
       "fields": [{ "field": "label", "before": "API", "after": "Customer API" }]
     },
     {
@@ -19,7 +17,6 @@
       "address": "element:customerDb",
       "name": "customerDb",
       "previousName": "db",
-      "confidenceHint": "high",
       "fields": [
         { "field": "label", "before": "Database", "after": "Customer Database" }
       ]
