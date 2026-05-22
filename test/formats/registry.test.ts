@@ -39,7 +39,11 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
   },
   {
     name: "kubernetes",
-    load: false, // k8s — deployment artifact, не source-of-truth
+    // Phase 2 ADR: добавлен load для drift-detection (`aact diff
+    // arch.dsl ./k8s/`). MVP coverage — workload kinds + namespace
+    // → Boundary + aact.* annotations. Relations / Services /
+    // kustomize chase — Phase C followup.
+    load: true,
     generate: true,
     fix: false, // IaC не authored руками — fix не имеет смысла
   },
