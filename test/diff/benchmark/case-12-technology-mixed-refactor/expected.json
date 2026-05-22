@@ -1,6 +1,14 @@
 {
-  "description": "Same (from, to) pair, technology swapped HTTP → gRPC. Pair-collapse pass rewrites the removed+added relation pair into a single `modified` change carrying `field: \"technology\"`. Address omits the tech qualifier because the collapsed entry represents a single edge that changed transport.",
+  "description": "Mixed refactor for technologySwapped — relation transport changes while an unrelated worker tag changes. The group should explain only the relation technology change.",
   "changes": [
+    {
+      "entity": "element",
+      "action": "modified",
+      "severity": "semantic",
+      "address": "element:worker",
+      "name": "worker",
+      "fields": [{ "field": "tags", "before": [], "after": ["batch"] }]
+    },
     {
       "entity": "relation",
       "action": "modified",

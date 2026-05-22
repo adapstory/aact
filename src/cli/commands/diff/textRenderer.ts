@@ -3,6 +3,7 @@ import { colors } from "consola/utils";
 import type {
   BoundaryChange,
   Change,
+  ChangeGroup,
   DiffData,
   ElementChange,
   RelationChange,
@@ -156,6 +157,11 @@ const renderChange = (c: Change): string => {
   }
 };
 
+const renderGroup = (g: ChangeGroup): string => {
+  const conf = colors.dim(` (confidence ${g.confidence.toFixed(2)})`);
+  return `  ${colors.cyan("~")} ${colors.dim("Group   ")} ${colors.bold(g.title)}${conf}`;
+};
+
 export const renderDiffText: Renderer<DiffData> = (envelope, sink) => {
   const { data } = envelope;
 
@@ -174,6 +180,13 @@ export const renderDiffText: Renderer<DiffData> = (envelope, sink) => {
   if (data.changes.length === 0) {
     sink.write(colors.green("  No structural changes.\n"));
     return;
+  }
+
+  if (data.groups && data.groups.length > 0) {
+    for (const group of data.groups) {
+      sink.write(renderGroup(group) + "\n");
+    }
+    sink.write("\n");
   }
 
   // Structural + semantic shown in full; cosmetic collapsed into a

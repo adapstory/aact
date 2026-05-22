@@ -2,7 +2,12 @@ import { PassThrough } from "node:stream";
 
 import { renderDiffText } from "../../../../src/cli/commands/diff/textRenderer";
 import { buildEnvelope } from "../../../../src/cli/output";
-import type { Change, DiffData, DiffSummary } from "../../../../src/diff";
+import type {
+  Change,
+  ChangeGroup,
+  DiffData,
+  DiffSummary,
+} from "../../../../src/diff";
 
 const SIDE = { source: "x", format: "plantuml" } as const;
 
@@ -23,9 +28,13 @@ const baseSummary = (changes: readonly Change[]): DiffSummary => ({
   byEntity: { element: 0, boundary: 0, relation: 0, workspace: 0 },
 });
 
-const envelopeFor = (changes: readonly Change[]): DiffData => ({
+const envelopeFor = (
+  changes: readonly Change[],
+  groups?: readonly ChangeGroup[],
+): DiffData => ({
   summary: baseSummary(changes),
   changes,
+  ...(groups ? { groups } : {}),
   baseline: SIDE,
   current: SIDE,
 });
@@ -251,6 +260,38 @@ describe("renderDiffText", () => {
     expect(text).toContain("api → db");
     expect(text).toContain("Postgres");
     expect(text).toContain("CockroachDB");
+  });
+
+  it("renders architectural change groups before primitive changes", () => {
+    const text = render(
+      envelopeFor(
+        [
+          {
+            entity: "relation",
+            action: "modified",
+            severity: "semantic",
+            address: "relation:api→db",
+            from: "api",
+            to: "db",
+            fields: [{ field: "technology", before: "HTTP", after: "Kafka" }],
+          },
+        ],
+        [
+          {
+            id: "group:technologySwapped:api:db:HTTP:Kafka",
+            kind: "technologySwapped",
+            title: "api → db technology changed from HTTP to Kafka",
+            severity: "semantic",
+            confidence: 1,
+            changeAddresses: ["relation:api→db"],
+          },
+        ],
+      ),
+    );
+
+    expect(text).toContain("Group");
+    expect(text).toContain("api → db technology changed from HTTP to Kafka");
+    expect(text).toContain("confidence 1.00");
   });
 
   it("renders workspace modified line when severity is non-cosmetic", () => {

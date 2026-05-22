@@ -11,6 +11,7 @@ import type {
   BoundaryChange,
   Change,
   ChangeAction,
+  ChangeGroup,
   ChangeSeverity,
   DiffData,
   DiffOptions,
@@ -427,6 +428,11 @@ const boundaryAddress = (name: string): string => `boundary:${name}`;
 const relationAddress = (from: string, to: string, tech?: string): string =>
   tech ? `relation:${from}→${to}(${tech})` : `relation:${from}→${to}`;
 const workspaceAddress = (): string => "workspace";
+
+const groupId = (kind: string, ...parts: readonly string[]): string =>
+  ["group", kind, ...parts]
+    .map((p) => p.replaceAll(/[^a-zA-Z0-9._-]+/g, "_"))
+    .join(":");
 
 // -----------------------------------------------------------------------------
 // Boundary index (which boundary owns each element name?)
@@ -879,6 +885,190 @@ const diffWorkspace = (
 };
 
 // -----------------------------------------------------------------------------
+// Change groups — deterministic architectural interpretations over primitives
+// -----------------------------------------------------------------------------
+
+const stringifyEvidence = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+};
+
+const elementSearchText = (el: Element | undefined): string => {
+  if (!el) return "";
+  const props = Object.entries(el.properties ?? {}).flatMap(([k, v]) => [k, v]);
+  return [
+    el.name,
+    el.label,
+    el.description,
+    el.technology,
+    ...el.tags,
+    ...props,
+  ]
+    .filter((x): x is string => typeof x === "string" && x.length > 0)
+    .join(" ")
+    .toLowerCase();
+};
+
+const isRepositoryLike = (el: Element | undefined): boolean => {
+  if (!el) return false;
+  const name = el.name.toLowerCase();
+  const text = elementSearchText(el);
+  return (
+    name.endsWith("repo") ||
+    name.endsWith("repository") ||
+    /\brepo\b/.test(text) ||
+    /\brepository\b/.test(text)
+  );
+};
+
+const isDatabaseLike = (el: Element | undefined): boolean => {
+  if (!el) return false;
+  if (el.kind.endsWith("Db")) return true;
+  const text = elementSearchText(el);
+  return (
+    /\bdb\b/.test(text) ||
+    /\bdatabase\b/.test(text) ||
+    /\bpostgres(?:ql)?\b/.test(text) ||
+    /\bmysql\b/.test(text) ||
+    /\bmariadb\b/.test(text) ||
+    /\bmongo(?:db)?\b/.test(text) ||
+    /\bcockroach(?:db)?\b/.test(text) ||
+    /\bdynamo(?:db)?\b/.test(text)
+  );
+};
+
+const maxSeverity = (changes: readonly Change[]): ChangeSeverity => {
+  let max: ChangeSeverity = "cosmetic";
+  for (const change of changes) {
+    if (SEVERITY_PRECEDENCE[change.severity] < SEVERITY_PRECEDENCE[max]) {
+      max = change.severity;
+    }
+  }
+  return max;
+};
+
+const detectTechnologySwappedGroups = (
+  changes: readonly Change[],
+): ChangeGroup[] => {
+  const groups: ChangeGroup[] = [];
+  for (const change of changes) {
+    if (change.entity !== "relation") continue;
+    if (change.action !== "modified") continue;
+    const tech = change.fields.find((f) => f.field === "technology");
+    if (!tech) continue;
+    const before = stringifyEvidence(tech.before) ?? "none";
+    const after = stringifyEvidence(tech.after) ?? "none";
+    groups.push({
+      id: groupId("technologySwapped", change.from, change.to, before, after),
+      kind: "technologySwapped",
+      title: `${change.from} → ${change.to} technology changed from ${before} to ${after}`,
+      severity: change.severity,
+      confidence: 1,
+      changeAddresses: [change.address],
+      evidence: {
+        from: change.from,
+        to: change.to,
+        beforeTechnology: before,
+        afterTechnology: after,
+      },
+    });
+  }
+  return groups;
+};
+
+const detectIntroducedRepositoryGroups = (
+  changes: readonly Change[],
+  baseline: Model,
+  current: Model,
+): ChangeGroup[] => {
+  const addedElements = changes.filter(
+    (c): c is ElementChange => c.entity === "element" && c.action === "added",
+  );
+  const addedRelations = changes.filter(
+    (c): c is RelationChange => c.entity === "relation" && c.action === "added",
+  );
+  const removedRelations = changes.filter(
+    (c): c is RelationChange =>
+      c.entity === "relation" && c.action === "removed",
+  );
+
+  const groups: ChangeGroup[] = [];
+  const seen = new Set<string>();
+
+  for (const repoChange of addedElements) {
+    const repository = current.elements[repoChange.name];
+    if (!isRepositoryLike(repository)) continue;
+
+    const serviceToRepo = addedRelations.filter(
+      (r) => r.to === repoChange.name && r.from !== repoChange.name,
+    );
+    const repoToDatabase = addedRelations.filter(
+      (r) =>
+        r.from === repoChange.name &&
+        r.to !== repoChange.name &&
+        isDatabaseLike(current.elements[r.to] ?? baseline.elements[r.to]),
+    );
+
+    for (const incoming of serviceToRepo) {
+      for (const outgoing of repoToDatabase) {
+        if (incoming.from === outgoing.to) continue;
+        const removed = removedRelations.find(
+          (r) => r.from === incoming.from && r.to === outgoing.to,
+        );
+        if (!removed) continue;
+
+        const id = groupId(
+          "introducedRepository",
+          incoming.from,
+          repoChange.name,
+          outgoing.to,
+        );
+        if (seen.has(id)) continue;
+        seen.add(id);
+
+        const groupedChanges = [repoChange, removed, incoming, outgoing];
+        groups.push({
+          id,
+          kind: "introducedRepository",
+          title: `Repository layer introduced between ${incoming.from} and ${outgoing.to}`,
+          severity: maxSeverity(groupedChanges),
+          confidence: 0.95,
+          changeAddresses: groupedChanges.map((c) => c.address),
+          evidence: {
+            service: incoming.from,
+            repository: repoChange.name,
+            database: outgoing.to,
+            removedRelation: removed.address,
+            serviceToRepository: incoming.address,
+            repositoryToDatabase: outgoing.address,
+          },
+        });
+      }
+    }
+  }
+
+  return groups;
+};
+
+const compareGroups = (a: ChangeGroup, b: ChangeGroup): number => {
+  const sevDiff =
+    SEVERITY_PRECEDENCE[a.severity] - SEVERITY_PRECEDENCE[b.severity];
+  if (sevDiff !== 0) return sevDiff;
+  return a.id.localeCompare(b.id);
+};
+
+const detectChangeGroups = (
+  changes: readonly Change[],
+  baseline: Model,
+  current: Model,
+): ChangeGroup[] =>
+  [
+    ...detectTechnologySwappedGroups(changes),
+    ...detectIntroducedRepositoryGroups(changes, baseline, current),
+  ].sort(compareGroups);
+
+// -----------------------------------------------------------------------------
 // Summary + sort
 // -----------------------------------------------------------------------------
 
@@ -1087,9 +1277,11 @@ export const computeDiff = (
   ].sort(compareChanges);
 
   const summary = buildSummary(allChanges);
+  const groups = detectChangeGroups(allChanges, baseline, current);
   return {
     summary,
     changes: allChanges,
+    ...(groups.length > 0 ? { groups } : {}),
     ...(options.withPatch ? { patch: computePatch(baseline, current) } : {}),
     baseline: baselineSide,
     current: currentSide,

@@ -1,4 +1,4 @@
-import { computeDiff } from "../../src/diff";
+import { computeDiff, DEFAULT_RENAME_THRESHOLD } from "../../src/diff";
 import type { Model } from "../../src/model";
 import { makeModel } from "../helpers/makeModel";
 
@@ -80,6 +80,10 @@ describe("computeDiff — severity classification", () => {
 });
 
 describe("computeDiff — rename detection", () => {
+  it("exports the documented default rename threshold", () => {
+    expect(DEFAULT_RENAME_THRESHOLD).toBe(0.65);
+  });
+
   it("detects rename when label and relations match", () => {
     const a = makeModel({
       elements: [
@@ -176,6 +180,20 @@ describe("computeDiff — relation pair-collapse", () => {
         after: "Kafka",
       }),
     );
+    expect(result.groups).toContainEqual(
+      expect.objectContaining({
+        kind: "technologySwapped",
+        title: "api → db technology changed from HTTP to Kafka",
+        confidence: 1,
+        changeAddresses: [relChanges[0].address],
+        evidence: expect.objectContaining({
+          from: "api",
+          to: "db",
+          beforeTechnology: "HTTP",
+          afterTechnology: "Kafka",
+        }),
+      }),
+    );
   });
 
   it("keeps multi-edge same (from, to) as separate add/remove", () => {
@@ -242,6 +260,75 @@ describe("computeDiff — relation pair-collapse", () => {
     expect(result.changes.filter((c) => c.entity === "relation")).toHaveLength(
       0,
     );
+  });
+});
+
+describe("computeDiff — architectural change groups", () => {
+  it("omits groups when no deterministic architectural pattern is detected", () => {
+    const a = makeModel({ elements: [{ name: "api" }] });
+    const b = makeModel({ elements: [{ name: "api" }, { name: "worker" }] });
+
+    expect(diff(a, b).groups).toBeUndefined();
+  });
+
+  it("detects repository introduction from service→db reroute", () => {
+    const a = makeModel({
+      elements: [
+        { name: "ordersService", relations: [{ to: "ordersDb" }] },
+        { name: "ordersDb", kind: "ContainerDb", technology: "PostgreSQL" },
+      ],
+    });
+    const b = makeModel({
+      elements: [
+        { name: "ordersService", relations: [{ to: "ordersRepo" }] },
+        {
+          name: "ordersRepo",
+          relations: [{ to: "ordersDb" }],
+          tags: ["repo"],
+        },
+        { name: "ordersDb", kind: "ContainerDb", technology: "PostgreSQL" },
+      ],
+    });
+
+    const result = diff(a, b);
+
+    expect(result.groups).toContainEqual(
+      expect.objectContaining({
+        kind: "introducedRepository",
+        title: "Repository layer introduced between ordersService and ordersDb",
+        severity: "structural",
+        confidence: 0.95,
+        changeAddresses: [
+          "element:ordersRepo",
+          "relation:ordersService→ordersDb",
+          "relation:ordersService→ordersRepo",
+          "relation:ordersRepo→ordersDb",
+        ],
+        evidence: expect.objectContaining({
+          service: "ordersService",
+          repository: "ordersRepo",
+          database: "ordersDb",
+        }),
+      }),
+    );
+  });
+
+  it("does not call an arbitrary intermediary a repository introduction", () => {
+    const a = makeModel({
+      elements: [
+        { name: "api", relations: [{ to: "store" }] },
+        { name: "store", kind: "ContainerDb" },
+      ],
+    });
+    const b = makeModel({
+      elements: [
+        { name: "api", relations: [{ to: "cache" }] },
+        { name: "cache", relations: [{ to: "store" }] },
+        { name: "store", kind: "ContainerDb" },
+      ],
+    });
+
+    expect(diff(a, b).groups).toBeUndefined();
   });
 });
 

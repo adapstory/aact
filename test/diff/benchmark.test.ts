@@ -43,7 +43,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Change, DiffData } from "../../src/diff";
+import type { Change, ChangeGroup, DiffData } from "../../src/diff";
 import { computeDiff } from "../../src/diff";
 import type { Model } from "../../src/model";
 
@@ -73,10 +73,21 @@ interface ExpectedChange {
 interface ExpectedDiff {
   readonly description?: string;
   readonly changes: readonly ExpectedChange[];
+  readonly groups?: readonly ExpectedGroup[];
   /** When `true`, the current algorithm does not yet meet this
    *  expectation. The runner dispatches the case via `it.fails`.
    *  Remove (or set `false`) when an algorithm PR closes the gap. */
   readonly knownGap?: boolean;
+}
+
+interface ExpectedGroup {
+  readonly id: string;
+  readonly kind?: string;
+  readonly title?: string;
+  readonly severity?: "structural" | "semantic" | "cosmetic";
+  readonly changeAddresses?: readonly string[];
+  readonly evidence?: Readonly<Record<string, unknown>>;
+  readonly confidenceHint?: "low" | "high";
 }
 
 const loadJson = async <T>(file: string): Promise<T> => {
@@ -129,6 +140,12 @@ interface MatchResult {
   readonly missing: readonly ExpectedChange[];
   readonly extras: readonly Change[];
   readonly mismatches: readonly { address: string; reason: string }[];
+}
+
+interface GroupMatchResult {
+  readonly missing: readonly ExpectedGroup[];
+  readonly extras: readonly ChangeGroup[];
+  readonly mismatches: readonly { id: string; reason: string }[];
 }
 
 const compareChanges = (
@@ -212,6 +229,69 @@ const compareChanges = (
   return { matched, missing, extras, mismatches };
 };
 
+const compareGroups = (
+  actual: readonly ChangeGroup[],
+  expected: readonly ExpectedGroup[],
+): GroupMatchResult => {
+  const missing: ExpectedGroup[] = [];
+  const mismatches: { id: string; reason: string }[] = [];
+  const matchedActual = new Set<ChangeGroup>();
+
+  for (const exp of expected) {
+    const found = actual.find((a) => !matchedActual.has(a) && a.id === exp.id);
+    if (!found) {
+      missing.push(exp);
+      continue;
+    }
+    matchedActual.add(found);
+
+    if (exp.kind !== undefined && found.kind !== exp.kind) {
+      mismatches.push({
+        id: exp.id,
+        reason: `kind mismatch: got "${found.kind}", expected "${exp.kind}"`,
+      });
+    }
+    if (exp.title !== undefined && found.title !== exp.title) {
+      mismatches.push({
+        id: exp.id,
+        reason: `title mismatch: got "${found.title}", expected "${exp.title}"`,
+      });
+    }
+    if (exp.severity !== undefined && found.severity !== exp.severity) {
+      mismatches.push({
+        id: exp.id,
+        reason: `severity mismatch: got "${found.severity}", expected "${exp.severity}"`,
+      });
+    }
+    if (
+      exp.changeAddresses !== undefined &&
+      !compareValue(found.changeAddresses, exp.changeAddresses)
+    ) {
+      mismatches.push({
+        id: exp.id,
+        reason: `changeAddresses mismatch: got ${JSON.stringify(found.changeAddresses)}, expected ${JSON.stringify(exp.changeAddresses)}`,
+      });
+    }
+    if (exp.evidence) {
+      for (const [key, value] of Object.entries(exp.evidence)) {
+        if (!compareValue(found.evidence?.[key], value)) {
+          mismatches.push({
+            id: exp.id,
+            reason: `evidence.${key} mismatch: got ${JSON.stringify(found.evidence?.[key])}, expected ${JSON.stringify(value)}`,
+          });
+        }
+      }
+    }
+    const confErr = confidenceMatches(found.confidence, exp.confidenceHint);
+    if (confErr) {
+      mismatches.push({ id: exp.id, reason: confErr });
+    }
+  }
+
+  const extras = actual.filter((a) => !matchedActual.has(a));
+  return { missing, extras, mismatches };
+};
+
 const formatExtras = (extras: readonly Change[]): string =>
   extras
     .map(
@@ -223,6 +303,12 @@ const formatExtras = (extras: readonly Change[]): string =>
 const formatMissing = (missing: readonly ExpectedChange[]): string =>
   missing.map((e) => `  - ${e.entity}/${e.action} @ ${e.address}`).join("\n");
 
+const formatGroupExtras = (extras: readonly ChangeGroup[]): string =>
+  extras.map((g) => `  - ${g.kind} @ ${g.id}`).join("\n");
+
+const formatGroupMissing = (missing: readonly ExpectedGroup[]): string =>
+  missing.map((g) => `  - ${g.kind ?? "group"} @ ${g.id}`).join("\n");
+
 const runCase = async (caseName: string): Promise<void> => {
   const dir = path.join(BENCH_DIR, caseName);
   const [baseline, current, expected] = await Promise.all([
@@ -233,6 +319,10 @@ const runCase = async (caseName: string): Promise<void> => {
 
   const result: DiffData = computeDiff(baseline, current, BASE, CURR);
   const cmp = compareChanges(result.changes, expected.changes);
+  const groupCmp =
+    expected.groups === undefined
+      ? null
+      : compareGroups(result.groups ?? [], expected.groups);
 
   const errors: string[] = [];
   if (cmp.missing.length > 0) {
@@ -243,6 +333,21 @@ const runCase = async (caseName: string): Promise<void> => {
   }
   for (const m of cmp.mismatches) {
     errors.push(`Mismatch @ ${m.address}: ${m.reason}`);
+  }
+  if (groupCmp) {
+    if (groupCmp.missing.length > 0) {
+      errors.push(
+        `Missing expected groups:\n${formatGroupMissing(groupCmp.missing)}`,
+      );
+    }
+    if (groupCmp.extras.length > 0) {
+      errors.push(
+        `Unexpected actual groups:\n${formatGroupExtras(groupCmp.extras)}`,
+      );
+    }
+    for (const m of groupCmp.mismatches) {
+      errors.push(`Group mismatch @ ${m.id}: ${m.reason}`);
+    }
   }
   if (errors.length > 0) {
     throw new Error(`[${caseName}] benchmark gaps:\n${errors.join("\n\n")}`);

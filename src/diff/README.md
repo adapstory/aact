@@ -184,13 +184,13 @@ protocol so a future algorithmic improvement fails the test suite until
 the gap marker is removed. New matching heuristics or group detectors
 must extend this corpus rather than relying only on narrow unit tests.
 
-The only group detectors acceptable to implement immediately are the
-ones with exact graph evidence:
+The initial v3 runtime implements only the group detectors with exact
+graph evidence:
 
 | `kind`                 | Required evidence                                                                                                 | Confidence |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------- |
 | `technologySwapped`    | One relation `modified` change with a `technology` field.                                                         | `1.0`      |
-| `introducedRepository` | One added repo-like element `B`; one removed `A → C`; one added `A → B`; one added `B → C`; `C` is database-like. | `0.85-1.0` |
+| `introducedRepository` | One added repo-like element `B`; one removed `A → C`; one added `A → B`; one added `B → C`; `C` is database-like. | `0.95`     |
 
 Everything else stays out of the initial runtime until the benchmark
 corpus proves it:
@@ -221,11 +221,11 @@ without changing the existing `Change` contract:
 - **Match evidence** — optional per-rename explanation of which
   similarity features contributed to `confidence`; useful for agents
   and review comments.
-- **Composite `ChangeGroup[]`** — optional higher-level architectural
-  operations over primitive changes. Examples: repository layer
-  introduced between service and DB, synchronous edge converted to
-  event flow, service split into API/worker/repo, or boundary extracted
-  from a flat system.
+- **Additional `ChangeGroup[]` detectors** — more higher-level
+  architectural operations over primitive changes. Examples:
+  synchronous edge converted to event flow, service split into
+  API/worker/repo, gateway introduced in front of downstreams, or
+  boundary extracted from a flat system.
 
 False positives are more harmful than false negatives: showing
 `removed + added` is noisy but honest, while a wrong `renamed` can
@@ -325,8 +325,8 @@ Canonical group families to grow into:
 | `relationRerouted`     | Edge target/source changes while endpoint roles stay similar.      | `Relation from {from} rerouted from {before} to {after}`              |
 | `technologySwapped`    | Same relation pair changes transport/technology.                   | `{from} → {to} technology changed from {before} to {after}`           |
 
-The first detector should be the safest one with the clearest graph
-shape, such as `introducedRepository` or `technologySwapped`. More
+The first shipped detectors are `technologySwapped` and
+`introducedRepository`, both backed by benchmark fixtures. More
 ambiguous groups (`splitElement`, `mergedElements`) should ship only
 with benchmark fixtures and conservative confidence thresholds.
 
@@ -370,6 +370,11 @@ Both inputs go through the standard format registry, so any format
 with `load` capability is a valid diff side — including
 cross-format diffs (`aact diff arch.puml workspace.dsl` works if both
 parse to the same logical Model).
+
+Human text output renders `groups[]` above primitive changes so a PR
+reviewer first sees the architectural interpretation, then the exact
+facts backing it. `--json` carries the same `DiffData` shape for agents
+and CI.
 
 ### Visual diff
 
