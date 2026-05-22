@@ -89,8 +89,9 @@ export interface LoadResult {
  * каноническим именем (PlantUML / Structurizr / model-json)
  * объявляет просто строку.
  *
- * Structurizr load/write asymmetry (load workspace.json → fix workspace.dsl)
- * решается через `AactConfig.source.writePath`, не через Format type.
+ * Structurizr fix всегда пишет обратно в `source.path` (DSL).
+ * JSON-source отрезан guard'ом в `check.ts` — JSON это read-only
+ * artifact, authoring через DSL.
  */
 export interface Format {
   readonly name: string;

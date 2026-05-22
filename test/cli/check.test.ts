@@ -235,7 +235,10 @@ describe("executeCheck — diagnostics", () => {
     ).toBe(true);
   });
 
-  it("emits format.missingWritePath for structurizr JSON source without writePath", async () => {
+  it("refuses --fix for Structurizr JSON source (read-only artifact)", async () => {
+    // JSON это generated artifact (output structurizr-cli export),
+    // не authoring surface. Drift между JSON и DSL после --fix скрывал
+    // изменения. Решение v3: --fix только для DSL source.
     mockLoadFormat.mockResolvedValue(
       fakeFormat("structurizr", structurizrDslSyntax),
     );
@@ -245,12 +248,12 @@ describe("executeCheck — diagnostics", () => {
     };
     const result = await executeCheck(config, {});
     expect(
-      result.diagnostics?.some((d) => d.kind === "format.missingWritePath"),
+      result.diagnostics?.some((d) => d.kind === "format.unsupportedFix"),
     ).toBe(true);
     expect(result.data.suggestedFixes).toHaveLength(0);
   });
 
-  it("DSL-source structurizr does NOT require writePath (fix writes to source.path)", async () => {
+  it("DSL-source structurizr --fix writes back to source.path (no writePath)", async () => {
     mockLoadFormat.mockResolvedValue(
       fakeFormat("structurizr", structurizrDslSyntax),
     );
@@ -260,16 +263,14 @@ describe("executeCheck — diagnostics", () => {
     };
     const result = await executeCheck(config, {});
     expect(
-      result.diagnostics?.some((d) => d.kind === "format.missingWritePath"),
+      result.diagnostics?.some((d) => d.kind === "format.unsupportedFix"),
     ).toBe(false);
     expect(result.data.suggestedFixes.length).toBeGreaterThan(0);
   });
 
-  it("JSON→DSL --fix re-checks via writePath, no false-green CI (Codex P1)", async () => {
-    // Раньше isDslFix branch вешал remaining: 0 unconditionally,
-    // exit=0 даже когда non-fixable violations оставались. Теперь
-    // executeCheck re-load'ит writePath файл (loader умеет DSL),
-    // пересчитывает violations, и exit=1 если хоть одна осталась.
+  it("DSL-source --fix re-checks after write, no false-green CI (Codex P1)", async () => {
+    // Mixed fixable/non-fixable scenario: первый load даёт N violations,
+    // после write re-load даёт оставшиеся → remaining > 0, exit=1.
     mockLoadFormat.mockResolvedValue(
       fakeFormat("structurizr", structurizrDslSyntax),
     );
@@ -280,11 +281,7 @@ describe("executeCheck — diagnostics", () => {
     mockWriteFile.mockResolvedValue();
 
     const config: AactConfig = {
-      source: {
-        type: "structurizr",
-        path: "./workspace.json",
-        writePath: "./workspace.dsl",
-      },
+      source: { type: "structurizr", path: "./workspace.dsl" },
     };
     const result = await executeCheck(config, { fix: true });
 

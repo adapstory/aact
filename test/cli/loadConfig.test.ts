@@ -74,17 +74,13 @@ describe("loadAndValidateConfig", () => {
     expect(config.source.path).toBe("test.puml");
   });
 
-  it("resolves source.path and source.writePath relative to the config file", async () => {
+  it("resolves source.path relative to the config file", async () => {
     const configFile = path.resolve(
       "/repo/examples/ecommerce-structurizr/aact.config.ts",
     );
     mockLoadConfig.mockResolvedValue({
       config: {
-        source: {
-          type: "structurizr",
-          path: "./workspace.json",
-          writePath: "./workspace.dsl",
-        },
+        source: { type: "structurizr", path: "./workspace.dsl" },
       },
       configFile,
     });
@@ -94,9 +90,6 @@ describe("loadAndValidateConfig", () => {
     );
 
     expect(config.source.path).toBe(
-      path.resolve("/repo/examples/ecommerce-structurizr/workspace.json"),
-    );
-    expect(config.source.writePath).toBe(
       path.resolve("/repo/examples/ecommerce-structurizr/workspace.dsl"),
     );
   });

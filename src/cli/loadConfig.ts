@@ -201,10 +201,6 @@ export const loadAndValidateConfig = async (
     typeof parsed.source === "string" ? { path: parsed.source } : parsed.source;
   const type = rawSource.type ?? (await inferSourceType(rawSource.path));
   const sourcePath = resolveConfigRelativePath(rawSource.path, configBase);
-  const writePath =
-    "writePath" in rawSource && rawSource.writePath !== undefined
-      ? resolveConfigRelativePath(rawSource.writePath, configBase)
-      : undefined;
   const sourceOptions =
     "options" in rawSource && rawSource.options !== undefined
       ? rawSource.options
@@ -231,7 +227,6 @@ export const loadAndValidateConfig = async (
       source: {
         path: sourcePath,
         type,
-        ...(writePath === undefined ? {} : { writePath }),
         ...(sourceOptions === undefined ? {} : { options: sourceOptions }),
       },
     },

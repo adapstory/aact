@@ -83,6 +83,7 @@ export interface CheckSummary {
 export interface CheckFixesApplied {
   readonly count: number;
   readonly remaining: number;
+  /** Absolute path that received the fixes — always `config.source.path`. */
   readonly writePath: string;
 }
 
@@ -237,21 +238,23 @@ const resolveFixCapability = async (
       },
     };
   }
-  // Structurizr range-edit semantics выровнены только с DSL. Для
-  // JSON-source loader парсит JSON, но fixes должны идти в DSL —
-  // requirement writePath. DSL-source — fix пишет обратно в тот же
-  // файл (`writePath ?? source.path`), без явного writePath.
+  // Structurizr range-edit semantics выровнены только с DSL.
+  // JSON-source это read-only: loader парсит, но --fix приведёт к
+  // drift между JSON и DSL (после write DSL обновлён, JSON отстал).
+  // V3 model: DSL — authoring surface, JSON — generated artifact.
+  // Решение: refuse --fix на JSON; пользователь переключает
+  // source.path на .dsl файл (auto-detect type=structurizr) и --fix
+  // пишет обратно в тот же файл.
   if (
     config.source.type === "structurizr" &&
-    !config.source.writePath &&
     config.source.path.toLowerCase().endsWith(".json")
   ) {
     return {
       capability: null,
       diagnostic: {
-        kind: "format.missingWritePath",
+        kind: "format.unsupportedFix",
         message:
-          "To use --fix with a JSON workspace, add source.writePath pointing to your workspace.dsl (fixes are emitted as DSL edits).",
+          "Cannot --fix a Structurizr JSON workspace: JSON is a read-only artifact. Switch source.path to your .dsl file (auto-detects as structurizr), then regenerate JSON via `structurizr-cli export` after editing if you need to keep the JSON copy in sync.",
         severity: "warning",
       },
     };
@@ -343,7 +346,10 @@ const applyFixes = async (
   fixes: readonly FixResult[],
   effective: readonly RuleDefinition[],
 ): Promise<ApplyFixesResult> => {
-  const writePath = path.resolve(config.source.writePath ?? config.source.path);
+  // Fixes всегда пишутся обратно в `source.path`. v2 `writePath`
+  // dropped: JSON-source случай отрезан upstream guard'ом, остальные
+  // форматы (DSL / PUML / etc.) являются и source и target.
+  const writePath = path.resolve(config.source.path);
   const source = await readFile(writePath, "utf8");
 
   // Pool every edit from every fix into one batch — the range-based
@@ -382,18 +388,10 @@ const applyFixes = async (
 
   await writeFile(writePath, content, "utf8");
 
-  // Re-check тот файл что только что записали — независимо от того
-  // совпадает он с `source.path` или это отдельный writePath. Раньше
-  // DSL-fix flow короткозамыкал `remaining: 0` потому что предполагал
-  // что после JSON→DSL emit невозможно пере-загрузить. Но Structurizr
-  // loader принимает И JSON, И DSL — re-load через writePath работает.
-  // Без re-check'а смешанный набор fixable/non-fixable violations
-  // отчитывался как успех → false-green CI.
-  const reLoadConfig: AactConfig = {
-    ...config,
-    source: { ...config.source, path: writePath },
-  };
-  const { model: reModel } = await loadModel(reLoadConfig);
+  // Re-check тот же файл после write — иначе false-green CI скрывает
+  // non-fixable violations. v2 имел short-circuit для JSON→DSL flow,
+  // но JSON-source теперь refused upstream — re-load всегда возможен.
+  const { model: reModel } = await loadModel(config);
   const reResults = runRules(reModel, config.rules, effective);
   const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
   return { remaining, writePath, conflictDiagnostics };

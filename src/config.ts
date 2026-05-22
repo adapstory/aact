@@ -23,7 +23,7 @@ const ruleOption = <T extends v.ObjectEntries>(entries: T) =>
  *
  * Source shape — accepts:
  *   1. String shorthand: `source: "./architecture.puml"` — type inferred from path
- *   2. Object form: `source: { path, type?, writePath? }` — type optional,
+ *   2. Object form: `source: { path, type?, options? }` — type optional,
  *      inferred from path if missing; explicit overrides infer
  *
  * Type accepts arbitrary string (validated against runtime format registry at
@@ -46,8 +46,6 @@ export const AactConfigSchema = v.strictObject({
       path: v.string(),
       /** Optional — infer'ится из `path` через format registry `defaultPattern` если опущен. */
       type: v.optional(v.string()),
-      /** Structurizr only: куда писать fix'ы (workspace.dsl). */
-      writePath: v.optional(v.string()),
       /**
        * Per-Format опции. Shape специфичен для каждого Format'а
        * (например `ComposeLoadOptions` / `KubernetesLoadOptions`)
@@ -176,7 +174,6 @@ export interface AactConfigInput<
     | {
         readonly path: string;
         readonly type?: string;
-        readonly writePath?: string;
         /** Per-Format опции. Shape специфичен для каждого формата
          *  (см. `ComposeLoadOptions` / `KubernetesLoadOptions` и т.д.). */
         readonly options?: unknown;
@@ -193,7 +190,6 @@ export interface AactConfig {
   readonly source: {
     readonly path: string;
     readonly type: string;
-    readonly writePath?: string;
     /** Per-Format опции (`ComposeLoadOptions` / `KubernetesLoadOptions` / ...). */
     readonly options?: unknown;
   };
