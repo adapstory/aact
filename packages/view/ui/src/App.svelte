@@ -1002,39 +1002,34 @@
 	        </p>
 	      {:else if diffData}
 	        <h2>Diff</h2>
-	        <h3 class="title">{diffData.summary.headline}</h3>
-	        <div class="stats">
-	          <div><span class="num">{diffData.summary.bySeverity.structural}</span> structural</div>
-	          <div><span class="num">{diffData.summary.bySeverity.semantic}</span> semantic</div>
-	          <div><span class="num">{diffData.summary.bySeverity.cosmetic}</span> cosmetic</div>
-	          <div><span class="num">{diffData.changes.length}</span> changes</div>
-	        </div>
+	        <p class="diff-headline">{diffData.summary.headline}</p>
+	        <p class="info-line">
+	          <span><b>{diffData.summary.bySeverity.structural}</b> structural</span>
+	          <span class="bullet" aria-hidden="true">·</span>
+	          <span><b>{diffData.summary.bySeverity.semantic}</b> semantic</span>
+	          <span class="bullet" aria-hidden="true">·</span>
+	          <span><b>{diffData.summary.bySeverity.cosmetic}</b> cosmetic</span>
+	          <span class="bullet" aria-hidden="true">·</span>
+	          <span><b>{diffData.changes.length}</b> total</span>
+	        </p>
 	        {#if diffGroups.length}
-	          <h4>Change groups</h4>
+	          <h4>Groups</h4>
 	          <ul class="change-list">
 	            {#each diffGroups as group (group.id)}
-	              <li class="change-row group-row">
-	                <span class="change-mark group-mark">{group.kind.slice(0, 1).toUpperCase()}</span>
-	                <span class="change-body">
-	                  <span class="change-title">{group.title}</span>
-	                  <span class="change-subtitle">{groupSubtitle(group)} · confidence {Math.round(group.confidence * 100)}%</span>
-	                </span>
+	              <li class="change-row" style="border-left-color: #38bdf8;">
+	                <span class="change-title">{group.title}</span>
+	                <span class="change-subtitle">{groupSubtitle(group)} · {Math.round(group.confidence * 100)}% confidence</span>
 	              </li>
 	            {/each}
 	          </ul>
 	        {/if}
 	        {#if topDiffChanges.length}
-	          <h4>Primitive changes</h4>
+	          <h4>Changes</h4>
 	          <ul class="change-list">
 	            {#each topDiffChanges as change (change.address)}
-	              <li class="change-row change-{change.action}">
-	                <span class="change-mark" style={`background: ${DIFF_COLOR[change.action]};`}>
-	                  {diffGlyph(change.action)}
-	                </span>
-	                <span class="change-body">
-	                  <span class="change-title">{changeTitle(change)}</span>
-	                  <span class="change-subtitle">{change.entity} · {change.action} · {changeSubtitle(change)}</span>
-	                </span>
+	              <li class="change-row" style={`border-left-color: ${DIFF_COLOR[change.action]};`}>
+	                <span class="change-title">{changeTitle(change)}</span>
+	                <span class="change-subtitle">{change.entity} {change.action} · {changeSubtitle(change)}</span>
 	              </li>
 	            {/each}
 	          </ul>
@@ -1148,9 +1143,9 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 16px;
-    padding: 10px 18px;
-    background: linear-gradient(180deg, #0f172a 0%, #0b1220 100%);
-    border-bottom: 1px solid #1e293b;
+    padding: 8px 14px;
+    background: #0d1424;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.10);
   }
   .brand {
     display: flex;
@@ -1159,33 +1154,36 @@
     min-width: 0;
   }
   .logo {
-    font-size: 14px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     color: #f8fafc;
   }
   .title {
     font-size: 12px;
-    color: #94a3b8;
-    font-weight: 600;
+    color: #64748b;
+    font-weight: 500;
+    letter-spacing: 0.01em;
   }
   .workspace {
-    font-size: 13px;
+    font-size: 12px;
     color: #cbd5e1;
-    font-weight: 600;
+    font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 340px;
   }
   .sep {
-    color: #475569;
+    color: #334155;
     font-size: 10px;
   }
   .status {
-    font-size: 11px;
+    font-size: 10.5px;
     margin-left: 4px;
-    color: #94a3b8;
+    color: #64748b;
+    font-feature-settings: "tnum";
+    letter-spacing: 0.02em;
   }
   .status-live {
     color: #34d399;
@@ -1193,30 +1191,35 @@
   .status-lost {
     color: #f87171;
   }
-	  .status-error {
-	    color: #fbbf24;
-	  }
-	  .diff-pill {
-	    display: inline-block;
-	    max-width: 360px;
-	    overflow: hidden;
-	    text-overflow: ellipsis;
-	    white-space: nowrap;
-	    font-size: 11px;
-	    font-weight: 700;
-	    color: #fde68a;
-	  }
-	  .topbar-controls {
-	    display: inline-flex;
-	    align-items: center;
-    gap: 8px;
+  .status-error {
+    color: #fbbf24;
+  }
+  .diff-pill {
+    display: inline-block;
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fbbf24;
+    letter-spacing: 0.01em;
+  }
+  .topbar-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .modes {
     display: inline-flex;
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 999px;
-    padding: 3px;
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 5px;
+    padding: 0;
+    overflow: hidden;
+  }
+  .modes button + button {
+    border-left: 1px solid rgba(148, 163, 184, 0.10);
   }
   .edge-modes button {
     padding: 5px 10px;
@@ -1227,19 +1230,21 @@
     border: 0;
     background: transparent;
     color: #94a3b8;
-    padding: 5px 14px;
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    font-weight: 500;
+    border-radius: 0;
     cursor: pointer;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
+    transition: background 80ms ease, color 80ms ease;
   }
   .modes button:hover {
+    background: rgba(255, 255, 255, 0.03);
     color: #e2e8f0;
   }
   .modes button.active {
-    background: #38bdf8;
-    color: #0b1220;
+    background: rgba(56, 189, 248, 0.12);
+    color: #7dd3fc;
   }
   .context {
     justify-self: end;
@@ -1259,41 +1264,45 @@
     appearance: none;
     border: 0;
     background: transparent;
-    color: #38bdf8;
+    color: #7dd3fc;
     cursor: pointer;
-    font-size: 12px;
-    padding: 2px 4px;
-    border-radius: 4px;
+    font-size: 11.5px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.01em;
   }
   .bcrumb:hover {
-    background: rgba(56, 189, 248, 0.1);
+    background: rgba(56, 189, 248, 0.08);
   }
   .bsep {
-    color: #475569;
+    color: #334155;
   }
   .expand-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
   .ghost {
     appearance: none;
-    border: 1px solid #1e293b;
-    background: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: transparent;
     color: #cbd5e1;
     padding: 4px 10px;
-    border-radius: 999px;
+    border-radius: 4px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
+    letter-spacing: 0.01em;
+    transition: background 80ms ease, color 80ms ease;
   }
   .ghost:hover {
-    background: #1e293b;
+    background: rgba(255, 255, 255, 0.04);
     color: #f8fafc;
   }
   .hint {
     color: #64748b;
-    font-size: 11px;
+    font-size: 10.5px;
+    letter-spacing: 0.01em;
   }
 
   main {
@@ -1683,15 +1692,11 @@
   }
 
   /* Analyze overlay — toggle button + sidebar metrics list. */
-  .analyze-toggle button {
-    /* Accent so the user spots the analytics-on state at a glance —
-       red ties it to the cycle highlight on the graph. */
-    border-color: #475569;
-  }
   .analyze-toggle button.active {
-    background: #7f1d1d;
-    border-color: #ef4444;
-    color: #fee2e2;
+    /* Red tint ties the toggle to the cycle-highlight color on the
+       graph — distinct from mode/edge accents which use sky blue. */
+    background: rgba(239, 68, 68, 0.14);
+    color: #fca5a5;
   }
   .metrics {
     list-style: none;
