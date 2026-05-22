@@ -3,7 +3,7 @@ import {
   DEFAULT_IMAGE_HEURISTIC,
   inferKindFromImage,
   matchesGlob,
-} from "../../../src/formats/compose/inferKind";
+} from "../../../src/formats/_shared/imageHeuristic";
 
 describe("DEFAULT_IMAGE_HEURISTIC", () => {
   it("classifies SQL stores as ContainerDb", () => {

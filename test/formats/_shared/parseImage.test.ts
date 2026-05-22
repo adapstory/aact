@@ -1,7 +1,7 @@
 import {
   parseImage,
   technologyLabel,
-} from "../../../src/formats/compose/parseImage";
+} from "../../../src/formats/_shared/imageHeuristic";
 
 describe("parseImage — bare image refs", () => {
   it("bare repo name", () => {

@@ -2,18 +2,19 @@ import path from "pathe";
 
 import type { Element, Model, ModelIssue, Relation } from "../../model";
 import { buildModel } from "../../model";
-import { parseCsvTags } from "../_shared/tags";
-import { normalizeDependsOn } from "./dependsOn";
-import type { IncludedFile } from "./include";
 import {
   compileImageHeuristic,
   inferKindFromImage,
   matchesGlob,
-} from "./inferKind";
+  parseImage,
+  technologyLabel,
+} from "../_shared/imageHeuristic";
+import { parseCsvTags } from "../_shared/tags";
+import { normalizeDependsOn } from "./dependsOn";
+import type { IncludedFile } from "./include";
 import { normalizeLabels, resolveLabelKeys } from "./labels";
 import { buildAiModelElement, buildAiModelRelation } from "./models";
 import { resolveNamingTransform } from "./naming";
-import { parseImage, technologyLabel } from "./parseImage";
 import { buildProviderElement } from "./providers";
 import type { Document, OffsetTable } from "./sourceMap";
 import { findKeyPair, keyLocation, valueLocationFor } from "./sourceMap";
