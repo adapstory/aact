@@ -235,7 +235,7 @@ describe("executeCheck — diagnostics", () => {
     ).toBe(true);
   });
 
-  it("emits format.missingWritePath for structurizr without writePath when violations exist", async () => {
+  it("emits format.missingWritePath for structurizr JSON source without writePath", async () => {
     mockLoadFormat.mockResolvedValue(
       fakeFormat("structurizr", structurizrDslSyntax),
     );
@@ -248,6 +248,21 @@ describe("executeCheck — diagnostics", () => {
       result.diagnostics?.some((d) => d.kind === "format.missingWritePath"),
     ).toBe(true);
     expect(result.data.suggestedFixes).toHaveLength(0);
+  });
+
+  it("DSL-source structurizr does NOT require writePath (fix writes to source.path)", async () => {
+    mockLoadFormat.mockResolvedValue(
+      fakeFormat("structurizr", structurizrDslSyntax),
+    );
+    mockLoadModel.mockResolvedValue({ model: violatingModel(), issues: [] });
+    const config: AactConfig = {
+      source: { type: "structurizr", path: "./workspace.dsl" },
+    };
+    const result = await executeCheck(config, {});
+    expect(
+      result.diagnostics?.some((d) => d.kind === "format.missingWritePath"),
+    ).toBe(false);
+    expect(result.data.suggestedFixes.length).toBeGreaterThan(0);
   });
 });
 

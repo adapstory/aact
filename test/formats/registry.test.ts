@@ -36,7 +36,9 @@ const CAPABILITIES_MATRIX: ReadonlyArray<{
     // `parser/README.md`; round-trip parity is covered by the generator tests.
     generate: true,
     fix: true,
-    defaultPattern: "workspace.json",
+    // workspace.json (exact basename) + *.dsl (extension) — DSL-files
+    // auto-detect type=structurizr без явного source.type в config.
+    defaultPattern: ["workspace.json", "*.dsl"],
   },
   {
     name: "kubernetes",

@@ -137,6 +137,15 @@ describe("loadAndValidateConfig", () => {
       expect(config.source.type).toBe("compose");
     });
 
+    it.each(["./workspace.dsl", "./architecture.dsl", "./c4.dsl"])(
+      "infers structurizr from %s (DSL-source UX parity)",
+      async (sourcePath) => {
+        mockLoadConfig.mockResolvedValue({ config: { source: sourcePath } });
+        const { config } = await loadAndValidateConfig();
+        expect(config.source.type).toBe("structurizr");
+      },
+    );
+
     it("falls back to plantuml-style positional shape when no pattern matches and explicit type is missing", async () => {
       mockLoadConfig.mockResolvedValue({
         config: { source: { type: "model-json", path: "./my-arch.json" } },

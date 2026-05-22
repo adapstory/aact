@@ -237,13 +237,21 @@ const resolveFixCapability = async (
       },
     };
   }
-  if (config.source.type === "structurizr" && !config.source.writePath) {
+  // Structurizr range-edit semantics выровнены только с DSL. Для
+  // JSON-source loader парсит JSON, но fixes должны идти в DSL —
+  // requirement writePath. DSL-source — fix пишет обратно в тот же
+  // файл (`writePath ?? source.path`), без явного writePath.
+  if (
+    config.source.type === "structurizr" &&
+    !config.source.writePath &&
+    config.source.path.toLowerCase().endsWith(".json")
+  ) {
     return {
       capability: null,
       diagnostic: {
         kind: "format.missingWritePath",
         message:
-          "To use --fix with structurizr, add source.writePath pointing to your workspace.dsl",
+          "To use --fix with a JSON workspace, add source.writePath pointing to your workspace.dsl (fixes are emitted as DSL edits).",
         severity: "warning",
       },
     };
