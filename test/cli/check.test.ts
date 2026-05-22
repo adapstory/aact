@@ -264,6 +264,35 @@ describe("executeCheck — diagnostics", () => {
     ).toBe(false);
     expect(result.data.suggestedFixes.length).toBeGreaterThan(0);
   });
+
+  it("JSON→DSL --fix re-checks via writePath, no false-green CI (Codex P1)", async () => {
+    // Раньше isDslFix branch вешал remaining: 0 unconditionally,
+    // exit=0 даже когда non-fixable violations оставались. Теперь
+    // executeCheck re-load'ит writePath файл (loader умеет DSL),
+    // пересчитывает violations, и exit=1 если хоть одна осталась.
+    mockLoadFormat.mockResolvedValue(
+      fakeFormat("structurizr", structurizrDslSyntax),
+    );
+    mockLoadModel
+      .mockResolvedValueOnce({ model: violatingModel(), issues: [] })
+      .mockResolvedValueOnce({ model: violatingModel(), issues: [] });
+    mockReadFile.mockResolvedValue("workspace { model { } }");
+    mockWriteFile.mockResolvedValue();
+
+    const config: AactConfig = {
+      source: {
+        type: "structurizr",
+        path: "./workspace.json",
+        writePath: "./workspace.dsl",
+      },
+    };
+    const result = await executeCheck(config, { fix: true });
+
+    expect(result.data.fixesApplied?.remaining).toBeGreaterThan(0);
+    expect(result.exitCode).toBe(1);
+    // loadModel был вызван дважды: initial + re-check после write.
+    expect(mockLoadModel).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("executeCheck — disabled rules respected", () => {

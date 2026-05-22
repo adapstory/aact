@@ -382,14 +382,18 @@ const applyFixes = async (
 
   await writeFile(writePath, content, "utf8");
 
-  const isDslFix =
-    !!config.source.writePath && config.source.writePath !== config.source.path;
-  if (isDslFix) {
-    // Cannot re-check Structurizr DSL until user regenerates workspace.json.
-    return { remaining: 0, writePath, conflictDiagnostics };
-  }
-
-  const { model: reModel } = await loadModel(config);
+  // Re-check тот файл что только что записали — независимо от того
+  // совпадает он с `source.path` или это отдельный writePath. Раньше
+  // DSL-fix flow короткозамыкал `remaining: 0` потому что предполагал
+  // что после JSON→DSL emit невозможно пере-загрузить. Но Structurizr
+  // loader принимает И JSON, И DSL — re-load через writePath работает.
+  // Без re-check'а смешанный набор fixable/non-fixable violations
+  // отчитывался как успех → false-green CI.
+  const reLoadConfig: AactConfig = {
+    ...config,
+    source: { ...config.source, path: writePath },
+  };
+  const { model: reModel } = await loadModel(reLoadConfig);
   const reResults = runRules(reModel, config.rules, effective);
   const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
   return { remaining, writePath, conflictDiagnostics };

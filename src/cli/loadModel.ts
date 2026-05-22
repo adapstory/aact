@@ -143,6 +143,8 @@ export const loadModel = async (config: AactConfig): Promise<LoadResult> => {
         { path: config.source.path },
       );
     }
+    // Specific Structurizr hints (keep before universal fallback — они
+    // дают actionable user messages для двух распространённых ошибок).
     if (error instanceof SyntaxError && config.source.type === "structurizr") {
       throw new ToolError(
         "model.parseError",
@@ -161,6 +163,18 @@ export const loadModel = async (config: AactConfig): Promise<LoadResult> => {
         { path: config.source.path, format: "structurizr" },
       );
     }
-    throw error;
+    // Universal fallback: любой остальной non-ToolError throw из
+    // `format.load` — это failure парсера / загрузчика для текущего
+    // формата. Surface как `model.parseError` чтобы agents и users
+    // видели actionable diagnostic, не `internal.unexpected` от
+    // generic CLI catch-all'а. Раньше narrow SyntaxError/TypeError
+    // mapping ловил только structurizr, а compose / k8s / model-json
+    // parse fails проваливались в "internal" категорию.
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ToolError(
+      "model.parseError",
+      `Cannot load ${config.source.type} source: ${config.source.path}. ${message}`,
+      { path: config.source.path, format: config.source.type },
+    );
   }
 };

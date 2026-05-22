@@ -162,7 +162,11 @@ describe("loadModel", () => {
     expect(diag.context).toBeDefined();
   });
 
-  it("re-throws unexpected errors instead of wrapping them in ToolError", async () => {
+  it("wraps any non-ToolError, non-ENOENT throw as model.parseError", async () => {
+    // Универсальный fallback: parse failures из ЛЮБОГО loader'а
+    // (plantuml chevrotain, compose YAML, k8s YAML, model-json JSON.parse,
+    // structurizr DSL) приходят сюда как plain Error и должны стать
+    // model.parseError, не internal.unexpected.
     const load = vi
       .fn()
       .mockRejectedValue(new Error("boom — totally unexpected"));
@@ -171,8 +175,48 @@ describe("loadModel", () => {
     const error = await loadModel(plantumlConfig).catch(
       (error_: unknown) => error_,
     );
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("boom — totally unexpected");
-    expect(error).not.toBeInstanceOf(ToolError);
+    expect(error).toBeInstanceOf(ToolError);
+    expect((error as ToolError).kind).toBe("model.parseError");
+    expect((error as ToolError).message).toContain("boom — totally unexpected");
+    expect((error as ToolError).context).toMatchObject({
+      format: "plantuml",
+      path: plantumlConfig.source.path,
+    });
+  });
+
+  it("preserves Structurizr-specific JSON hint for SyntaxError", async () => {
+    const structurizrConfig = {
+      source: { type: "structurizr", path: "./workspace.json" },
+    } as Parameters<typeof loadModel>[0];
+    const load = vi
+      .fn()
+      .mockRejectedValue(new SyntaxError("Unexpected token } at position 42"));
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
+
+    const error = await loadModel(structurizrConfig).catch(
+      (error_: unknown) => error_,
+    );
+    expect(error).toBeInstanceOf(ToolError);
+    expect((error as ToolError).kind).toBe("model.parseError");
+    expect((error as ToolError).message).toMatch(/valid JSON/);
+  });
+
+  it("propagates compose / k8s parse failures as model.parseError", async () => {
+    const composeConfig = {
+      source: { type: "compose", path: "./compose.yaml" },
+    } as Parameters<typeof loadModel>[0];
+    const load = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("YAMLParseError: bad indentation at line 5"),
+      );
+    mockLoadFormat.mockResolvedValue(fakeFormat(load));
+
+    const error = await loadModel(composeConfig).catch(
+      (error_: unknown) => error_,
+    );
+    expect(error).toBeInstanceOf(ToolError);
+    expect((error as ToolError).kind).toBe("model.parseError");
+    expect((error as ToolError).context).toMatchObject({ format: "compose" });
   });
 });
