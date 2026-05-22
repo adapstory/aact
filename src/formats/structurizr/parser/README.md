@@ -57,9 +57,9 @@ gitignored `.parser-refs/` directory.
 | `grammar.md`  | Target grammar (rule by rule, scope decisions).                                                                                   |
 
 The pipeline: `joinContinuations → expandSubstitutions → tokenize →
-normalizeKeywordCase → stripOpaqueBlocks → stripDeploymentBlocks →
-stripInlineDirectives → findHardRemovedTokens → parse (CST) → buildAst
-→ toModel`.
+normalizeKeywordCase → extractAndApplyArchetypes → stripOpaqueBlocks →
+stripDeploymentBlocks → stripInlineDirectives → findHardRemovedTokens →
+parse (CST) → buildAst → toModel`.
 
 ## Scope
 

@@ -51,6 +51,8 @@ import {
   DeploymentEnvironment,
   DeploymentGroup,
   DeploymentNode,
+  Description,
+  Element,
   EnterpriseHardError,
   Equals,
   Group,
@@ -65,6 +67,9 @@ import {
   SoftwareSystemInstance,
   StringLiteral,
   Styles,
+  Tag,
+  Tags,
+  Technology,
   Terminology,
   Theme,
   Themes,
@@ -85,6 +90,26 @@ export interface HardRemovedError {
   /** Human hint at the modern replacement. */
   readonly hint: string;
   readonly range: SourceLocation;
+}
+
+/**
+ * Archetype alias declaration extracted from an `archetypes { ... }`
+ * block. The alias name (LHS of `=`) becomes a synthetic keyword
+ * usable in element declaration position; defaults from the body
+ * (description / technology / tags) are applied during toModel when
+ * an element is declared via the alias.
+ */
+export interface ArchetypeAlias {
+  /** The base element-kind token type (Container, Person, etc.). */
+  readonly baseTokenType: TokenType;
+  /** Defaults merged with the element declared via this alias. */
+  readonly defaults: ArchetypeDefaults;
+}
+
+export interface ArchetypeDefaults {
+  readonly description?: string;
+  readonly technology?: string;
+  readonly tags: readonly string[];
 }
 
 /**
@@ -292,6 +317,301 @@ export const stripOpaqueBlocks = (
   }
 
   return { tokens: out, blocks };
+};
+
+// ── Archetype alias support ─────────────────────────────────────────────
+
+/**
+ * Token type for each base element kind an archetype can alias.
+ * Lowercased keys for case-insensitive lookup (reference DSL dispatches
+ * case-insensitively).
+ */
+const ARCHETYPE_BASE_KEYWORDS: ReadonlyMap<string, TokenType> = new Map([
+  ["person", Person],
+  ["softwaresystem", SoftwareSystem],
+  ["container", Container],
+  ["component", Component],
+  ["group", Group],
+  ["element", Element],
+]);
+
+/**
+ * Reads the first `archetypes { ... }` block from the token stream,
+ * extracts alias declarations of the form
+ * `<aliasName> = <baseKeyword|otherAlias> [ { defaults? } ]`, and walks
+ * the rest of the stream substituting each alias-as-kind usage with
+ * the resolved base keyword token. Chained aliases are resolved
+ * recursively (e.g. `springBoot = application { … }` where
+ * `application = container { … }` becomes `springBoot → container`
+ * with merged defaults).
+ *
+ * The substituted token carries a custom `payload` describing the
+ * alias name and the defaults to apply — the visitor reads it when
+ * building the element AST node so toModel can merge the defaults
+ * onto the resulting Container without altering Source positions.
+ *
+ * Out of scope (deliberate):
+ *   - Kind-default form `softwaresystem { description "X" }` inside
+ *     `archetypes { … }` with no alias name (applies defaults to ALL
+ *     declarations of that kind).
+ *   - Relationship archetypes `https = -> { … }` — requires a new
+ *     `--<alias>->` lexer token and is rare in practice.
+ */
+export const extractAndApplyArchetypes = (
+  tokens: readonly IToken[],
+): {
+  tokens: IToken[];
+  aliasMap: ReadonlyMap<string, ArchetypeAlias>;
+} => {
+  const aliasMap = new Map<string, ArchetypeAlias>();
+
+  // Find the archetypes block. There's at most one in a workspace per
+  // the reference parser (`ArchetypesParser` is dispatched once).
+  const archetypesIdx = tokens.findIndex((t) => tokenMatcher(t, Archetypes));
+  if (archetypesIdx === -1) {
+    return { tokens: [...tokens], aliasMap };
+  }
+  const braceIdx = findOpeningBrace(tokens, archetypesIdx);
+  if (braceIdx < 0) {
+    return { tokens: [...tokens], aliasMap };
+  }
+  // Find the matching close brace for the archetypes block.
+  let depth = 1;
+  let blockEnd = braceIdx + 1;
+  while (blockEnd < tokens.length && depth > 0) {
+    if (tokenMatcher(tokens[blockEnd], LBrace)) depth++;
+    else if (tokenMatcher(tokens[blockEnd], RBrace)) depth--;
+    if (depth === 0) break;
+    blockEnd++;
+  }
+  if (depth !== 0) {
+    return { tokens: [...tokens], aliasMap };
+  }
+
+  // Walk the block contents and extract each alias declaration.
+  // Declarations have the form:
+  //   <Identifier> Equals <baseKeyword|aliasIdentifier> [LBrace ... RBrace]
+  let i = braceIdx + 1;
+  while (i < blockEnd) {
+    if (
+      tokens[i].tokenType.name !== "Identifier" ||
+      i + 2 >= blockEnd ||
+      !tokenMatcher(tokens[i + 1], Equals)
+    ) {
+      i++;
+      continue;
+    }
+    const aliasName = tokens[i].image;
+    const rhs = tokens[i + 2];
+    const rhsImage = rhs.image.toLowerCase();
+    const baseTokenType = resolveBaseType(rhs, rhsImage, aliasMap);
+    if (!baseTokenType) {
+      // Unrecognised RHS — likely a relationship archetype (`->`) or
+      // a kind we don't model. Skip; don't poison the alias map.
+      i += 3;
+      continue;
+    }
+    // Optional body — collect defaults if present.
+    let next = i + 3;
+    let defaults: ArchetypeDefaults = {
+      tags: parentTags(rhs, rhsImage, aliasMap),
+    };
+    if (next < blockEnd && tokenMatcher(tokens[next], LBrace)) {
+      const bodyEnd = findMatchingBrace(tokens, next, blockEnd);
+      if (bodyEnd > next) {
+        defaults = mergeArchetypeDefaults(
+          defaults,
+          parseArchetypeBody(tokens, next + 1, bodyEnd),
+        );
+        next = bodyEnd + 1;
+      } else {
+        next++;
+      }
+    }
+    aliasMap.set(aliasName.toLowerCase(), {
+      baseTokenType,
+      defaults,
+    });
+    i = next;
+  }
+
+  // Now walk the entire stream (the archetypes block stays in place
+  // and will be stripped later by `stripOpaqueBlocks`). Substitute
+  // alias-as-kind usages in the rest of the token stream.
+  const out: IToken[] = [];
+  for (const [k, t] of tokens.entries()) {
+    // Don't substitute inside the archetypes block itself — its
+    // identifier tokens (alias names on the LHS) must stay so
+    // stripOpaqueBlocks recognises the block structure.
+    if (k >= archetypesIdx && k <= blockEnd) {
+      out.push(t);
+      continue;
+    }
+    if (t.tokenType.name !== "Identifier") {
+      out.push(t);
+      continue;
+    }
+    const alias = aliasMap.get(t.image.toLowerCase());
+    if (!alias) {
+      out.push(t);
+      continue;
+    }
+    // Substitute only at element-kind position — the previous
+    // non-trivial token must be `Equals` (the canonical form
+    // `<id> = <alias> "Name"`) so we don't mangle relationship
+    // endpoints or other identifier slots.
+    const prev = out.at(-1);
+    if (!prev || !tokenMatcher(prev, Equals)) {
+      out.push(t);
+      continue;
+    }
+    out.push(rewriteAsKeyword(t, alias));
+  }
+  return { tokens: out, aliasMap };
+};
+
+/**
+ * Resolve the RHS of an archetype declaration to a base token type.
+ * The RHS is either a direct base keyword (`container`, `person`, …)
+ * or another alias previously declared in the same block.
+ */
+const resolveBaseType = (
+  rhs: IToken,
+  rhsImageLower: string,
+  aliasMap: ReadonlyMap<string, ArchetypeAlias>,
+): TokenType | undefined => {
+  // Direct base keyword as a parsed keyword token.
+  const direct = ARCHETYPE_BASE_KEYWORDS.get(rhsImageLower);
+  if (direct && rhs.tokenType !== Identifier) return direct;
+  // Direct base keyword spelled in lowercase (lexed as Identifier).
+  if (direct && rhs.tokenType === Identifier) return direct;
+  // Chained alias — look up earlier declaration.
+  const chained = aliasMap.get(rhsImageLower);
+  if (chained) return chained.baseTokenType;
+  return undefined;
+};
+
+/**
+ * When an alias chains to another alias, inherit the parent alias's
+ * tags as the starting tag list for the child's defaults. Direct base
+ * keywords contribute no inherited tags.
+ */
+const parentTags = (
+  rhs: IToken,
+  rhsImageLower: string,
+  aliasMap: ReadonlyMap<string, ArchetypeAlias>,
+): readonly string[] => {
+  if (
+    rhs.tokenType !== Identifier &&
+    ARCHETYPE_BASE_KEYWORDS.has(rhsImageLower)
+  )
+    return [];
+  return aliasMap.get(rhsImageLower)?.defaults.tags ?? [];
+};
+
+const findMatchingBrace = (
+  tokens: readonly IToken[],
+  openIdx: number,
+  hardLimit: number,
+): number => {
+  let depth = 1;
+  let j = openIdx + 1;
+  while (j < hardLimit && depth > 0) {
+    if (tokenMatcher(tokens[j], LBrace)) depth++;
+    else if (tokenMatcher(tokens[j], RBrace)) depth--;
+    if (depth === 0) return j;
+    j++;
+  }
+  return -1;
+};
+
+/**
+ * Parse the body of one archetype declaration (`{ description "…"; tag
+ * "…"; technology "…" }`) and extract supported defaults. Out of
+ * scope: properties / perspectives — they would need round-trip
+ * onto every element's `properties`/`perspectives` map and aren't
+ * commonly used as archetype defaults.
+ */
+const parseArchetypeBody = (
+  tokens: readonly IToken[],
+  start: number,
+  end: number,
+): ArchetypeDefaults => {
+  let description: string | undefined;
+  let technology: string | undefined;
+  const tags: string[] = [];
+  let i = start;
+  while (i < end) {
+    const t = tokens[i];
+    if (tokenMatcher(t, Description) && i + 1 < end) {
+      const v = tokens[i + 1];
+      if (tokenMatcher(v, StringLiteral)) {
+        description = unwrapStringImage(v.image);
+        i += 2;
+        continue;
+      }
+    }
+    if (tokenMatcher(t, Technology) && i + 1 < end) {
+      const v = tokens[i + 1];
+      if (tokenMatcher(v, StringLiteral)) {
+        technology = unwrapStringImage(v.image);
+        i += 2;
+        continue;
+      }
+    }
+    if ((tokenMatcher(t, Tag) || tokenMatcher(t, Tags)) && i + 1 < end) {
+      // Accept both `tag "a"` and multi-string `tags "a" "b"` forms;
+      // each string may carry a CSV list which we split below.
+      let j = i + 1;
+      while (j < end && tokenMatcher(tokens[j], StringLiteral)) {
+        const raw = unwrapStringImage(tokens[j].image);
+        for (const piece of raw.split(",")) {
+          const trimmed = piece.trim();
+          if (trimmed) tags.push(trimmed);
+        }
+        j++;
+      }
+      i = j;
+      continue;
+    }
+    // Nested archetype, unsupported body statement, or noise — skip.
+    if (tokenMatcher(t, LBrace)) {
+      const close = findMatchingBrace(tokens, i, end);
+      i = close > i ? close + 1 : i + 1;
+      continue;
+    }
+    i++;
+  }
+  return { description, technology, tags };
+};
+
+const mergeArchetypeDefaults = (
+  base: ArchetypeDefaults,
+  add: ArchetypeDefaults,
+): ArchetypeDefaults => ({
+  description: add.description ?? base.description,
+  technology: add.technology ?? base.technology,
+  tags: [...base.tags, ...add.tags],
+});
+
+const unwrapStringImage = (image: string): string => image.slice(1, -1);
+
+/**
+ * Re-tag an alias `Identifier` token as the alias's base keyword token
+ * so the chevrotain parser dispatches to the correct element rule.
+ * Attaches a non-standard `aliasUsage` property so the visitor can
+ * recover the alias name + defaults at AST-build time.
+ */
+const rewriteAsKeyword = (token: IToken, alias: ArchetypeAlias): IToken => {
+  const idxKey = "tokenTypeIdx";
+  const aliasName = token.image;
+  return {
+    ...token,
+    tokenType: alias.baseTokenType,
+    [idxKey]: (alias.baseTokenType as TokenType & { tokenTypeIdx?: number })
+      .tokenTypeIdx,
+    aliasUsage: { name: aliasName, defaults: alias.defaults },
+  } as IToken;
 };
 
 /**

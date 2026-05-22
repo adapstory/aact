@@ -29,10 +29,12 @@ import type {
   NameOverride,
   RelationshipNode,
   StringLiteral as AstStringLiteral,
+  TagsStatement,
   WorkspaceBodyNode,
   WorkspaceNode,
 } from "./ast";
 import { parserInstance } from "./parser";
+import type { ArchetypeDefaults } from "./preParse";
 
 const sourcePosFromTokenStart = (token: IToken): SourcePosition => ({
   line: token.startLine!,
@@ -104,6 +106,10 @@ interface ElementHeaderAst {
   readonly description?: AstStringLiteral;
   readonly technology?: AstStringLiteral;
   readonly tags?: AstStringLiteral;
+  /** When the kind token was substituted from an archetype alias by
+   *  the pre-parse pass, this carries the alias name + defaults so
+   *  `elementDeclaration` can merge them onto the AST node. */
+  readonly aliasUsage?: { name: string; defaults: ArchetypeDefaults };
 }
 
 const findClosingBrace = (cst: CstNode): IToken | undefined => {
@@ -361,7 +367,7 @@ class StructurizrCstToAst extends BaseVisitor {
 
   elementDeclaration(ctx: ElementDeclarationCtx): ElementNode {
     const header = this.visit(ctx.elementHeader[0]) as ElementHeaderAst;
-    const body: ElementBodyNode[] = ctx.elementBody
+    let body: ElementBodyNode[] = ctx.elementBody
       ? (this.visit(ctx.elementBody[0]) as ElementBodyNode[])
       : [];
     const assignedCst = ctx.assignedIdentifier?.[0];
@@ -386,6 +392,50 @@ class StructurizrCstToAst extends BaseVisitor {
       this.file,
     );
 
+    // Apply archetype-alias defaults. Source positionals win — only
+    // fill description / technology when the user didn't set them.
+    // Tags from the alias body merge additively (`archetype.tags +
+    // header.tags`) per `ContainerParser.parse` in the reference; the
+    // alias *name* itself is NOT added as a tag (verified against
+    // `DslTests.test_archetypes` — Customer API only carries
+    // "Application" / "Spring Boot", not "application" /
+    // "springBootApplication"). We inject a synthetic TagsStatement at
+    // the start of the body so the normal toModel aggregation merges
+    // it with explicit `tags "..."` lines.
+    //
+    // Out of scope (deliberate, documented in grammar.md):
+    //   - properties / perspectives propagation from archetype body
+    //   - kind-default form `softwaresystem { ... }` without alias name
+    //   - relationship archetypes (`a --https-> b`)
+    let headerDescription = header.description;
+    let headerTechnology = header.technology;
+    if (header.aliasUsage) {
+      const { defaults } = header.aliasUsage;
+      if (!headerDescription && defaults.description) {
+        headerDescription = this.syntheticString(
+          defaults.description,
+          header.kindToken,
+        );
+      }
+      if (!headerTechnology && defaults.technology) {
+        headerTechnology = this.syntheticString(
+          defaults.technology,
+          header.kindToken,
+        );
+      }
+      if (defaults.tags.length > 0) {
+        const tagsStmt: TagsStatement = {
+          kind: "tags",
+          value: this.syntheticString(
+            defaults.tags.join(","),
+            header.kindToken,
+          ),
+          range: rangeFromToken(header.kindToken, this.file),
+        };
+        body = [tagsStmt, ...body];
+      }
+    }
+
     switch (header.kind) {
       case "person": {
         return {
@@ -393,7 +443,7 @@ class StructurizrCstToAst extends BaseVisitor {
           assignedIdentifier: assignedAst,
           name: header.name,
           headerTags: header.tags,
-          headerDescription: header.description,
+          headerDescription,
           body,
           range: baseRange,
         };
@@ -404,7 +454,7 @@ class StructurizrCstToAst extends BaseVisitor {
           assignedIdentifier: assignedAst,
           name: header.name,
           headerTags: header.tags,
-          headerDescription: header.description,
+          headerDescription,
           body,
           range: baseRange,
         };
@@ -415,8 +465,8 @@ class StructurizrCstToAst extends BaseVisitor {
           assignedIdentifier: assignedAst,
           name: header.name,
           headerTags: header.tags,
-          headerDescription: header.description,
-          headerTechnology: header.technology,
+          headerDescription,
+          headerTechnology,
           body,
           range: baseRange,
         };
@@ -427,8 +477,8 @@ class StructurizrCstToAst extends BaseVisitor {
           assignedIdentifier: assignedAst,
           name: header.name,
           headerTags: header.tags,
-          headerDescription: header.description,
-          headerTechnology: header.technology,
+          headerDescription,
+          headerTechnology,
           body,
           range: baseRange,
         };
@@ -443,7 +493,7 @@ class StructurizrCstToAst extends BaseVisitor {
           kind: "element",
           assignedIdentifier: assignedAst,
           name: header.name,
-          headerDescription: header.description,
+          headerDescription,
           headerTags: header.tags,
           body,
           range: baseRange,
@@ -513,6 +563,11 @@ class StructurizrCstToAst extends BaseVisitor {
     }
 
     const lastToken = positional3 ?? positional2 ?? positional1 ?? nameToken;
+    const aliasUsage = (
+      kindToken as IToken & {
+        aliasUsage?: { name: string; defaults: ArchetypeDefaults };
+      }
+    ).aliasUsage;
     return {
       kind: kindName,
       kindToken,
@@ -521,6 +576,7 @@ class StructurizrCstToAst extends BaseVisitor {
       description,
       technology,
       tags,
+      aliasUsage,
     };
   }
 
@@ -954,6 +1010,18 @@ class StructurizrCstToAst extends BaseVisitor {
       kind: "string",
       value: unwrapStringLiteral(token.image),
       range: rangeFromToken(token, this.file),
+    };
+  }
+
+  /** Build a `StringLiteral` AST node for a value sourced from a
+   *  pre-parse pass (e.g. archetype defaults) where no source token
+   *  exists. The range points at the kind keyword so diagnostics still
+   *  resolve to a real spot in the file. */
+  private syntheticString(value: string, anchor: IToken): AstStringLiteral {
+    return {
+      kind: "string",
+      value,
+      range: rangeFromToken(anchor, this.file),
     };
   }
 }

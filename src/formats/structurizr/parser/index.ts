@@ -13,11 +13,13 @@
 import type { LoadResult } from "../../types";
 import { parseStructurizrDsl } from "./parser";
 import type {
+  ArchetypeAlias,
   HardRemovedError,
   OpaqueBlock,
   ParsedInfoBlock,
 } from "./preParse";
 import {
+  extractAndApplyArchetypes,
   findHardRemovedTokens,
   normalizeKeywordCase,
   stripDeploymentBlocks,
@@ -39,14 +41,20 @@ export interface ChevrotainParseResult extends LoadResult {
    *  Empty on a clean parse. */
   readonly parseErrors: readonly ChevrotainParseError[];
   /** Opaque workspace blocks (views/styles/configuration/branding/
-   *  terminology/themes) that were skipped during parsing. They are
-   *  preserved here so a future writer can reinsert them verbatim. */
+   *  terminology/themes/archetypes) that were skipped during parsing.
+   *  They are preserved here so a future writer can reinsert them
+   *  verbatim. */
   readonly opaqueBlocks: readonly OpaqueBlock[];
   /** Deployment-family blocks (deploymentEnvironment/deploymentNode/
    *  …) skipped because aact does not model deployment topology yet.
    *  Each one carries the construct name and a hint so the CLI can
    *  show an info-level "N deployment blocks ignored" summary. */
   readonly infoBlocks: readonly ParsedInfoBlock[];
+  /** Archetype aliases extracted from `archetypes { ... }`. Already
+   *  applied to the token stream during pre-parse (alias → base
+   *  keyword substitution + defaults merged onto resulting elements).
+   *  Exposed for diagnostics and downstream tooling. */
+  readonly archetypeAliases: ReadonlyMap<string, ArchetypeAlias>;
 }
 
 /**
@@ -78,22 +86,25 @@ export const parseSource = (
   const lex = StructurizrLexer.tokenize(substituted);
 
   // Pre-parse passes in order:
-  //   1. Strip opaque workspace blocks (views/styles/…) so their inner
-  //      tokens never reach the parser or surface lex noise (`*` etc.).
-  //   2. Strip deployment-family blocks — recognised but not modelled.
-  //   3. Convert hard-removed tokens (`!ref`/`enterprise`/…) into
+  //   1. Normalise keyword case — rewrite lowercase keyword spellings
+  //      (`softwaresystem`, …) from Identifier back to canonical
+  //      keyword tokens so the grammar matches the reference parser's
+  //      case-insensitive dispatch.
+  //   2. Extract `archetypes { … }` alias declarations and substitute
+  //      every alias-as-kind usage with the resolved base keyword.
+  //      Runs BEFORE opaque stripping so the archetypes-block contents
+  //      are still readable; the block itself is stripped by the next
+  //      pass.
+  //   3. Strip opaque workspace blocks (views/styles/archetypes/…) so
+  //      their inner tokens never reach the parser.
+  //   4. Strip deployment-family blocks — recognised but not modelled.
+  //   5. Strip inline `!docs` / `!decisions` / `!adrs` directives.
+  //   6. Convert hard-removed tokens (`!ref`/`enterprise`/…) into
   //      explicit errors with replacement hints.
-  // First normalisation: rewrite lowercase keyword spellings
-  // (`softwaresystem`, `softwaresysteminstance`, …) from Identifier
-  // back to their canonical keyword tokens so the grammar matches
-  // the reference parser's case-insensitive dispatch.
   const normalizedTokens = normalizeKeywordCase(lex.tokens);
-  const stripped = stripOpaqueBlocks(normalizedTokens, filePath);
+  const archetyped = extractAndApplyArchetypes(normalizedTokens);
+  const stripped = stripOpaqueBlocks(archetyped.tokens, filePath);
   const deployment = stripDeploymentBlocks(stripped.tokens, filePath);
-  // Strip inline `!docs` / `!decisions` / `!adrs` directives — they
-  // take 1–2 positional path/importer args and no body. Run AFTER
-  // hard-removed pre-parse so a stray `!constant` near them still
-  // surfaces with its full diagnostic.
   const inlineStripped = stripInlineDirectives(deployment.tokens);
   const hardRemoved = findHardRemovedTokens(inlineStripped, filePath);
 
@@ -134,6 +145,7 @@ export const parseSource = (
     parseErrors,
     opaqueBlocks: stripped.blocks,
     infoBlocks: deployment.blocks,
+    archetypeAliases: archetyped.aliasMap,
   };
 };
 
