@@ -66,35 +66,24 @@
   .el {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 12px 14px 14px;
-    border-radius: 12px;
-    background: linear-gradient(
-      180deg,
-      var(--fill) 0%,
-      color-mix(in srgb, var(--fill) 82%, black) 100%
-    );
+    gap: 3px;
+    padding: 10px 12px 12px;
+    border-radius: 6px;
+    background: var(--fill);
     color: var(--text, #f8fafc);
-    box-shadow:
-      0 10px 28px -18px color-mix(in srgb, var(--fill) 70%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border: 1px solid color-mix(in srgb, var(--fill) 60%, black);
     box-sizing: border-box;
     width: 100%;
     height: 100%;
     cursor: pointer;
-    transition:
-      transform 120ms ease,
-      box-shadow 120ms ease;
+    transition: filter 100ms ease, border-color 100ms ease;
   }
   .el:hover {
-    transform: translateY(-1px);
-    box-shadow:
-      0 14px 36px -16px color-mix(in srgb, var(--fill) 80%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    filter: brightness(1.08);
   }
   .el.is-selected {
-    outline: 2px solid #38bdf8;
-    outline-offset: 2px;
+    border-color: #7dd3fc;
+    box-shadow: 0 0 0 1px #7dd3fc inset;
   }
   .head {
     display: flex;
@@ -102,16 +91,17 @@
     justify-content: space-between;
   }
   .kind {
-    font-size: 9px;
-    letter-spacing: 0.14em;
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--text) 70%, transparent);
-    font-weight: 700;
+    color: color-mix(in srgb, var(--text) 65%, transparent);
+    font-weight: 500;
   }
   .label {
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.15;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.005em;
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -120,13 +110,13 @@
   }
   .tech {
     font-size: 10px;
-    color: color-mix(in srgb, var(--text) 85%, transparent);
-    font-style: italic;
+    color: color-mix(in srgb, var(--text) 75%, transparent);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .desc {
     font-size: 11px;
-    line-height: 1.3;
-    color: color-mix(in srgb, var(--text) 78%, transparent);
+    line-height: 1.35;
+    color: color-mix(in srgb, var(--text) 70%, transparent);
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;

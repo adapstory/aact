@@ -391,12 +391,15 @@
   /** Colour mapping for diff status overlays. Tied to the bordering
    *  style in `decoratedNodes` / `decoratedEdges` below — keep in
    *  sync with the visual key shown next to the diff banner. */
+  // Desaturated diff palette derived from Zed's One Dark token set —
+  // each hue is paired with a glyph (see diffGlyph) so the signal
+  // survives colour-blindness and dark-mode shifts.
   const DIFF_COLOR: Readonly<Record<ChangeAction, string>> = {
-    added: "#22c55e", // green
-    removed: "#ef4444", // red
-    modified: "#eab308", // yellow
-    renamed: "#3b82f6", // blue
-    moved: "#a855f7", // purple
+    added: "#a1c181",
+    removed: "#d07277",
+    modified: "#dec184",
+    renamed: "#7dd3fc",
+    moved: "#b6a4d7",
   };
 
   const diffGlyph = (action: ChangeAction): string => {
@@ -404,13 +407,13 @@
       case "added":
         return "+";
       case "removed":
-        return "-";
+        return "−";
       case "modified":
         return "~";
       case "renamed":
-        return "R";
+        return "↦";
       case "moved":
-        return "M";
+        return "⇄";
     }
   };
 
@@ -668,11 +671,11 @@
   const issueMessage = (issue: ModelIssue): string =>
     issue.message ? `${issue.kind}: ${issue.message}` : issue.kind;
 
-	  const minimapNodeColor = (node: Node): string => {
-	    const diffAction = (node.data as { diffAction?: ChangeAction } | undefined)
-	      ?.diffAction;
-	    if (diffAction) return DIFF_COLOR[diffAction];
-	    const kind = String((node.data as { kind?: string } | undefined)?.kind);
+  const minimapNodeColor = (node: Node): string => {
+    const diffAction = (node.data as { diffAction?: ChangeAction } | undefined)
+      ?.diffAction;
+    if (diffAction) return DIFF_COLOR[diffAction];
+    const kind = String((node.data as { kind?: string } | undefined)?.kind);
     const external = Boolean(
       (node.data as { external?: boolean } | undefined)?.external,
     );
@@ -848,16 +851,18 @@
       <aside class="legend" aria-label="C4 element palette">
         <span class="legend-row"><span class="swatch" style="background: #08427b;"></span>Person</span>
         <span class="legend-row"><span class="swatch" style="background: #1168bd;"></span>System</span>
-	        <span class="legend-row"><span class="swatch" style="background: #438dd5;"></span>Container</span>
-	        <span class="legend-row"><span class="swatch" style="background: #85bbf0;"></span>Component</span>
-	        <span class="legend-row"><span class="swatch" style="background: #475569;"></span>External</span>
-	        {#if diffMode}
-	          <span class="legend-rule"></span>
-	          <span class="legend-row"><span class="swatch" style="background: #22c55e;"></span>Added</span>
-	          <span class="legend-row"><span class="swatch" style="background: #eab308;"></span>Modified</span>
-	          <span class="legend-row"><span class="swatch" style="background: #ef4444;"></span>Removed</span>
-	        {/if}
-	      </aside>
+        <span class="legend-row"><span class="swatch" style="background: #438dd5;"></span>Container</span>
+        <span class="legend-row"><span class="swatch" style="background: #85bbf0;"></span>Component</span>
+        <span class="legend-row"><span class="swatch" style="background: #475569;"></span>External</span>
+        {#if diffMode}
+          <span class="legend-rule"></span>
+          <span class="legend-row"><span class="swatch" style="background: #a1c181;"></span>Added</span>
+          <span class="legend-row"><span class="swatch" style="background: #dec184;"></span>Modified</span>
+          <span class="legend-row"><span class="swatch" style="background: #d07277;"></span>Removed</span>
+          <span class="legend-row"><span class="swatch" style="background: #7dd3fc;"></span>Renamed</span>
+          <span class="legend-row"><span class="swatch" style="background: #b6a4d7;"></span>Moved</span>
+        {/if}
+      </aside>
 
       {#if activeError}
         <aside class="error-overlay" role="status" aria-live="polite">
@@ -994,57 +999,54 @@
             {/each}
           </ul>
         {/if}
-	        <p class="hint">
-	          {#if mode === "drill"}Double-click to enter this boundary.
-	          {:else if mode === "expand"}Double-click to {expanded.has(selectedBoundary.name) ? "collapse" : "expand"} this boundary.
-	          {:else}This boundary is part of the full hierarchy.
-	          {/if}
-	        </p>
-	      {:else if diffData}
-	        <h2>Diff</h2>
-	        <p class="diff-headline">{diffData.summary.headline}</p>
-	        <p class="info-line">
-	          <span><b>{diffData.summary.bySeverity.structural}</b> structural</span>
-	          <span class="bullet" aria-hidden="true">·</span>
-	          <span><b>{diffData.summary.bySeverity.semantic}</b> semantic</span>
-	          <span class="bullet" aria-hidden="true">·</span>
-	          <span><b>{diffData.summary.bySeverity.cosmetic}</b> cosmetic</span>
-	          <span class="bullet" aria-hidden="true">·</span>
-	          <span><b>{diffData.changes.length}</b> total</span>
-	        </p>
-	        {#if diffGroups.length}
-	          <h4>Groups</h4>
-	          <ul class="change-list">
-	            {#each diffGroups as group (group.id)}
-	              <li class="change-row" style="border-left-color: #38bdf8;">
-	                <span class="change-title">{group.title}</span>
-	                <span class="change-subtitle">{groupSubtitle(group)} · {Math.round(group.confidence * 100)}% confidence</span>
-	              </li>
-	            {/each}
-	          </ul>
-	        {/if}
-	        {#if topDiffChanges.length}
-	          <h4>Changes</h4>
-	          <ul class="change-list">
-	            {#each topDiffChanges as change (change.address)}
-	              <li class="change-row" style={`border-left-color: ${DIFF_COLOR[change.action]};`}>
-	                <span class="change-title">{changeTitle(change)}</span>
-	                <span class="change-subtitle">{change.entity} {change.action} · {changeSubtitle(change)}</span>
-	              </li>
-	            {/each}
-	          </ul>
-	        {/if}
-	      {:else if analyzeOn && envelope}
-	        {@const a = envelope.data.analysis}
-        <h2>Architecture metrics</h2>
-        <div class="stats">
-          <div><span class="num">{a.elementsCount}</span> elements</div>
-          <div><span class="num">{a.databases.count}</span> databases</div>
-          <div><span class="num">{a.relationsByStyle.sync + a.relationsByStyle.async + a.relationsByStyle.unspecified}</span> relations</div>
-          {#if a.cycles.count > 0}
-            <div class="warn"><span class="num">{a.cycles.count}</span> cycle{a.cycles.count === 1 ? "" : "s"}</div>
+        <p class="hint">
+          {#if mode === "drill"}Double-click to enter this boundary.
+          {:else if mode === "expand"}Double-click to {expanded.has(selectedBoundary.name) ? "collapse" : "expand"} this boundary.
+          {:else}This boundary is part of the full hierarchy.
           {/if}
-        </div>
+        </p>
+      {:else if diffData}
+        <h4>Diff</h4>
+        <p class="diff-headline">{diffData.summary.headline}</p>
+        <dl class="info-line">
+          <div><dt>structural</dt><dd>{diffData.summary.bySeverity.structural}</dd></div>
+          <div><dt>semantic</dt><dd>{diffData.summary.bySeverity.semantic}</dd></div>
+          <div><dt>cosmetic</dt><dd>{diffData.summary.bySeverity.cosmetic}</dd></div>
+          <div><dt>total</dt><dd>{diffData.changes.length}</dd></div>
+        </dl>
+        {#if diffGroups.length}
+          <h4>Groups</h4>
+          <ul class="change-list">
+            {#each diffGroups as group (group.id)}
+              <li class="change-row" style="border-left-color: #38bdf8;">
+                <span class="change-title">{group.title}</span>
+                <span class="change-subtitle">{groupSubtitle(group)} · {Math.round(group.confidence * 100)}% confidence</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if topDiffChanges.length}
+          <h4>Changes</h4>
+          <ul class="change-list">
+            {#each topDiffChanges as change (change.address)}
+              <li class="change-row" style={`border-left-color: ${DIFF_COLOR[change.action]};`}>
+                <span class="change-title"><span class="change-glyph" style={`color: ${DIFF_COLOR[change.action]};`}>{diffGlyph(change.action)}</span> {changeTitle(change)}</span>
+                <span class="change-subtitle">{change.entity} · {changeSubtitle(change)}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {:else if analyzeOn && envelope}
+        {@const a = envelope.data.analysis}
+        <h4>Metrics</h4>
+        <dl class="info-line">
+          <div><dt>elements</dt><dd>{a.elementsCount}</dd></div>
+          <div><dt>databases</dt><dd>{a.databases.count}</dd></div>
+          <div><dt>relations</dt><dd>{a.relationsByStyle.sync + a.relationsByStyle.async + a.relationsByStyle.unspecified}</dd></div>
+          {#if a.cycles.count > 0}
+            <div class="warn"><dt>cycles</dt><dd>{a.cycles.count}</dd></div>
+          {/if}
+        </dl>
         {#if Object.keys(a.elementsByKind).length}
           <h4>By kind</h4>
           <ul class="metrics">
@@ -1060,9 +1062,8 @@
           <li><span class="k">unspecified</span><span class="v">{a.relationsByStyle.unspecified}</span></li>
         </ul>
         {#if a.cycles.count > 0 && a.cycles.smallest}
-          <h4 class="warn-h">Cycles ⚠</h4>
+          <h4 class="warn-h">Cycles</h4>
           <p class="cycle-list">
-            {a.cycles.count} detected. Shortest:
             <span class="cycle-trail">{a.cycles.smallest.join(" → ")}</span>
           </p>
         {/if}
@@ -1082,25 +1083,21 @@
             {/each}
           </ul>
         {/if}
-        <p class="hint">
-          Cycles are highlighted red on the graph. Click a node to
-          inspect — Analyze stays on.
-        </p>
       {:else if envelope?.data.model.workspace}
-        <h2>Workspace</h2>
+        <h4>Workspace</h4>
         <h3 class="title">{envelope.data.model.workspace.name ?? "(unnamed)"}</h3>
         {#if envelope.data.model.workspace.description}
           <p class="desc">{envelope.data.model.workspace.description}</p>
         {/if}
         {#if summary}
-          <div class="stats">
-            <div><span class="num">{summary.elements}</span> elements</div>
-            <div><span class="num">{summary.boundaries}</span> boundaries</div>
-            <div><span class="num">{summary.relations}</span> relations</div>
+          <dl class="info-line">
+            <div><dt>elements</dt><dd>{summary.elements}</dd></div>
+            <div><dt>boundaries</dt><dd>{summary.boundaries}</dd></div>
+            <div><dt>relations</dt><dd>{summary.relations}</dd></div>
             {#if summary.issues > 0}
-              <div class="warn"><span class="num">{summary.issues}</span> loader issues</div>
+              <div class="warn"><dt>issues</dt><dd>{summary.issues}</dd></div>
             {/if}
-          </div>
+          </dl>
         {/if}
         {#if envelope.data.issues.length}
           <h4>Loader issues</h4>
@@ -1110,10 +1107,6 @@
             {/each}
           </ul>
         {/if}
-        <p class="hint">
-          Click a node to inspect. Switch modes in the top bar to
-          change how the hierarchy unfolds.
-        </p>
       {:else}
         <p class="hint">Loading model…</p>
       {/if}
@@ -1308,17 +1301,16 @@
   main {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 360px;
-    background: #1e293b;
+    background: #0b1220;
     overflow: hidden;
   }
-  .graph,
-  .details {
+  .graph {
     background: #0b1220;
     overflow: hidden;
     position: relative;
   }
-  .graph {
-    position: relative;
+  .details {
+    overflow: auto;
   }
 
   .legend {
@@ -1328,31 +1320,31 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 10px 12px;
-    background: rgba(15, 23, 42, 0.85);
-    border: 1px solid #1e293b;
-    border-radius: 10px;
+    padding: 8px 10px;
+    background: #0d1424;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 4px;
     font-size: 11px;
     color: #cbd5e1;
     z-index: 4;
-    backdrop-filter: blur(6px);
+    letter-spacing: 0.01em;
   }
   .legend-row {
     display: flex;
     align-items: center;
     gap: 8px;
   }
-	  .swatch {
-	    width: 12px;
-	    height: 12px;
-	    border-radius: 3px;
-	  }
-	  .legend-rule {
-	    display: block;
-	    height: 1px;
-	    margin: 4px 0;
-	    background: #1e293b;
-	  }
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+  .legend-rule {
+    display: block;
+    height: 1px;
+    margin: 4px 0;
+    background: rgba(148, 163, 184, 0.10);
+  }
   .error-overlay {
     position: absolute;
     top: 18px;
@@ -1392,32 +1384,34 @@
   }
 
   .details {
-    padding: 20px;
+    padding: 16px 18px 20px;
     overflow: auto;
-    border-left: 1px solid #1e293b;
+    background: #0d1424;
+    border-left: 1px solid rgba(148, 163, 184, 0.10);
   }
   .details h2 {
-    margin: 0;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.14em;
+    margin: 0 0 6px;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.10em;
     text-transform: uppercase;
-    color: #94a3b8;
+    color: #64748b;
   }
   .details h3 {
-    margin: 6px 0 10px;
-    font-size: 18px;
-    font-weight: 800;
-    line-height: 1.2;
+    margin: 2px 0 12px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.25;
     color: #f8fafc;
+    letter-spacing: -0.005em;
   }
   .details h4 {
-    margin: 18px 0 8px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.14em;
+    margin: 16px 0 6px;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.10em;
     text-transform: uppercase;
-    color: #94a3b8;
+    color: #64748b;
   }
   .tech {
     margin: 0 0 10px;
@@ -1456,11 +1450,12 @@
   .tag {
     display: inline-block;
     font-size: 10px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: #1e293b;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(148, 163, 184, 0.10);
     color: #cbd5e1;
     margin-right: 4px;
+    letter-spacing: 0.01em;
   }
   .props {
     display: flex;
@@ -1471,17 +1466,17 @@
     display: inline-flex;
     gap: 5px;
     max-width: 100%;
-    padding: 2px 7px;
-    border-radius: 6px;
-    background: #0f172a;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: transparent;
     color: #cbd5e1;
-    border: 1px solid #1e293b;
+    border: 1px solid rgba(148, 163, 184, 0.14);
     font-size: 10px;
     overflow-wrap: anywhere;
   }
   .prop-key {
-    color: #38bdf8;
-    font-weight: 700;
+    color: #7dd3fc;
+    font-weight: 600;
   }
   .relations {
     list-style: none;
@@ -1517,89 +1512,88 @@
     margin: 0;
     font-size: 12px;
   }
-	  .issues li {
-	    margin: 6px 0;
-	    padding: 8px 10px;
-	    border-radius: 8px;
-    border: 1px solid #92400e;
-    background: rgba(69, 26, 3, 0.45);
-    color: #fed7aa;
-	    line-height: 1.35;
-	    overflow-wrap: anywhere;
-	  }
-	  .change-list {
-	    list-style: none;
-	    padding: 0;
-	    margin: 0;
-	    display: grid;
-	    gap: 8px;
-	  }
-	  .change-row {
-	    display: grid;
-	    grid-template-columns: 24px minmax(0, 1fr);
-	    gap: 10px;
-	    align-items: start;
-	    padding: 9px 10px;
-	    border: 1px solid #1e293b;
-	    border-radius: 8px;
-	    background: #0f172a;
-	  }
-	  .change-mark {
-	    display: inline-grid;
-	    place-items: center;
-	    width: 22px;
-	    height: 22px;
-	    border-radius: 6px;
-	    color: #020617;
-	    font-size: 12px;
-	    font-weight: 900;
-	  }
-	  .group-mark {
-	    background: #38bdf8;
-	  }
-	  .change-body {
-	    min-width: 0;
-	    display: grid;
-	    gap: 3px;
-	  }
-	  .change-title {
-	    overflow: hidden;
-	    text-overflow: ellipsis;
-	    white-space: nowrap;
-	    color: #f8fafc;
-	    font-size: 12px;
-	    font-weight: 800;
-	  }
-	  .change-subtitle {
-	    overflow-wrap: anywhere;
-	    color: #94a3b8;
-	    font-size: 11px;
-	    line-height: 1.3;
-	  }
-	  .stats {
-	    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+  .issues li {
+    margin: 6px 0;
+    padding: 7px 9px;
+    border-radius: 4px;
+    border-left: 2px solid #dec184;
+    background: rgba(222, 193, 132, 0.06);
+    color: #e2c896;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .change-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
     gap: 8px;
-    margin: 14px 0;
   }
-  .stats > div {
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 8px;
-    padding: 8px 12px;
+  .change-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    align-items: start;
+    padding: 6px 0 6px 10px;
+    border-left: 2px solid var(--diff-tint, rgba(148, 163, 184, 0.40));
+    background: transparent;
+  }
+  .change-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .change-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .change-glyph {
+    display: inline-block;
+    width: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 700;
     font-size: 11px;
-    color: #94a3b8;
+    text-align: center;
   }
-  .stats .num {
-    font-size: 18px;
-    font-weight: 800;
-    color: #f8fafc;
-    display: block;
-    line-height: 1.1;
+  .change-subtitle {
+    overflow-wrap: anywhere;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
   }
-  .stats .warn {
-    border-color: #b45309;
-    color: #fbbf24;
+  .info-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 18px;
+    margin: 8px 0 4px;
+    padding: 0;
+    font-size: 11px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+  }
+  .info-line > div {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+  .info-line dt {
+    color: #64748b;
+    letter-spacing: 0.01em;
+  }
+  .info-line dd {
+    margin: 0;
+    color: #e2e8f0;
+    font-weight: 500;
+    font-size: 13px;
+  }
+  .info-line .warn dd {
+    color: #dec184;
+  }
+  .info-line .warn dt {
+    color: #dec184;
   }
   :global(.svelte-flow) {
     background: #0b1220;
@@ -1672,22 +1666,22 @@
     pointer-events: none;
   }
   :global(.svelte-flow__controls) {
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 8px;
+    background: #0d1424;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 4px;
     overflow: hidden;
   }
   :global(.svelte-flow__controls-button) {
-    background: #0f172a;
-    border-bottom: 1px solid #1e293b;
+    background: #0d1424;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.10);
     color: #cbd5e1;
   }
   :global(.svelte-flow__controls-button:hover) {
-    background: #1e293b;
+    background: rgba(255, 255, 255, 0.04);
   }
   :global(.svelte-flow__minimap) {
-    border: 1px solid #1e293b;
-    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 4px;
     overflow: hidden;
   }
 
@@ -1701,14 +1695,14 @@
   .metrics {
     list-style: none;
     padding: 0;
-    margin: 0 0 12px 0;
-    font-size: 0.78rem;
+    margin: 0 0 10px 0;
+    font-size: 12px;
   }
   .metrics li {
     display: flex;
     justify-content: space-between;
-    padding: 2px 0;
-    border-bottom: 1px solid #1e293b;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.06);
   }
   .metrics li:last-child {
     border-bottom: none;
@@ -1719,24 +1713,25 @@
   .metrics .v {
     color: #e2e8f0;
     font-variant-numeric: tabular-nums;
+    font-weight: 500;
   }
   .warn-h {
-    color: #fca5a5;
+    color: #dec184;
   }
   .cycle-list {
-    font-size: 0.78rem;
-    color: #fca5a5;
+    font-size: 12px;
+    color: #94a3b8;
     margin: 4px 0 12px 0;
   }
   .cycle-trail {
     display: block;
     margin-top: 4px;
     padding: 6px 8px;
-    background: #1e1010;
-    border-left: 3px solid #ef4444;
-    color: #fee2e2;
+    background: rgba(222, 193, 132, 0.06);
+    border-left: 2px solid #dec184;
+    color: #e2c896;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.75rem;
+    font-size: 11px;
     word-break: break-all;
   }
 </style>

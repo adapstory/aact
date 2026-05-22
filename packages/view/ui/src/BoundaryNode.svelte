@@ -78,12 +78,11 @@
 >
   <Handle type="target" position={Position.Left} />
   <header class="header">
-    <span class="chip">{data.kind} boundary</span>
+    <span class="kind">{data.kind} boundary</span>
     <span class="label">{data.label}</span>
     {#if !data.expanded}
       <span class="meta">
-        {data.childCount} child{data.childCount === 1 ? "" : "ren"} · dblclick to
-        {data.canExpand ? "expand" : "enter"}
+        {data.childCount} · double-click to {data.canExpand ? "expand" : "enter"}
       </span>
     {/if}
   </header>
@@ -121,35 +120,33 @@
   .header {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 10px 14px;
+    gap: 2px;
+    padding: 8px 12px 10px;
     border-bottom: 1px dashed
-      color-mix(in srgb, var(--accent) 60%, transparent);
-    background: color-mix(in srgb, var(--accent) 18%, #0f172a);
+      color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
     border-radius: 14px 14px 0 0;
   }
-  .chip {
-    align-self: flex-start;
-    font-size: 9px;
-    letter-spacing: 0.14em;
+  .kind {
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--accent);
-    color: white;
-    font-weight: 700;
+    color: color-mix(in srgb, var(--accent) 65%, #cbd5e1);
+    font-weight: 500;
   }
   .label {
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.15;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
     color: #f8fafc;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    letter-spacing: -0.005em;
   }
   .meta {
     font-size: 10px;
-    color: rgba(226, 232, 240, 0.6);
+    color: rgba(226, 232, 240, 0.45);
+    letter-spacing: 0.01em;
   }
 </style>
