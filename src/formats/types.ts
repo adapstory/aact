@@ -89,8 +89,16 @@ export interface LoadResult {
 export interface Format {
   readonly name: string;
   readonly defaultPattern?: string;
-  load?(path: string): Promise<LoadResult>;
-  generate?(model: Model): FormatOutput;
+  /**
+   * `options` — per-Format escape hatch (annotation prefix для k8s,
+   * `composeFile` для compose и т.д.). Каждый Format типизирует
+   * свою options shape в собственном модуле и заявляет его в
+   * `AactConfig.source.options` через discriminated union. Loader'ы
+   * существующих формат-ов которым опции не нужны просто игнорируют
+   * параметр.
+   */
+  load?(path: string, options?: unknown): Promise<LoadResult>;
+  generate?(model: Model, options?: unknown): FormatOutput;
   fix?: FixCapability;
 }
 
