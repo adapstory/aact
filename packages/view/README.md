@@ -6,11 +6,6 @@ DSL / C4-PUML / model-json source you point `aact check` at is the
 source of truth; `aact view` renders it as an interactive graph
 that re-layouts every time you save the file.
 
-> **Status: experimental.** Ships on the `proposal/aact-view`
-> branch; not yet on a beta release. Expect rough edges around
-> non-default models and watch the CHANGELOG entry when the feature
-> graduates.
-
 ## Install
 
 `@aact/view` is an optional companion package. Install alongside

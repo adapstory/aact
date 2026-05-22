@@ -1,7 +1,6 @@
 ---
 name: aact view
 version: 0.1.0
-status: experimental
 description: |
   Browser-based live viewer for the normalised C4 Model that
   `aact view` boots locally. Visual language follows the Simon
