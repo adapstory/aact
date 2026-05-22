@@ -27,6 +27,10 @@ import type {
   ModelChildNode,
   ModelNode,
   NameOverride,
+  PerspectiveEntry,
+  PerspectivesBlock,
+  PropertiesBlock,
+  PropertyEntry,
   RelationshipNode,
   StringLiteral as AstStringLiteral,
   TagsStatement,
@@ -399,13 +403,13 @@ class StructurizrCstToAst extends BaseVisitor {
     // alias *name* itself is NOT added as a tag (verified against
     // `DslTests.test_archetypes` — Customer API only carries
     // "Application" / "Spring Boot", not "application" /
-    // "springBootApplication"). We inject a synthetic TagsStatement at
-    // the start of the body so the normal toModel aggregation merges
-    // it with explicit `tags "..."` lines.
+    // "springBootApplication"). We inject synthetic TagsStatement /
+    // PropertiesBlock / PerspectivesBlock at the start of the body so
+    // the normal toModel aggregation merges them with any explicit
+    // body statements (later body lines override earlier ones for
+    // singular keys; tags accumulate).
     //
     // Out of scope (deliberate, documented in grammar.md):
-    //   - properties / perspectives propagation from archetype body
-    //   - kind-default form `softwaresystem { ... }` without alias name
     //   - relationship archetypes (`a --https-> b`)
     let headerDescription = header.description;
     let headerTechnology = header.technology;
@@ -423,17 +427,10 @@ class StructurizrCstToAst extends BaseVisitor {
           header.kindToken,
         );
       }
-      if (defaults.tags.length > 0) {
-        const tagsStmt: TagsStatement = {
-          kind: "tags",
-          value: this.syntheticString(
-            defaults.tags.join(","),
-            header.kindToken,
-          ),
-          range: rangeFromToken(header.kindToken, this.file),
-        };
-        body = [tagsStmt, ...body];
-      }
+      body = [
+        ...this.syntheticArchetypeBody(defaults, header.kindToken),
+        ...body,
+      ];
     }
 
     switch (header.kind) {
@@ -1023,6 +1020,80 @@ class StructurizrCstToAst extends BaseVisitor {
       value,
       range: rangeFromToken(anchor, this.file),
     };
+  }
+
+  /** Materialise archetype-body defaults (tags + properties +
+   *  perspectives) as synthetic AST body statements anchored on the
+   *  element's kind keyword. The toModel aggregation walks body items
+   *  in order, so these go first and explicit body lines override
+   *  them for singular keys. */
+  private syntheticArchetypeBody(
+    defaults: ArchetypeDefaults,
+    anchor: IToken,
+  ): ElementBodyNode[] {
+    const range = rangeFromToken(anchor, this.file);
+    const out: ElementBodyNode[] = [];
+    if (defaults.tags.length > 0) {
+      const tagsStmt: TagsStatement = {
+        kind: "tags",
+        value: this.syntheticString(defaults.tags.join(","), anchor),
+        range,
+      };
+      out.push(tagsStmt);
+    }
+    const propEntries: PropertyEntry[] = [];
+    for (const [k, v] of Object.entries(defaults.properties)) {
+      propEntries.push({
+        kind: "propertyEntry",
+        key: this.syntheticString(k, anchor),
+        value: this.syntheticString(v, anchor),
+        range,
+      });
+    }
+    if (propEntries.length > 0) {
+      const propBlock: PropertiesBlock = {
+        kind: "properties",
+        entries: propEntries,
+        range,
+      };
+      out.push(propBlock);
+    }
+    // Perspectives: defaults.perspectives map is keyed
+    // `perspective.<name>` (description) plus
+    // `perspective.<name>.value` (optional value). Reconstruct the
+    // PerspectiveEntry list so toModel routes through its standard
+    // perspectives handler.
+    const perspectiveNames = new Set<string>();
+    for (const k of Object.keys(defaults.perspectives)) {
+      if (!k.startsWith("perspective.")) continue;
+      const rest = k.slice("perspective.".length);
+      if (rest.endsWith(".value")) continue;
+      perspectiveNames.add(rest);
+    }
+    const perspectiveEntries: PerspectiveEntry[] = [];
+    for (const name of perspectiveNames) {
+      const description = defaults.perspectives[`perspective.${name}`];
+      const valueKey = `perspective.${name}.value`;
+      const hasValue = valueKey in defaults.perspectives;
+      perspectiveEntries.push({
+        kind: "perspectiveEntry",
+        name: { kind: "identifier", name, range },
+        description: this.syntheticString(description, anchor),
+        value: hasValue
+          ? this.syntheticString(defaults.perspectives[valueKey], anchor)
+          : undefined,
+        range,
+      });
+    }
+    if (perspectiveEntries.length > 0) {
+      const perspectivesBlock: PerspectivesBlock = {
+        kind: "perspectives",
+        entries: perspectiveEntries,
+        range,
+      };
+      out.push(perspectivesBlock);
+    }
+    return out;
   }
 }
 

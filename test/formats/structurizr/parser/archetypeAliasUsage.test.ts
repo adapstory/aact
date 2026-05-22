@@ -207,6 +207,118 @@ describe("Structurizr parser — archetype alias usage", () => {
     expect(controller?.technology).toBe("Spring MVC REST Controller");
   });
 
+  it("propagates archetype properties { } to every element via the alias", () => {
+    // Reference `Archetype.addProperties` copies the body's properties
+    // block onto every declared element. Verified against
+    // `DslTests.test_archetypesForDefaults` (properties match across
+    // both `a` and `b` declarations).
+    const src = `workspace {
+      model {
+        archetypes {
+          application = container {
+            properties {
+              "team" "platform"
+              "tier" "1"
+            }
+          }
+        }
+        s = softwareSystem "S" {
+          api = application "API"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    const api = model.elements["api"];
+    expect(api?.properties?.["team"]).toBe("platform");
+    expect(api?.properties?.["tier"]).toBe("1");
+  });
+
+  it("propagates archetype perspectives { } to every element via the alias", () => {
+    const src = `workspace {
+      model {
+        archetypes {
+          application = container {
+            perspectives {
+              Security "encrypted in transit" "TLS 1.3"
+              Scalability "horizontal scaling"
+            }
+          }
+        }
+        s = softwareSystem "S" {
+          api = application "API"
+        }
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    const api = model.elements["api"];
+    expect(api?.properties?.["perspective.Security"]).toBe(
+      "encrypted in transit",
+    );
+    expect(api?.properties?.["perspective.Security.value"]).toBe("TLS 1.3");
+    expect(api?.properties?.["perspective.Scalability"]).toBe(
+      "horizontal scaling",
+    );
+  });
+
+  it("kind-default archetype applies to every element of that kind", () => {
+    // Reference fixture: `archetypes-for-defaults.dsl`. A decl WITHOUT
+    // `<alias> =` prefix applies defaults to every element of the
+    // matching base kind — both `a` and `b` here should pick up the
+    // Default Description + Default Tag.
+    const src = `workspace {
+      model {
+        archetypes {
+          softwareSystem {
+            description "Default Description"
+            tag "Default Tag"
+            properties {
+              "Default Property Name" "Default Property Value"
+            }
+            perspectives {
+              "Default Perspective Name" "Default Perspective Description"
+            }
+          }
+        }
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    for (const name of ["a", "b"]) {
+      const e = model.elements[name];
+      expect(e).toBeDefined();
+      expect(e?.description).toBe("Default Description");
+      expect(e?.tags).toContain("Default Tag");
+      expect(e?.properties?.["Default Property Name"]).toBe(
+        "Default Property Value",
+      );
+      expect(e?.properties?.["perspective.Default Perspective Name"]).toBe(
+        "Default Perspective Description",
+      );
+    }
+  });
+
+  it("kind-default does NOT override explicit positional description", () => {
+    const src = `workspace {
+      model {
+        archetypes {
+          softwareSystem {
+            description "Default Description"
+          }
+        }
+        a = softwareSystem "A"
+        b = softwareSystem "B" "Explicit"
+      }
+    }`;
+    const { model, parseErrors } = parse(src);
+    expect(parseErrors).toEqual([]);
+    expect(model.elements["a"]?.description).toBe("Default Description");
+    expect(model.elements["b"]?.description).toBe("Explicit");
+  });
+
   it("exposes alias map on ChevrotainParseResult.archetypeAliases", () => {
     const src = `workspace {
       model {
