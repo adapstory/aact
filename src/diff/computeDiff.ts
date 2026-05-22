@@ -5,6 +5,8 @@ import type {
   Relation,
   WorkspaceMetadata,
 } from "../model";
+import { hungarian } from "./hungarian";
+import { boundarySimilarity, elementSimilarity } from "./similarity";
 import type {
   BoundaryChange,
   Change,
@@ -135,64 +137,17 @@ const propertiesEqual = (
 };
 
 // -----------------------------------------------------------------------------
-// Similarity (rename detector)
+// Rename detection — Hungarian assignment over multi-feature similarity
 // -----------------------------------------------------------------------------
-
-const levenshtein = (a: string, b: string): number => {
-  if (a === b) return 0;
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  const prev: number[] = Array.from({ length: b.length + 1 }, (_, i) => i);
-  const curr: number[] = Array.from({ length: b.length + 1 }, () => 0);
-  for (let i = 1; i <= a.length; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
-    }
-    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
-  }
-  return prev[b.length];
-};
-
-const stringSimilarity = (a: string, b: string): number => {
-  if (a === "" && b === "") return 1;
-  const maxLen = Math.max(a.length, b.length);
-  if (maxLen === 0) return 1;
-  return 1 - levenshtein(a, b) / maxLen;
-};
-
-const jaccard = (a: readonly string[], b: readonly string[]): number => {
-  const setA = new Set(a);
-  const setB = new Set(b);
-  if (setA.size === 0 && setB.size === 0) return 1;
-  let intersection = 0;
-  for (const x of setA) if (setB.has(x)) intersection++;
-  const union = setA.size + setB.size - intersection;
-  return union === 0 ? 1 : intersection / union;
-};
-
-const elementSimilarity = (a: Element, b: Element): number => {
-  // Compare on what people typically keep stable across renames:
-  // the label, and the set of outgoing relation targets. Tags and
-  // technology contribute lightly but aren't decisive — a refactor
-  // often moves a service across boundaries while keeping the
-  // label and roughly the same dependencies.
-  const labelSim = stringSimilarity(a.label, b.label);
-  const nameSim = stringSimilarity(a.name, b.name);
-  const relationsSim = jaccard(
-    a.relations.map((r) => r.to),
-    b.relations.map((r) => r.to),
-  );
-  return Math.max(labelSim, nameSim) * 0.5 + relationsSim * 0.5;
-};
-
-const boundarySimilarity = (a: Boundary, b: Boundary): number => {
-  const labelSim = stringSimilarity(a.label, b.label);
-  const nameSim = stringSimilarity(a.name, b.name);
-  const elementsSim = jaccard(a.elementNames, b.elementNames);
-  return Math.max(labelSim, nameSim) * 0.5 + elementsSim * 0.5;
-};
+//
+// Similarity functions live in `./similarity.ts` (multi-feature, hand-tuned
+// weights, documented). The detector here is the matching machinery: build
+// a cost matrix from the similarity function, hand it to Hungarian for a
+// globally-optimal assignment, threshold-filter the result.
+//
+// `INFEASIBLE` is the cost we assign to forbidden cells (cross-kind, or
+// similarity below threshold). Hungarian treats `+Infinity` as "cannot
+// match" and leaves the row unassigned.
 
 interface RenamePair<T> {
   readonly removed: T;
@@ -200,35 +155,34 @@ interface RenamePair<T> {
   readonly confidence: number;
 }
 
-const detectRenames = <T extends { kind: string }>(
+const detectRenames = <T>(
   removed: readonly T[],
   added: readonly T[],
   similarity: (a: T, b: T) => number,
   threshold: number,
 ): RenamePair<T>[] => {
-  const matches: RenamePair<T>[] = [];
-  const removedTaken = new Set<T>();
-  const addedTaken = new Set<T>();
-
-  // Score every cross-product pair of same kind, sort desc, then
-  // greedy assignment. Quadratic in worst case but n is small
-  // (typical PRs touch ≤10 elements) so this is fine.
-  const scored: { r: T; a: T; score: number }[] = [];
-  for (const r of removed) {
-    for (const a of added) {
-      if (r.kind !== a.kind) continue;
-      const score = similarity(r, a);
-      if (score >= threshold) scored.push({ r, a, score });
-    }
+  if (removed.length === 0 || added.length === 0) return [];
+  // Build cost matrix: cost = 1 - similarity for feasible pairs,
+  // +Infinity for pairs below the threshold. Hungarian then picks
+  // the globally optimal assignment that minimises total cost
+  // (= maximises total similarity).
+  const cost: number[][] = removed.map((r) =>
+    added.map((a) => {
+      const s = similarity(r, a);
+      return s >= threshold ? 1 - s : Number.POSITIVE_INFINITY;
+    }),
+  );
+  const { assignment } = hungarian(cost);
+  const pairs: RenamePair<T>[] = [];
+  for (const [i, j] of assignment.entries()) {
+    if (j === undefined) continue;
+    pairs.push({
+      removed: removed[i],
+      added: added[j],
+      confidence: 1 - cost[i][j],
+    });
   }
-  scored.sort((x, y) => y.score - x.score);
-  for (const { r, a, score } of scored) {
-    if (removedTaken.has(r) || addedTaken.has(a)) continue;
-    matches.push({ removed: r, added: a, confidence: score });
-    removedTaken.add(r);
-    addedTaken.add(a);
-  }
-  return matches;
+  return pairs;
 };
 
 // -----------------------------------------------------------------------------
