@@ -2,6 +2,7 @@ import { defineCommand } from "citty";
 
 import type { DiffData, DiffOptions } from "../../../diff";
 import { computeDiff } from "../../../diff";
+import { knownFormatNames } from "../../../formats/registry";
 import { loadAndValidateConfig } from "../../loadConfig";
 import type { Reporter } from "../../output";
 import {
@@ -15,6 +16,13 @@ import { exitWith, readJsonFlag } from "../../run";
 import { configArg, jsonArg } from "../../sharedArgs";
 import { loadBaseline } from "./baseline";
 import { renderDiffText } from "./textRenderer";
+
+/**
+ * Joined list используется в help-text'е `--baseline-format` и
+ * `--current-format`. Считается один раз на module load — registry
+ * статичный, race conditions нет.
+ */
+const FORMAT_LIST = knownFormatNames().join(", ");
 
 /**
  * `aact diff <baseline> [<current>]` — structural diff between two
@@ -66,6 +74,7 @@ const resolveCurrentInput = async (
 ): Promise<{
   arg: string;
   formatOverride?: string;
+  options?: unknown;
   resolvedConfigPath: string | null;
 }> => {
   if (explicitArg && explicitArg.length > 0) {
@@ -76,6 +85,7 @@ const resolveCurrentInput = async (
     return {
       arg: loaded.config.source.path,
       formatOverride: loaded.config.source.type,
+      options: loaded.config.source.options,
       resolvedConfigPath: loaded.configPath ?? configPath ?? null,
     };
   } catch (error) {
@@ -128,23 +138,22 @@ export const diff = defineCommand({
     baseline: {
       type: "positional",
       description:
-        "Baseline source: file path, `<ref>:<path>` git ref, or `-` for stdin",
+        "Baseline source: file path, directory (kubernetes), `<ref>:<path>` git ref, or `-` for stdin",
       required: true,
     },
     current: {
       type: "positional",
       description:
-        "Current source (defaults to aact.config.ts → source when omitted)",
+        "Current source — file path or directory (defaults to aact.config.ts → source when omitted)",
       required: false,
     },
     "baseline-format": {
       type: "string",
-      description:
-        "Override format detection for baseline (plantuml, structurizr, model-json)",
+      description: `Override format detection for baseline (${FORMAT_LIST})`,
     },
     "current-format": {
       type: "string",
-      description: "Override format detection for current",
+      description: `Override format detection for current (${FORMAT_LIST})`,
     },
     strict: {
       type: "boolean",
@@ -188,6 +197,12 @@ export const diff = defineCommand({
       const current = await loadBaseline({
         arg: currentInput.arg,
         formatOverride: args["current-format"] ?? currentInput.formatOverride,
+        // Per-Format options пробрасываются ТОЛЬКО на current side —
+        // baseline берётся из git/файла без config контекста, и
+        // applying user-config options к baseline было бы surprising
+        // (например naming transform changed model элементов с тех
+        // пор как baseline был snapshot'нут).
+        options: currentInput.options,
         sideLabel: "current",
       });
 

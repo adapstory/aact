@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -97,7 +98,16 @@ const COMPOSE_BASES = new Set([
   "docker-compose.yml",
 ]);
 
-const detectFormatFromPath = (filePath: string): string | undefined => {
+const detectFormatFromPath = (
+  filePath: string,
+  isDirectory = false,
+): string | undefined => {
+  // Directory input — единственный формат принимающий директорию это
+  // `kubernetes` (k8s loader walks recursively, поддерживает
+  // kustomization chase). Future-proofing: если другой формат
+  // добавит directory acceptance, fallback станет ambiguous, и
+  // потребуется per-format directory hint.
+  if (isDirectory) return "kubernetes";
   const base = path.basename(filePath).toLowerCase();
   const ext = path.extname(base);
   if (ext === ".puml" || ext === ".plantuml" || ext === ".iuml") {
@@ -125,6 +135,15 @@ export interface LoadBaselineInput {
    * runs).
    */
   readonly cwd?: string;
+  /**
+   * Per-Format options (`ComposeLoadOptions` / `KubernetesLoadOptions`
+   * etc.) пробрасываемые в `format.load(path, options)`. Для current-side
+   * приходят из `aact.config.ts → source.options`. Для baseline-side
+   * сейчас всегда undefined — baseline это git-ref / другой файл, у
+   * него нет config context. Если когда-нибудь понадобится — добавим
+   * `--baseline-options` CLI flag или config.baselineOptions.
+   */
+  readonly options?: unknown;
 }
 
 export interface LoadBaselineResult {
@@ -136,7 +155,7 @@ export interface LoadBaselineResult {
 export const loadBaseline = async (
   input: LoadBaselineInput,
 ): Promise<LoadBaselineResult> => {
-  const { arg, formatOverride, sideLabel, cwd } = input;
+  const { arg, formatOverride, sideLabel, cwd, options } = input;
 
   // Resolve format hint FIRST — stdin without an explicit
   // `--<side>-format` would otherwise hang waiting for fd 0 to
@@ -172,9 +191,13 @@ export const loadBaseline = async (
         { path: arg },
       );
     }
+    // `aact diff arch.dsl ./k8s/` — directory это валидный entry
+    // только для kubernetes loader (он сам walk'ает). detectFormatFromPath
+    // под флагом отдаёт "kubernetes" сразу, без extension парсинга.
+    const isDirectory = statSync(arg).isDirectory();
     pathForContent = { kind: "file", arg };
     sourceLabel = arg;
-    formatHint = formatHint ?? detectFormatFromPath(arg);
+    formatHint = formatHint ?? detectFormatFromPath(arg, isDirectory);
   }
 
   if (!formatHint) {
@@ -185,9 +208,11 @@ export const loadBaseline = async (
     );
   }
 
-  // Only now read content — format is known, we won't block on fd 0
-  // unless we actually intend to consume it.
-  let rawContent: string;
+  // Stdin / git refs need to materialise on disk because format
+  // loaders work on file paths. File / directory args go straight to
+  // the loader (k8s walks the directory itself; reading a directory
+  // through `readFileSync` would throw EISDIR).
+  let rawContent: string | undefined;
   switch (pathForContent.kind) {
     case "stdin": {
       rawContent = readStdin();
@@ -202,7 +227,7 @@ export const loadBaseline = async (
       break;
     }
     case "file": {
-      rawContent = readFileSync(pathForContent.arg, "utf8");
+      // Loader reads directly from `arg` — no scratch needed.
       break;
     }
   }
@@ -216,15 +241,12 @@ export const loadBaseline = async (
     );
   }
 
-  // Loaders work on file paths; for git-ref / stdin content we
-  // write a scratch file in os.tmpdir() and feed that. The path
-  // suffix is preserved so loaders that key off extension behave
-  // consistently. Always cleaned up; failure to delete is benign
-  // (OS reclaims tmpdir on reboot).
-  const needsScratch = arg === "-" || isGitRef(arg);
+  // Materialise stdin / git-ref content на scratch path с правильным
+  // extension'ом — loaders что keying off basename ведут себя
+  // consistently. Always cleaned up; failure to delete is benign.
   let pathForLoad = arg;
   let scratchDir: string | undefined;
-  if (needsScratch) {
+  if (rawContent !== undefined) {
     scratchDir = mkdtempSync(path.join(tmpdir(), "aact-diff-"));
     pathForLoad = path.join(
       scratchDir,
@@ -234,7 +256,7 @@ export const loadBaseline = async (
   }
 
   try {
-    const result = await format.load(pathForLoad);
+    const result = await format.load(pathForLoad, options);
     return {
       model: result.model,
       issues: result.issues,

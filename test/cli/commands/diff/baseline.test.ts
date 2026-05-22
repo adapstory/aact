@@ -227,3 +227,74 @@ describe("loadBaseline — git ref input", () => {
     }
   });
 });
+
+describe("loadBaseline — directory inputs (kubernetes auto-detect)", () => {
+  it("infers kubernetes for a directory argument", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "aact-baseline-k8s-"));
+    try {
+      writeFileSync(
+        path.join(dir, "deploy.yaml"),
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata: { name: orders }\nspec: { template: { spec: { containers: [{ image: nginx }] } } }",
+        "utf8",
+      );
+      const result = await loadBaseline({ arg: dir, sideLabel: "baseline" });
+      expect(result.side.format).toBe("kubernetes");
+      expect(Object.keys(result.model.elements)).toEqual(["orders"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not collide with file detection — compose.yaml still wins over k8s", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "aact-baseline-compose-"));
+    try {
+      const file = path.join(dir, "compose.yaml");
+      writeFileSync(file, "services:\n  api:\n    image: nginx", "utf8");
+      const result = await loadBaseline({ arg: file, sideLabel: "baseline" });
+      expect(result.side.format).toBe("compose");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("loadBaseline — options pass-through", () => {
+  it("forwards options to format.load (skip glob applied)", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "aact-baseline-opts-"));
+    try {
+      writeFileSync(
+        path.join(dir, "manifests.yaml"),
+        [
+          "apiVersion: apps/v1",
+          "kind: Deployment",
+          "metadata: { name: orders }",
+          "spec: { template: { spec: { containers: [{ image: nginx }] } } }",
+          "---",
+          "apiVersion: apps/v1",
+          "kind: Deployment",
+          "metadata: { name: orders-canary }",
+          "spec: { template: { spec: { containers: [{ image: nginx }] } } }",
+        ].join("\n"),
+        "utf8",
+      );
+      const result = await loadBaseline({
+        arg: dir,
+        sideLabel: "baseline",
+        options: { skip: ["*-canary"] },
+      });
+      expect(Object.keys(result.model.elements)).toEqual(["orders"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("undefined options preserves loader defaults", async () => {
+    const file = makeTempPuml(SIMPLE_PUML);
+    try {
+      const result = await loadBaseline({ arg: file, sideLabel: "baseline" });
+      expect(Object.keys(result.model.elements)).toContain("svc");
+    } finally {
+      cleanupParent(file);
+    }
+  });
+});
