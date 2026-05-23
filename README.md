@@ -7,6 +7,10 @@
 
 🇷🇺 **Русский** | 🇬🇧 [English](README.en.md)
 
+<p align="center">
+  <img src="docs/demo/demo.gif" alt="aact demo: init → check → fix → analyze" width="820"/>
+</p>
+
 CLI и библиотека для валидации, анализа и генерации архитектуры микросервисных систем, описанной "as Code" (PlantUML C4, Structurizr).
 
 Инструменты для работы с архитектурой в формате "as Code":

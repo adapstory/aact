@@ -7,6 +7,10 @@
 
 🇷🇺 [Русский](README.md) | 🇬🇧 **English**
 
+<p align="center">
+  <img src="docs/demo/demo.gif" alt="aact demo: init → check → fix → analyze" width="820"/>
+</p>
+
 CLI and library for validating, analyzing, and generating microservice architectures described "as Code" (PlantUML C4, Structurizr).
 
 Three things this repo gives you:
