@@ -2,6 +2,9 @@
 
 **/.scannerwork
 
+### local-only marketing / pr drafts — never committed
+/docs/social-media/
+
 ### https://github.com/github/gitignore/blob/master/Global/JetBrains.gitignore
 
 .idea/*
