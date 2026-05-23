@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.28 — 2026-05-23
+
+> CLI plan-view round. `aact check --dry-run` is now a dedicated mode
+> with inline per-violation annotations and compact edit previews —
+> not a copy of `check` with a "Suggested fixes" trailer. The
+> envelope's `mergedFixes` field, previously hidden under
+> `fixesApplied`, surfaces at the top of `data` so `--dry-run`
+> consumers (and any non-fix-mode reader) can see which rules dedupe
+> collapsed together.
+
+### Added
+
+- **`aact check --dry-run` plan view.** Per violation: standard
+  location/rule/target row + an inline annotation:
+  - `→ would <description>` followed by a compact one-line preview of
+    each planned edit (`replace <file:line:col>  →  <new content>`)
+    when the rule has an autofix;
+  - `→ resolved together with <rule> fix` when dedupe collapsed this
+    rule's fix into another's edit;
+  - `→ no autofix — manual review` otherwise.
+
+  The result box switches to `✗ check (dry-run)` with a
+  `N violations · X fixable · Y manual` headline plus a
+  `run --fix to apply` hint. Distinct shape from `check`'s diagnose
+  table and `--fix`'s outcome list — each command renders for its
+  own purpose.
+
+### Changed
+
+- **`mergedFixes` promoted to the top of `CheckData`.** Previously
+  nested under `fixesApplied.mergedRules` and therefore invisible to
+  `--dry-run` consumers (and any non-fix reader). The new top-level
+  `data.mergedFixes` is populated whenever dedupe collapsed cross-rule
+  edits, regardless of mode. `fixesApplied.mergedRules` is removed —
+  read the same shape from `data.mergedFixes`.
+
 ## v3.0.0-beta.27 — 2026-05-23
 
 > View UI polish round. `aact view` databases and queues now render as

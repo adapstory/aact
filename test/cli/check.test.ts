@@ -598,8 +598,13 @@ describe("renderCheckText", () => {
       return output();
     })();
 
-    expect(inDryRun).toContain("Suggested fixes");
-    expect(inCheck).not.toContain("Suggested fixes");
+    // Dry-run renders inline plan: violation row + "→ would <description>" +
+    // compact edit preview + (dry-run) box. Plain check shows only the
+    // violation table + diagnose box, no fix preview.
+    expect(inDryRun).toContain("would add anti-corruption layer");
+    expect(inDryRun).toContain("(dry-run)");
+    expect(inCheck).not.toContain("would add anti-corruption layer");
+    expect(inCheck).not.toContain("(dry-run)");
   });
 
   it("renders github annotations in github-actions mode", () => {

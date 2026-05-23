@@ -95,14 +95,6 @@ export interface CheckFixesApplied {
     readonly violations: readonly CheckViolation[];
     readonly summary: CheckSummary;
   };
-  /**
-   * Rules whose byte-identical fix edits were absorbed by another
-   * rule's kept edit, keyed by the rule that retained the edit. Lets
-   * the renderer credit every rule the single landed edit resolved
-   * (otherwise multi-rule violations would look like only one rule was
-   * addressed). Omitted when no dedupe collapsed cross-rule edits.
-   */
-  readonly mergedRules?: Readonly<Record<string, readonly string[]>>;
 }
 
 export type CheckMode = "check" | "dry-run" | "fix";
@@ -132,6 +124,14 @@ export interface CheckData {
   readonly suggestedFixes: readonly FixResult[];
   readonly summary: CheckSummary;
   readonly rules: readonly CheckRuleMetadata[];
+  /**
+   * Rules whose byte-identical fix edits were absorbed by another
+   * rule's kept edit during dedup, keyed by the rule that retained the
+   * edit. Surfaces in both `--dry-run` (so "resolved together" is
+   * visible at plan time) and `--fix` (so renderer credits every rule
+   * the landed edit resolved). Omitted when no dedupe happened.
+   */
+  readonly mergedFixes?: Readonly<Record<string, readonly string[]>>;
   readonly fixesApplied?: CheckFixesApplied;
 }
 
@@ -575,7 +575,6 @@ export const executeCheck = async (
       remaining: result.remaining,
       writePath: result.writePath,
       before: { violations, summary },
-      ...(Object.keys(mergedRules).length > 0 ? { mergedRules } : {}),
     };
     finalViolations = result.remainingViolations;
     finalSummary = result.remainingSummary;
@@ -587,6 +586,7 @@ export const executeCheck = async (
   }
 
   const ruleCatalogue = buildRuleCatalogue(config.rules, effective);
+  const hasMerges = Object.keys(mergedRules).length > 0;
 
   return {
     data: {
@@ -595,6 +595,7 @@ export const executeCheck = async (
       suggestedFixes,
       summary: finalSummary,
       rules: ruleCatalogue,
+      ...(hasMerges ? { mergedFixes: mergedRules } : {}),
       ...(fixesApplied ? { fixesApplied } : {}),
     },
     exitCode: computeExitCode(finalViolations.length, fixesApplied),
@@ -735,71 +736,6 @@ const renderBoxSummary = (
   );
 };
 
-const prefixContent = (content: string, first: string, rest: string): string =>
-  content
-    .split("\n")
-    .map((line, i) => (i === 0 ? first + line : rest + line))
-    .join("\n");
-
-const renderEdit = (edit: SourceEdit, sink: NodeJS.WritableStream): void => {
-  switch (edit.kind) {
-    case "remove": {
-      sink.write(
-        colors.dim(
-          `    - remove ${formatLocationDisplay(edit.range)} (${editByteSpan(edit.range)} bytes)\n`,
-        ),
-      );
-      break;
-    }
-    case "replace": {
-      sink.write(
-        colors.dim(`    ~ replace ${formatLocationDisplay(edit.range)}\n`),
-      );
-      sink.write(
-        colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
-      );
-      break;
-    }
-    case "insert-after": {
-      sink.write(
-        colors.dim(
-          `    + insert after ${formatLocationDisplay(edit.anchor)}\n`,
-        ),
-      );
-      sink.write(
-        colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
-      );
-      break;
-    }
-    case "insert-before": {
-      sink.write(
-        colors.dim(
-          `    + insert before ${formatLocationDisplay(edit.anchor)}\n`,
-        ),
-      );
-      sink.write(
-        colors.green(prefixContent(edit.content, "    + ", "      ")) + "\n",
-      );
-      break;
-    }
-  }
-};
-
-const editByteSpan = (range: SourceLocation): number =>
-  range.end.offset - range.start.offset;
-
-const renderFixes = (
-  fixes: readonly FixResult[],
-  sink: NodeJS.WritableStream,
-): void => {
-  for (const fix of fixes) {
-    const ruleTag = colors.bold(`[${fix.rule}]`);
-    sink.write(`  ${ruleTag}  ${fix.description}\n`);
-    for (const edit of fix.edits) renderEdit(edit, sink);
-    sink.write("\n");
-  }
-};
-
 export type CheckTextMode = "human" | "github-actions";
 
 const detectCheckTextMode = (): CheckTextMode =>
@@ -827,13 +763,16 @@ export const renderCheckText = (
 
   // Mode-specific output shapes — each command has a distinct purpose:
   //   `check`     — diagnose: what's wrong
-  //   `--dry-run` — plan:     what would be fixed and how
-  //   `--fix`     — apply:    what was just fixed
-  // The pre-fix violation table belongs to `check`; repeating it under
-  // `--fix` reads as "found 2 errors → still found 2 errors → applied"
-  // even though the second listing is just the pre-fix state.
+  //   `--dry-run` — plan:     what would be fixed and how (per-violation
+  //                           inline annotation + planned edits)
+  //   `--fix`     — apply:    what was just fixed (per-applied summary,
+  //                           pre-fix violation table dropped)
   if (data.mode === "fix") {
     renderFixOutcome(data, sink);
+    return;
+  }
+  if (data.mode === "dry-run") {
+    renderDryRunPlan(data, sink);
     return;
   }
 
@@ -841,11 +780,171 @@ export const renderCheckText = (
 
   const fixableRules = new Set(data.suggestedFixes.map((f) => f.rule)).size;
   renderBoxSummary(data, fixableRules, sink);
+};
 
-  if (data.mode === "dry-run" && data.suggestedFixes.length > 0) {
-    sink.write(colors.bold("Suggested fixes (dry run):") + "\n\n");
-    renderFixes(data.suggestedFixes, sink);
+/**
+ * Plan output for `aact check --dry-run`. For each violation: standard
+ * row + inline annotation about whether an autofix exists, the rule's
+ * fix description, and a compact preview of each planned edit. Closes
+ * with a box that splits "fixable" vs "manual review".
+ *
+ * Differs from `check` (just the violation table) and `--fix` (only
+ * the applied summary) — `--dry-run` is the "plan" mode that shows
+ * BOTH what's wrong AND what `--fix` would do, without touching disk.
+ */
+const renderDryRunPlan = (
+  data: CheckData,
+  sink: NodeJS.WritableStream,
+): void => {
+  if (data.violations.length === 0) {
+    sink.write(
+      box(colors.green("No violations found."), {
+        title: colors.green("✓ check (dry-run)"),
+        style: { borderColor: "green" },
+      }) + "\n",
+    );
+    return;
   }
+
+  // Group fixes by rule so each violation can pull the matching plan.
+  const fixesByRule = new Map<string, FixResult[]>();
+  for (const fix of data.suggestedFixes) {
+    const list = fixesByRule.get(fix.rule) ?? [];
+    list.push(fix);
+    fixesByRule.set(fix.rule, list);
+  }
+  // Rules whose fixes were absorbed by a sibling — used to label
+  // "resolved together with X" when this rule's violations have no
+  // direct fix in suggestedFixes.
+  const resolvedByOtherRule = new Map<string, string>();
+  const mergedFixes = data.mergedFixes ?? {};
+  for (const keeper of Object.keys(mergedFixes)) {
+    for (const subsumed of mergedFixes[keeper] ?? []) {
+      resolvedByOtherRule.set(subsumed, keeper);
+    }
+  }
+
+  const seenFixForRule = new Set<string>();
+  let fixableCount = 0;
+  for (const v of data.violations) {
+    renderViolationRow(v, sink);
+    const ownFixes = fixesByRule.get(v.rule);
+    if (ownFixes && ownFixes.length > 0) {
+      fixableCount += 1;
+      if (seenFixForRule.has(v.rule)) {
+        sink.write(colors.dim(`     → covered by the ${v.rule} fix above\n\n`));
+      } else {
+        seenFixForRule.add(v.rule);
+        for (const fix of ownFixes) renderDryRunFix(fix, sink);
+      }
+      continue;
+    }
+    const subsumedBy = resolvedByOtherRule.get(v.rule);
+    if (subsumedBy) {
+      fixableCount += 1;
+      sink.write(
+        colors.dim(`     → resolved together with ${subsumedBy} fix\n\n`),
+      );
+      continue;
+    }
+    sink.write(colors.dim(`     → no autofix — manual review\n\n`));
+  }
+
+  renderDryRunBox(data.violations.length, fixableCount, sink);
+};
+
+const renderViolationRow = (
+  v: CheckViolation,
+  sink: NodeJS.WritableStream,
+): void => {
+  const locText = v.sourceLocation
+    ? formatLocationDisplay(v.sourceLocation)
+    : "";
+  const paddedLoc = locText.padEnd(Math.max(locText.length, 1));
+  const linked = linkSourceLocation(paddedLoc, v.sourceLocation);
+  const severity = colors.red("error");
+  const ruleCell = colors.yellow(v.rule);
+  const subject = colors.bold(v.target);
+  sink.write(
+    `  ${colors.dim(linked)}  ${severity}  ${ruleCell}  ${subject}: ${v.message}\n`,
+  );
+  if (v.relatedLocations && v.relatedLocations.length > 0) {
+    const indent = " ".repeat(locText.length + 4);
+    for (const rel of v.relatedLocations) {
+      const relText = formatLocationDisplay(rel.sourceLocation);
+      const relLink = linkSourceLocation(relText, rel.sourceLocation);
+      const label = rel.message ? `${rel.message}: ` : "";
+      const arrow = colors.dim(`↳ ${label}${relLink}`);
+      sink.write(`  ${indent}${arrow}\n`);
+    }
+  }
+};
+
+const renderDryRunFix = (fix: FixResult, sink: NodeJS.WritableStream): void => {
+  sink.write(colors.dim(`     → would `) + fix.description + "\n");
+  for (const edit of fix.edits) renderDryRunEdit(edit, sink);
+  sink.write("\n");
+};
+
+const renderDryRunEdit = (
+  edit: SourceEdit,
+  sink: NodeJS.WritableStream,
+): void => {
+  const action = editActionLabel(edit.kind);
+  const anchorLoc =
+    edit.kind === "remove" || edit.kind === "replace"
+      ? edit.range
+      : edit.anchor;
+  const loc = formatLocationDisplay(anchorLoc);
+  const linkedLoc = linkSourceLocation(loc, anchorLoc);
+  sink.write(colors.dim(`       ${action} ${linkedLoc}`));
+  if (edit.kind === "remove") {
+    sink.write("\n");
+    return;
+  }
+  const single = edit.content.replaceAll(/\s+/g, " ").trim();
+  const compact = single.length > 64 ? single.slice(0, 61) + "…" : single;
+  sink.write(colors.dim("  →  ") + colors.green(compact) + "\n");
+};
+
+const editActionLabel = (kind: SourceEdit["kind"]): string => {
+  switch (kind) {
+    case "replace": {
+      return "replace";
+    }
+    case "remove": {
+      return "remove";
+    }
+    case "insert-after": {
+      return "insert after";
+    }
+    case "insert-before": {
+      return "insert before";
+    }
+  }
+};
+
+const renderDryRunBox = (
+  total: number,
+  fixable: number,
+  sink: NodeJS.WritableStream,
+): void => {
+  const manual = total - fixable;
+  const violationsWord = total === 1 ? "violation" : "violations";
+  const parts: readonly string[] = [
+    colors.red(`${total} ${violationsWord}`),
+    ...(fixable > 0 ? [colors.green(`${fixable} fixable`)] : []),
+    ...(manual > 0 ? [colors.yellow(`${manual} manual`)] : []),
+  ];
+  const headline = parts.join(colors.dim(" · "));
+  const subline = fixable > 0 ? colors.dim("run --fix to apply") : "";
+  const content = subline ? `${headline}\n${subline}` : headline;
+  sink.write(
+    box(content, {
+      title: colors.red("✗ check (dry-run)"),
+      style: { borderColor: "red" },
+    }) + "\n",
+  );
 };
 
 /**
@@ -939,7 +1038,7 @@ const renderFixOutcome = (
     return;
   }
 
-  const mergedRules = applied.mergedRules ?? {};
+  const mergedRules = data.mergedFixes ?? {};
   for (const fix of data.suggestedFixes) {
     renderAppliedFixLine(fix, mergedRules, sink);
   }
