@@ -268,6 +268,58 @@
     }
   };
 
+  /**
+   * Global keyboard shortcuts — Zed-style, single-letter, no chord.
+   *   1 / 2 / 3 — switch view mode (Drill / Expand / Flat)
+   *   A         — toggle the Analyze overlay
+   *   Esc       — clear selection (closes the element / boundary panel)
+   *
+   * Shortcuts no-op when the user is typing into a form control or a
+   * contenteditable surface so the keys don't fight the page.
+   */
+  const isEditableTarget = (event: KeyboardEvent): boolean => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return false;
+    if (target.isContentEditable) return true;
+    const tag = target.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  };
+  const onGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (isEditableTarget(event)) return;
+    switch (event.key) {
+      case "1": {
+        setMode("drill");
+        event.preventDefault();
+        return;
+      }
+      case "2": {
+        setMode("expand");
+        event.preventDefault();
+        return;
+      }
+      case "3": {
+        setMode("flat");
+        event.preventDefault();
+        return;
+      }
+      case "a":
+      case "A": {
+        setAnalyze(!analyzeOn);
+        event.preventDefault();
+        return;
+      }
+      case "Escape": {
+        if (selected) {
+          selected = null;
+          event.preventDefault();
+        }
+        return;
+      }
+    }
+  };
+
   const collapseAll = (): void => {
     expanded = new Set();
   };
@@ -688,6 +740,8 @@
   };
 </script>
 
+<svelte:window onkeydown={onGlobalKeyDown} />
+
 <svelte:head>
   <title>aact view</title>
 </svelte:head>
@@ -696,25 +750,25 @@
   <header class="topbar">
     <div class="brand">
       <span class="logo">aact</span>
-      <span class="sep" aria-hidden="true">·</span>
-      <span class="title">view</span>
+      <span class="subcmd">view</span>
       {#if envelope?.data.model.workspace?.name}
-        <span class="sep" aria-hidden="true">·</span>
         <span class="workspace" title={envelope.data.model.workspace.description ?? ""}>
           {envelope.data.model.workspace.name}
         </span>
       {/if}
-      <span class="status status-{status}">
-        {#if status === "live"}● live
-        {:else if status === "error"}● reload error
-        {:else if status === "lost"}● disconnected — retrying
-        {:else}● connecting
-        {/if}
+      <span class="status">
+        <span class="status-dot dot-{status}" aria-hidden="true"></span>
+        <span class="status-label">
+          {#if status === "live"}live
+          {:else if status === "error"}reload failed
+          {:else if status === "lost"}reconnecting
+          {:else}connecting
+          {/if}
+        </span>
       </span>
       {#if diffMode && envelope?.data.diff}
-        <span class="sep" aria-hidden="true">·</span>
-        <span class="diff-pill" title={envelope.data.diff.data.summary.headline}>
-          diff: {envelope.data.diff.data.summary.headline}
+        <span class="diff-chip" title={envelope.data.diff.data.summary.headline}>
+          diff {envelope.data.diff.data.summary.headline}
         </span>
       {/if}
     </div>
@@ -847,6 +901,12 @@
           />
         </SvelteFlow>
       </SvelteFlowProvider>
+
+      <div class="kbd-floater" aria-label="Keyboard shortcuts">
+        <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span class="kbd-label">modes</span>
+        <kbd>A</kbd><span class="kbd-label">analyze</span>
+        <kbd>Esc</kbd><span class="kbd-label">clear</span>
+      </div>
 
       <aside class="legend" aria-label="C4 element palette">
         <span class="legend-row"><span class="swatch" style="background: #08427b;"></span>Person</span>
@@ -1140,63 +1200,76 @@
     background: #0d1424;
     border-bottom: 1px solid rgba(148, 163, 184, 0.10);
   }
+  /* Zed-style title bar left cluster: no middot separators, slot
+     siblings sit on a small gap. Project name reads as the main
+     identity (regular weight, default text); subcommand and status
+     are muted breadcrumb-like. Status indicator is a 6×6 rounded dot
+     followed by a muted label — matches Zed's `Indicator::dot()` +
+     `LabelSize::Small Color::Muted` pattern. */
   .brand {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    align-items: center;
+    gap: 10px;
     min-width: 0;
   }
   .logo {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
     color: #f8fafc;
   }
-  .title {
+  .subcmd {
     font-size: 12px;
     color: #64748b;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    font-weight: 400;
   }
   .workspace {
     font-size: 12px;
-    color: #cbd5e1;
-    font-weight: 500;
+    color: #e2e8f0;
+    font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 340px;
   }
-  .sep {
-    color: #334155;
-    font-size: 10px;
-  }
   .status {
-    font-size: 10.5px;
-    margin-left: 4px;
-    color: #64748b;
-    font-feature-settings: "tnum";
-    letter-spacing: 0.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
-  .status-live {
-    color: #34d399;
+  .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    flex-shrink: 0;
   }
-  .status-lost {
-    color: #f87171;
+  .dot-live {
+    background: #34d399;
   }
-  .status-error {
-    color: #fbbf24;
+  .dot-lost {
+    background: #f87171;
   }
-  .diff-pill {
+  .dot-error {
+    background: #fbbf24;
+  }
+  .dot-connecting {
+    background: #64748b;
+  }
+  .status-label {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 400;
+  }
+  .diff-chip {
     display: inline-block;
     max-width: 360px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 400;
     color: #fbbf24;
-    letter-spacing: 0.01em;
   }
   .topbar-controls {
     display: inline-flex;
@@ -1246,6 +1319,42 @@
     gap: 10px;
     font-size: 12px;
     min-width: 0;
+  }
+  /* Single-line keyboard cheat-sheet — pinned to the bottom-left,
+     directly right of the Legend so the two help surfaces read as
+     one row. Chip-only, no panel chrome. */
+  .kbd-floater {
+    position: absolute;
+    bottom: 14px;
+    left: 130px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .kbd-floater kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    padding: 2px 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px;
+    line-height: 1.2;
+    color: #cbd5e1;
+    background: rgba(148, 163, 184, 0.08);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 3px;
+  }
+  .kbd-floater .kbd-label {
+    font-size: 11px;
+    color: #64748b;
+    letter-spacing: 0.01em;
+    margin: 0 8px 0 2px;
+  }
+  .kbd-floater .kbd-label:last-child {
+    margin-right: 0;
   }
   .breadcrumb {
     display: flex;
@@ -1665,7 +1774,14 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* Move xyflow's Controls to top-left of the canvas — bottom-left
+     is owned by the Legend, and stacking the two created a "controls
+     are hidden" trap. Top-left keeps zoom/fit/lock buttons one Cmd-tab
+     away from the diagram. */
   :global(.svelte-flow__controls) {
+    bottom: auto !important;
+    left: 14px !important;
+    top: 14px !important;
     background: #0d1424;
     border: 1px solid rgba(148, 163, 184, 0.14);
     border-radius: 4px;

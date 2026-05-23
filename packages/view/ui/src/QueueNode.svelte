@@ -19,6 +19,10 @@
   const actions = getContext<ViewActions>(VIEW_ACTIONS);
 
   const fill = $derived(data.external ? "#475569" : "#1168bd");
+
+  // Split the camelCase kind (ContainerQueue / SystemQueue / ComponentQueue)
+  // into "<Tier> Queue" so the uppercase chip reads as two words.
+  const kindLabel = $derived(data.kind.replace(/Queue$/, " Queue"));
 </script>
 
 <div
@@ -34,8 +38,29 @@
   }}
 >
   <Handle type="target" position={Position.Left} />
-  <div class="body">
-    <span class="kind">{data.kind}</span>
+  <!-- Canonical C4 queue: horizontal cylinder (pipe). Small (8%)
+       left/right rim ellipses so the pipe hint is unmistakable but
+       most of the node is body for the text content. -->
+  <svg
+    class="shape"
+    width="100%"
+    height="100%"
+    viewBox="0 0 100 100"
+    preserveAspectRatio="none"
+    aria-hidden="true"
+  >
+    <path
+      class="body"
+      d="M 6 0 C 2 0 0 22 0 50 C 0 78 2 100 6 100 L 94 100 C 98 100 100 78 100 50 C 100 22 98 0 94 0 Z"
+    />
+    <path
+      class="rim"
+      d="M 6 0 C 10 0 12 22 12 50 C 12 78 10 100 6 100"
+      fill="none"
+    />
+  </svg>
+  <div class="content">
+    <span class="kind">{kindLabel}</span>
     <span class="label">{data.label}</span>
     {#if data.technology}
       <span class="tech">[{data.technology}]</span>
@@ -49,73 +74,81 @@
 
 <style>
   .q {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    padding: 0;
-    /* Pipe / capsule end-caps so it reads as a queue at a glance. */
-    border-radius: 999px;
-    background: linear-gradient(
-      180deg,
-      var(--fill) 0%,
-      color-mix(in srgb, var(--fill) 80%, black) 100%
-    );
-    color: #f8fafc;
+    position: relative;
     width: 100%;
     height: 100%;
-    box-sizing: border-box;
+    color: #f8fafc;
     cursor: pointer;
-    box-shadow:
-      0 10px 28px -18px color-mix(in srgb, var(--fill) 70%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    transition: transform 120ms ease;
+    box-sizing: border-box;
+    transition: filter 100ms ease;
   }
   .q:hover {
-    transform: translateY(-1px);
+    filter: brightness(1.08);
   }
-  .q.is-selected {
-    outline: 2px solid #38bdf8;
-    outline-offset: 2px;
+  .shape {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
   }
-  .body {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 14px 22px;
-    overflow: hidden;
+  .shape .body {
+    fill: var(--fill);
+    stroke: color-mix(in srgb, var(--fill) 55%, black);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+  }
+  .shape .rim {
+    stroke: color-mix(in srgb, var(--fill) 55%, black);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    opacity: 0.8;
+  }
+  .q.is-selected .shape .body {
+    stroke: #7dd3fc;
+    stroke-width: 2;
+  }
+  /* block layout — matches DatabaseNode. Horizontal padding clears
+     the left rim and the right end-cap curve. */
+  .content {
+    position: relative;
+    display: block;
+    padding: 14px 10% 14px 14%;
+    box-sizing: border-box;
     height: 100%;
-    justify-content: center;
+    overflow: hidden;
   }
   .kind {
-    font-size: 9px;
-    letter-spacing: 0.14em;
+    display: block;
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: rgba(248, 250, 252, 0.78);
-    font-weight: 700;
+    color: rgba(248, 250, 252, 0.65);
+    font-weight: 500;
+    margin-bottom: 3px;
   }
   .label {
+    display: block;
     font-size: 13px;
-    font-weight: 700;
-    line-height: 1.15;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.005em;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    white-space: nowrap;
   }
   .tech {
+    display: block;
     font-size: 10px;
-    color: rgba(248, 250, 252, 0.85);
-    font-style: italic;
+    color: rgba(248, 250, 252, 0.75);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    margin-top: 2px;
   }
   .desc {
+    display: block;
     font-size: 11px;
-    line-height: 1.3;
-    color: rgba(248, 250, 252, 0.75);
+    line-height: 1.35;
+    color: rgba(248, 250, 252, 0.7);
     overflow: hidden;
     text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
+    margin-top: 2px;
   }
 </style>

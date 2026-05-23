@@ -6,7 +6,54 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-## v3.0.0-beta.26 — 2026-05-23
+## v3.0.0-beta.27 — 2026-05-23
+
+> View UI polish round. `aact view` databases and queues now render as
+> canonical C4 cylinders and horizontal pipes (inline SVG so the shapes
+> stay crisp at any size). Topbar brand block adopts Zed's title-bar
+> language — no middot separators, a real 6×6 status dot, muted
+> subcommand breadcrumb. Three single-letter keyboard shortcuts land
+> (`1/2/3` for view mode, `A` for analyze, `Esc` to clear selection)
+> with a discoverable cheat-sheet next to the C4 legend.
+
+### Added
+
+- **Canonical C4 shapes for `ContainerDb` / `ContainerQueue`.** Inline
+  SVG paths with `preserveAspectRatio="none"` and `vector-effect:
+non-scaling-stroke` give databases a cylinder profile (visible top
+  rim ellipse + bottom curve) and queues a horizontal pipe profile
+  (left rim ellipse + right end-cap), regardless of the ELK-assigned
+  node aspect ratio. Both keep the same solid C4 fill / hairline
+  stroke / typography hierarchy as the regular Container nodes, so
+  the three node families read as one visual family while keeping
+  their canonical shape hints.
+- **Keyboard shortcuts on the workbench.** `1`, `2`, `3` switch
+  between Drill / Expand / Flat view modes; `A` toggles the Analyze
+  overlay; `Esc` clears the current node / boundary selection.
+  Shortcuts no-op while focus sits in a form control so they don't
+  fight the page. A small chip-style cheat-sheet sits next to the
+  C4 element legend so the bindings are visible without a tooltip.
+- **`aact view` topbar brand block: Zed title-bar style.** The
+  `aact · view · <Workspace> · ● live` chain drops the middot
+  separators for a tight 10px gap, splits the readable identity
+  (`aact` semi-bold app name, `view` muted breadcrumb,
+  `<Workspace>` regular text), and replaces the unicode `●` with a
+  real 6×6 `border-radius: 999px` div whose colour tracks the
+  connection state (`#34d399` live / `#fbbf24` reload error /
+  `#f87171` disconnected / muted while connecting). Mirrors Zed's
+  `Indicator::dot()` + `LabelSize::Small Color::Muted` pattern.
+- **`ContainerDb` and `ContainerQueue` kind labels render with a
+  space.** The uppercase chip in the node header now reads as
+  `CONTAINER DB` / `CONTAINER QUEUE` instead of the camelCased
+  `CONTAINERDB` / `CONTAINERQUEUE`.
+
+### Changed
+
+- **SvelteFlow Controls moved to the top-left of the canvas.**
+  The default bottom-left position collided with the C4 legend; top-left
+  keeps zoom / fit / lock buttons reachable without overlap. Style
+  matches the Zed-language hairline border + flat surface other
+  overlays use.
 
 > Honesty fix on the `--fix` summary. When dedupe collapsed two
 > rules' byte-identical edits into one (beta.25), the outcome read
