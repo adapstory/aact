@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.26 — 2026-05-23
+
+> Honesty fix on the `--fix` summary. When dedupe collapsed two
+> rules' byte-identical edits into one (beta.25), the outcome read
+> as "1 fix applied" — looked like only one of the two violations
+> got addressed. Now the summary credits every rule the single
+> landed edit resolved and shows the violations-resolved count
+> alongside the edit count.
+
+### Added
+
+- **Renderer + envelope credit subsumed rules in `--fix` output.**
+  When the dedupe pass merges another rule's byte-identical edit into
+  the kept one, the renderer now appends
+  `(also resolves: <rule>, …)` to the affected fix line, and the
+  result box shows `N fix applied · M violations resolved` so the
+  pre-fix violation count is visible alongside the edit count.
+  Machine consumers read the same data from
+  `data.fixesApplied.mergedRules`, a record keyed by the kept rule
+  with the list of rules it subsumes (omitted when no dedupe
+  happened).
+
 ## v3.0.0-beta.25 — 2026-05-23
 
 > Quality-of-life on the autofix loop. Two rules that propose

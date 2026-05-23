@@ -95,6 +95,14 @@ export interface CheckFixesApplied {
     readonly violations: readonly CheckViolation[];
     readonly summary: CheckSummary;
   };
+  /**
+   * Rules whose byte-identical fix edits were absorbed by another
+   * rule's kept edit, keyed by the rule that retained the edit. Lets
+   * the renderer credit every rule the single landed edit resolved
+   * (otherwise multi-rule violations would look like only one rule was
+   * addressed). Omitted when no dedupe collapsed cross-rule edits.
+   */
+  readonly mergedRules?: Readonly<Record<string, readonly string[]>>;
 }
 
 export type CheckMode = "check" | "dry-run" | "fix";
@@ -272,13 +280,25 @@ const resolveFixCapability = async (
   return { capability: format.fix };
 };
 
+interface GeneratedFixes {
+  readonly fixes: readonly FixResult[];
+  /**
+   * Rules whose byte-identical fix edits were absorbed by another
+   * rule's kept edit, keyed by the rule that retained the edit.
+   * Empty when no dedupe happened. Used to render
+   * "also resolves: <rule>" annotations so the user sees both
+   * concerns were addressed by the single edit.
+   */
+  readonly mergedRules: Readonly<Record<string, readonly string[]>>;
+}
+
 const generateFixes = (
   model: Model,
   results: readonly RuleResult[],
   rules: AactConfig["rules"],
   syntax: FormatSyntax,
   effective: readonly RuleDefinition[],
-): FixResult[] => {
+): GeneratedFixes => {
   const ruleByName = new Map(effective.map((r) => [r.name, r]));
   const fixes: FixResult[] = [];
   for (const result of results) {
@@ -324,19 +344,30 @@ const editIdentity = (edit: SourceEdit): string => {
  * existing `orders_repo`. Keep the first occurrence and drop later
  * byte-identical edits before rendering/applying fixes; genuinely
  * different overlapping edits are still left for `applyEdits` to
- * report as conflicts.
+ * report as conflicts. The map of subsumed rules per kept rule travels
+ * alongside so the renderer can credit every rule the single edit
+ * resolves.
  */
 const deduplicateIdenticalFixEdits = (
   fixes: readonly FixResult[],
-): FixResult[] => {
-  const seen = new Set<string>();
+): GeneratedFixes => {
+  const editKeyToOwner = new Map<string, string>();
+  const merged = new Map<string, Set<string>>();
   const deduped: FixResult[] = [];
 
   for (const fix of fixes) {
     const edits = fix.edits.filter((edit) => {
       const key = editIdentity(edit);
-      if (seen.has(key)) return false;
-      seen.add(key);
+      const owner = editKeyToOwner.get(key);
+      if (owner !== undefined) {
+        if (owner !== fix.rule) {
+          const set = merged.get(owner) ?? new Set<string>();
+          set.add(fix.rule);
+          merged.set(owner, set);
+        }
+        return false;
+      }
+      editKeyToOwner.set(key, fix.rule);
       return true;
     });
     // Drop fixes whose every edit was deduped away (no work left). Fixes
@@ -346,7 +377,12 @@ const deduplicateIdenticalFixEdits = (
     deduped.push(edits.length === fix.edits.length ? fix : { ...fix, edits });
   }
 
-  return deduped;
+  const mergedRules: Record<string, readonly string[]> = {};
+  for (const [keeper, subsumed] of merged) {
+    mergedRules[keeper] = [...subsumed].sort((a, b) => a.localeCompare(b));
+  }
+
+  return { fixes: deduped, mergedRules };
 };
 
 const flattenViolations = (
@@ -508,17 +544,20 @@ export const executeCheck = async (
   const mode = resolveMode(args);
 
   let suggestedFixes: readonly FixResult[] = [];
+  let mergedRules: Readonly<Record<string, readonly string[]>> = {};
   if (violations.length > 0) {
     const fixCap = await resolveFixCapability(config);
     if (fixCap.diagnostic) diagnostics.push(fixCap.diagnostic);
     if (fixCap.capability) {
-      suggestedFixes = generateFixes(
+      const generated = generateFixes(
         model,
         results,
         config.rules,
         fixCap.capability.syntax,
         effective,
       );
+      suggestedFixes = generated.fixes;
+      mergedRules = generated.mergedRules;
     }
   }
 
@@ -536,6 +575,7 @@ export const executeCheck = async (
       remaining: result.remaining,
       writePath: result.writePath,
       before: { violations, summary },
+      ...(Object.keys(mergedRules).length > 0 ? { mergedRules } : {}),
     };
     finalViolations = result.remainingViolations;
     finalSummary = result.remainingSummary;
@@ -813,6 +853,77 @@ export const renderCheckText = (
  * of each applied fix, then a result box ("N fix applied · M remaining")
  * — no duplicated pre-fix violation table.
  */
+const renderAppliedFixLine = (
+  fix: FixResult,
+  mergedRules: Readonly<Record<string, readonly string[]>>,
+  sink: NodeJS.WritableStream,
+): void => {
+  const subsumed = mergedRules[fix.rule] ?? [];
+  const annotation =
+    subsumed.length > 0
+      ? "  " + colors.dim(`(also resolves: ${subsumed.join(", ")})`)
+      : "";
+  sink.write(
+    `  ${colors.green("✓")}  ${colors.yellow(fix.rule)}  ${fix.description}${annotation}\n`,
+  );
+};
+
+const renderRemainingViolations = (
+  data: CheckData,
+  sink: NodeJS.WritableStream,
+): void => {
+  sink.write(colors.yellow("Not auto-fixed:") + "\n");
+  for (const v of data.violations) {
+    const loc = v.sourceLocation
+      ? colors.dim(formatLocationDisplay(v.sourceLocation)) + "  "
+      : "";
+    sink.write(
+      `  ${colors.yellow("⚠")}  ${loc}${colors.yellow(v.rule)}  ${colors.bold(v.target)}: ${v.message}\n`,
+    );
+  }
+  sink.write("\n");
+};
+
+const renderFixOutcomeBox = (
+  applied: CheckFixesApplied,
+  postFixViolations: number,
+  sink: NodeJS.WritableStream,
+): void => {
+  // Two numbers tell different stories: how many edits landed (count)
+  // and how many violations they collectively resolved (pre − post).
+  // Without the second, one edit that resolves two rules reads as
+  // "only one problem fixed".
+  const resolved = Math.max(
+    0,
+    applied.before.violations.length - postFixViolations,
+  );
+  const fixLabel = applied.count === 1 ? "fix" : "fixes";
+  const parts: string[] = [
+    colors.green(`${applied.count} ${fixLabel} applied`),
+  ];
+  if (resolved !== applied.count) {
+    const label = resolved === 1 ? "violation" : "violations";
+    parts.push(colors.green(`${resolved} ${label} resolved`));
+  }
+  if (applied.remaining > 0) {
+    const label = applied.remaining === 1 ? "violation" : "violations";
+    parts.push(colors.yellow(`${applied.remaining} ${label} remaining`));
+  }
+  const wrote = colors.dim(`wrote ${formatDisplayPath(applied.writePath)}`);
+  const headline = parts.join(colors.dim(" · ")) + "\n" + wrote;
+
+  const warn = applied.remaining > 0;
+  const title = warn
+    ? colors.yellow("⚠ check --fix")
+    : colors.green("✓ check --fix");
+  sink.write(
+    box(headline, {
+      title,
+      style: { borderColor: warn ? "yellow" : "green" },
+    }) + "\n",
+  );
+};
+
 const renderFixOutcome = (
   data: CheckData,
   sink: NodeJS.WritableStream,
@@ -828,52 +939,17 @@ const renderFixOutcome = (
     return;
   }
 
+  const mergedRules = applied.mergedRules ?? {};
   for (const fix of data.suggestedFixes) {
-    const ruleTag = colors.yellow(fix.rule);
-    sink.write(`  ${colors.green("✓")}  ${ruleTag}  ${fix.description}\n`);
+    renderAppliedFixLine(fix, mergedRules, sink);
   }
   sink.write("\n");
 
-  // Remaining violations — these are post-fix (data.violations is the
-  // re-check result in fix mode). Show them so the user knows what
-  // still needs manual review.
   if (applied.remaining > 0 && data.violations.length > 0) {
-    sink.write(colors.yellow("Not auto-fixed:") + "\n");
-    for (const v of data.violations) {
-      const loc = v.sourceLocation
-        ? colors.dim(formatLocationDisplay(v.sourceLocation)) + "  "
-        : "";
-      sink.write(
-        `  ${colors.yellow("⚠")}  ${loc}${colors.yellow(v.rule)}  ${colors.bold(v.target)}: ${v.message}\n`,
-      );
-    }
-    sink.write("\n");
+    renderRemainingViolations(data, sink);
   }
 
-  const fixLabel = applied.count === 1 ? "fix" : "fixes";
-  const headlineParts: string[] = [
-    colors.green(`${applied.count} ${fixLabel} applied`),
-  ];
-  if (applied.remaining > 0) {
-    const remainLabel = applied.remaining === 1 ? "violation" : "violations";
-    headlineParts.push(
-      colors.yellow(`${applied.remaining} ${remainLabel} remaining`),
-    );
-  }
-  const wrote = colors.dim(`wrote ${formatDisplayPath(applied.writePath)}`);
-  const headline = headlineParts.join(colors.dim(" · ")) + "\n" + wrote;
-
-  const titleColor = applied.remaining > 0 ? "yellow" : "green";
-  const titleGlyph = applied.remaining > 0 ? "⚠" : "✓";
-  sink.write(
-    box(headline, {
-      title:
-        titleColor === "green"
-          ? colors.green(`${titleGlyph} check --fix`)
-          : colors.yellow(`${titleGlyph} check --fix`),
-      style: { borderColor: titleColor },
-    }) + "\n",
-  );
+  renderFixOutcomeBox(applied, data.violations.length, sink);
 };
 
 // -----------------------------------------------------------------------------
