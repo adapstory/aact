@@ -6,6 +6,145 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.24 — 2026-05-23
+
+> Format API reaches feature-complete: Docker Compose and Kubernetes
+> loaders join PlantUML, Structurizr DSL/JSON, and `.aact.json` as
+> first-class formats. Structurizr DSL gains a round-trip generator,
+> so a model loaded from DSL can be regenerated back to DSL with
+> identifier and property preservation. The `diff` engine moves from
+> naive rename heuristics to Kuhn-Munkres optimal assignment over an
+> eight-feature similarity vector with fixed-point chain-rename
+> resolution and architectural ChangeGroup detection. `aact view`
+> grows a diff overlay, an analyze overlay, and a non-AI visual
+> language. One breaking change: `source.writePath` is dropped and
+> Structurizr JSON now refuses `--fix` (use DSL).
+
+### Added
+
+- **Docker Compose loader and generator.** Auto-detects all four
+  canonical filenames (`compose.yaml`, `compose.yml`,
+  `docker-compose.yaml`, `docker-compose.yml`); resolves service
+  names through the unified image-heuristic helper shared with the
+  Kubernetes loader; preserves user-authored labels; round-trips
+  through `aact generate --format compose`.
+- **Kubernetes loader.** Walks Deployment, StatefulSet, DaemonSet,
+  Job, and CronJob workloads; reads namespaces, annotations, and
+  Service relations; chases `kustomization.yaml` resource graphs so
+  the loader sees the same flattened tree `kubectl apply -k` would
+  apply. Pairs with the existing `generate --format kubernetes`
+  output for closed-loop infrastructure conformance.
+- **Structurizr DSL generator with round-trip parity.** Models
+  loaded from `.dsl` regenerate to `.dsl` with identifiers,
+  workspace body overrides, archetype alias chains, and implied
+  relationships preserved. Closes the symmetry gap left when v3
+  only supported DSL loading.
+- **Structurizr archetype family.** Kind-default archetype form
+  (`archetype "service" { tags … }`), archetype alias usage with
+  chained defaults, and property/perspective propagation through
+  the archetype hierarchy. Workspace-body overrides and bare
+  `impliedRelationships` directive land in the same pass.
+- **Diff: Hungarian assignment over multi-feature similarity.**
+  Rename detection replaces the previous greedy nearest-neighbour
+  pass with Kuhn-Munkres optimal assignment on a similarity matrix
+  computed from name, label, technology, external flag, tags,
+  relations, description, and properties — eight weighted features
+  derived from the EMF Compare convention. Configurable
+  `--rename-threshold` (default 0.65) controls the minimum
+  similarity required to admit a candidate rename.
+- **Diff: fixed-point iteration for chain renames.** When a rename
+  unlocks adjacent rename candidates (e.g. a service renames and
+  its repository renames in tandem), the resolver re-runs until the
+  assignment stabilises, capped at 5 iterations. Removes a known
+  failure mode where the first pass would miss the second leg of a
+  refactor.
+- **Diff: architectural ChangeGroup detectors.** Primitive changes
+  are post-processed into higher-level patterns:
+  `technologySwapped` (a container's technology field changed —
+  surfaced as one group instead of one field-change per affected
+  property), `introducedRepository` (a new repository container
+  appeared and accessor relations rerouted through it). Each group
+  carries a confidence score and the list of underlying change
+  addresses. The text reporter and `--json` envelope both expose
+  groups under `data.groups`.
+- **Diff benchmark corpus.** Twelve hand-authored before/after
+  scenarios under `test/diff/benchmark/case-NN/` cover renames,
+  decomposition, repository extraction, technology swaps, boundary
+  moves, and chain renames. Each case ships an `expected.json`
+  asserting exact diff output — the corpus doubles as a regression
+  harness and a tuning ground for future similarity weight
+  adjustments.
+- **`aact view` — diff mode.** `aact view --diff <baseline>` boots
+  the workbench against the current model and a baseline (file path
+  or git ref), colours added / removed / modified / renamed / moved
+  nodes and relations on the graph, and adds a sidebar diff panel
+  listing ChangeGroups and top primitive changes. Baseline is
+  loaded once at boot; live-reload still tracks the current source.
+- **`aact view` — analyze overlay.** Toggle in the topbar surfaces
+  architecture metrics in the sidebar (elements by kind, relations
+  by style, top fan-in / fan-out, cycles) and highlights cycle
+  edges on the graph itself. The same `AnalysisReport` shape the
+  `aact analyze --json` envelope returns.
+- **`aact view` — non-AI visual language.** Topbar adopts Zed-style
+  segmented controls with hairline dividers and muted accent on
+  active. Sidebar drops the stat-card grid for a horizontal
+  info-line; section headers unify on a single uppercase tracking
+  treatment. Diff palette is paired with `+ − ~ ↦ ⇄` glyphs so the
+  status survives colour-blindness. Boundary chips drop the solid
+  pill background for an understated kind label tinted with the
+  family accent; element nodes drop gradients and decorative
+  shadows for a solid C4 fill with hairline border.
+- **Per-module READMEs for public contracts.** `src/model/`,
+  `src/rules/`, `src/diff/`, and `src/formats/` each ship a README
+  documenting the public surface, design choices, and integration
+  hooks. Targeted at library consumers and AI agents building
+  against the envelope.
+
+### Fixed
+
+- **Diff: pass `source.options` through to baseline + current
+  loaders.** Format options configured in `aact.config.ts` were
+  silently dropped when `aact diff` loaded the two sides. Both
+  loaders now receive the resolved options.
+- **Diff: auto-detect Kubernetes directories as baseline / current.**
+  When the baseline or current path is a directory containing
+  Kubernetes manifests, the loader now infers `format: kubernetes`
+  instead of failing the format dispatch.
+- **`aact check --fix`: universal parse-error mapping.** Parse
+  errors raised by any loader (PlantUML, Structurizr DSL, Compose,
+  K8s) now flow through a single `parse-error` diagnostic with
+  consistent source-location anchoring, and `--fix` re-checks after
+  applying edits so partial-fix runs surface remaining violations
+  in the same invocation.
+- **Structurizr: DSL-source parity for config inference and
+  `--fix`.** The DSL loader and the existing JSON loader now agree
+  on how config-level options (`source.options.structurizr.*`)
+  flow into element kind defaults, so `aact check --fix` produces
+  identical edits regardless of which form the workspace was
+  loaded from.
+- **`aact view`: scope WebSocket upgrades to `/api/ws` and surface
+  layout errors.** WebSocket upgrade attempts on unrelated paths
+  used to crash the h3 server with a CrossWS error; they now
+  return 404. ELK layout failures surface as a banner over the
+  canvas instead of a blank pane.
+
+### Tests
+
+- Property-based + e2e push closes the remaining coverage gap to
+  clear the 95% statements floor consistently across runs.
+
+### Breaking Changes
+
+- **`source.writePath` is dropped.** The config option only existed
+  to support read-from-A-write-to-B during the v2 → v3 cutover; v3
+  rules write back to the same path they read from. Drop the
+  field from any `aact.config.ts` that still declares it.
+- **Structurizr JSON refuses `aact check --fix`.** Structurizr JSON
+  is treated as a generated artefact (`workspace.json` from
+  Structurizr Cloud, CI, or the DSL CLI). `--fix` against a JSON
+  source now errors with a hint to point the config at the
+  authoring DSL instead. DSL `--fix` is unchanged.
+
 ## v3.0.0-beta.23 — 2026-05-21
 
 > Supersedes the rapid-iteration sequence beta.19 → beta.22. The
