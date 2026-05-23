@@ -6,6 +6,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## v3.0.0-beta.25 — 2026-05-23
+
+> Quality-of-life on the autofix loop. Two rules that propose
+> byte-identical edits no longer raise an `editConflict` warning —
+> the duplicate is dropped silently and the single edit applies.
+> `aact check --fix` text output drops the pre-fix violation table
+> for a per-applied-fix one-liner + outcome box. In JSON, `--fix`
+> mode now treats `data.violations` / `data.summary` as the
+> **post-fix** state so `exitCode` and the envelope agree; pre-fix
+> data moves to `fixesApplied.before` for audit.
+
+### Added
+
+- **`fixesApplied.before` in the `check --fix` JSON envelope.** Carries
+  the pre-fix `violations` + `summary` snapshot for tooling that needs
+  to audit what the command saw before any edits landed. Top-level
+  `data.violations` / `data.summary` continue to be the authoritative
+  final state — in `--fix` mode they now reflect the post-fix re-check
+  result, matching `exitCode`. Outside `--fix` they're unchanged.
+
+### Fixed
+
+- **`aact check --fix`: dedupe byte-identical edits across rules
+  before applying.** Multiple rules can independently discover the
+  same safe rewrite — the starter architecture is the canonical case:
+  `crud` and `dbPerService` both route `orders → orders_db` through
+  the existing `orders_repo`. Previously the applier reported the
+  second occurrence as an `editConflict` and required a re-run; now
+  the duplicate is filtered out before render so the single edit
+  applies cleanly. Genuinely different overlapping edits still
+  surface as conflicts.
+
+### Changed
+
+- **`aact check --fix` text output: outcome-focused, no duplicate
+  violation table.** The pre-fix violation listing belonged to `check`;
+  repeating it under `--fix` read as "found 2 errors → still found 2
+  errors → applied" even though the second listing was just the
+  pre-fix state. New shape: one line per applied fix
+  (`✓ <rule>  <description>`), then a result box
+  (`N fix applied · M violations remaining · wrote <path>`). When some
+  violations had no autofix, they're listed under a "Not auto-fixed"
+  heading. `check` and `--dry-run` output is unchanged.
+
 ## v3.0.0-beta.24 — 2026-05-23
 
 > Format API reaches feature-complete: Docker Compose and Kubernetes

@@ -85,6 +85,16 @@ export interface CheckFixesApplied {
   readonly remaining: number;
   /** Absolute path that received the fixes — always `config.source.path`. */
   readonly writePath: string;
+  /**
+   * Pre-fix snapshot for audit. In `--fix` mode `data.violations` and
+   * `data.summary` reflect the **post-fix** state (so exitCode and
+   * data agree); `before` carries what the command saw before any
+   * edits landed.
+   */
+  readonly before: {
+    readonly violations: readonly CheckViolation[];
+    readonly summary: CheckSummary;
+  };
 }
 
 export type CheckMode = "check" | "dry-run" | "fix";
@@ -286,7 +296,57 @@ const generateFixes = (
       }) ?? []),
     );
   }
-  return fixes;
+  return deduplicateIdenticalFixEdits(fixes);
+};
+
+const sourceLocationKey = (loc: SourceLocation): string =>
+  `${loc.file}:${loc.start.offset}:${loc.end.offset}`;
+
+const editIdentity = (edit: SourceEdit): string => {
+  switch (edit.kind) {
+    case "replace": {
+      return `${edit.kind}:${sourceLocationKey(edit.range)}:${edit.content}`;
+    }
+    case "remove": {
+      return `${edit.kind}:${sourceLocationKey(edit.range)}`;
+    }
+    case "insert-after":
+    case "insert-before": {
+      return `${edit.kind}:${sourceLocationKey(edit.anchor)}:${edit.content}`;
+    }
+  }
+};
+
+/**
+ * Multiple rules can discover the same safe rewrite from different
+ * angles. The starter architecture is the canonical case: `crud` and
+ * `dbPerService` both redirect `orders -> orders_db` through the
+ * existing `orders_repo`. Keep the first occurrence and drop later
+ * byte-identical edits before rendering/applying fixes; genuinely
+ * different overlapping edits are still left for `applyEdits` to
+ * report as conflicts.
+ */
+const deduplicateIdenticalFixEdits = (
+  fixes: readonly FixResult[],
+): FixResult[] => {
+  const seen = new Set<string>();
+  const deduped: FixResult[] = [];
+
+  for (const fix of fixes) {
+    const edits = fix.edits.filter((edit) => {
+      const key = editIdentity(edit);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    // Drop fixes whose every edit was deduped away (no work left). Fixes
+    // that started with zero edits — legitimate no-op announcements —
+    // pass through untouched.
+    if (fix.edits.length > 0 && edits.length === 0) continue;
+    deduped.push(edits.length === fix.edits.length ? fix : { ...fix, edits });
+  }
+
+  return deduped;
 };
 
 const flattenViolations = (
@@ -337,6 +397,8 @@ const buildSummary = (results: readonly RuleResult[]): CheckSummary => {
 
 interface ApplyFixesResult {
   readonly remaining: number;
+  readonly remainingViolations: readonly CheckViolation[];
+  readonly remainingSummary: CheckSummary;
   readonly writePath: string;
   readonly conflictDiagnostics: readonly Diagnostic[];
 }
@@ -391,10 +453,19 @@ const applyFixes = async (
   // Re-check тот же файл после write — иначе false-green CI скрывает
   // non-fixable violations. v2 имел short-circuit для JSON→DSL flow,
   // но JSON-source теперь refused upstream — re-load всегда возможен.
+  // Post-fix violations + summary become the envelope's authoritative
+  // state so `data.violations` and `exitCode` always agree.
   const { model: reModel } = await loadModel(config);
   const reResults = runRules(reModel, config.rules, effective);
-  const remaining = reResults.reduce((n, r) => n + r.violations.length, 0);
-  return { remaining, writePath, conflictDiagnostics };
+  const remainingViolations = flattenViolations(reResults, reModel);
+  const remainingSummary = buildSummary(reResults);
+  return {
+    remaining: remainingViolations.length,
+    remainingViolations,
+    remainingSummary,
+    writePath,
+    conflictDiagnostics,
+  };
 };
 
 // -----------------------------------------------------------------------------
@@ -452,13 +523,22 @@ export const executeCheck = async (
   }
 
   let fixesApplied: CheckFixesApplied | undefined;
+  // In `--fix` mode `data.violations` / `data.summary` are overwritten
+  // with the post-fix re-check so the envelope's authoritative state
+  // matches `exitCode`. Pre-fix data moves to `fixesApplied.before` for
+  // audit. Outside `--fix` these stay pointing at the initial run.
+  let finalViolations: readonly CheckViolation[] = violations;
+  let finalSummary: CheckSummary = summary;
   if (mode === "fix" && suggestedFixes.length > 0) {
     const result = await applyFixes(config, suggestedFixes, effective);
     fixesApplied = {
       count: suggestedFixes.length,
       remaining: result.remaining,
       writePath: result.writePath,
+      before: { violations, summary },
     };
+    finalViolations = result.remainingViolations;
+    finalSummary = result.remainingSummary;
     // Surface every edit conflict — silent drops here would defeat
     // the whole point of moving from string-matching to range-based
     // edits. Each conflict is its own diagnostic so the user can see
@@ -471,13 +551,13 @@ export const executeCheck = async (
   return {
     data: {
       mode,
-      violations,
+      violations: finalViolations,
       suggestedFixes,
-      summary,
+      summary: finalSummary,
       rules: ruleCatalogue,
       ...(fixesApplied ? { fixesApplied } : {}),
     },
-    exitCode: computeExitCode(violations.length, fixesApplied),
+    exitCode: computeExitCode(finalViolations.length, fixesApplied),
     diagnostics,
   };
 };
@@ -705,6 +785,18 @@ export const renderCheckText = (
     return;
   }
 
+  // Mode-specific output shapes — each command has a distinct purpose:
+  //   `check`     — diagnose: what's wrong
+  //   `--dry-run` — plan:     what would be fixed and how
+  //   `--fix`     — apply:    what was just fixed
+  // The pre-fix violation table belongs to `check`; repeating it under
+  // `--fix` reads as "found 2 errors → still found 2 errors → applied"
+  // even though the second listing is just the pre-fix state.
+  if (data.mode === "fix") {
+    renderFixOutcome(data, sink);
+    return;
+  }
+
   renderViolationsTable(data, sink);
 
   const fixableRules = new Set(data.suggestedFixes.map((f) => f.rule)).size;
@@ -714,18 +806,74 @@ export const renderCheckText = (
     sink.write(colors.bold("Suggested fixes (dry run):") + "\n\n");
     renderFixes(data.suggestedFixes, sink);
   }
+};
 
-  if (data.fixesApplied) {
-    const tail =
-      data.fixesApplied.remaining > 0
-        ? ` (${data.fixesApplied.remaining} violation(s) remain)`
+/**
+ * Outcome-only output for `aact check --fix`. Shows the one-line summary
+ * of each applied fix, then a result box ("N fix applied · M remaining")
+ * — no duplicated pre-fix violation table.
+ */
+const renderFixOutcome = (
+  data: CheckData,
+  sink: NodeJS.WritableStream,
+): void => {
+  const applied = data.fixesApplied;
+  // No applied fixes — either nothing was wrong (clean) or there were
+  // violations with no autofix available. Fall back to the regular
+  // diagnose layout so the user still sees what stayed.
+  if (!applied || applied.count === 0) {
+    renderViolationsTable(data, sink);
+    const fixableRules = new Set(data.suggestedFixes.map((f) => f.rule)).size;
+    renderBoxSummary(data, fixableRules, sink);
+    return;
+  }
+
+  for (const fix of data.suggestedFixes) {
+    const ruleTag = colors.yellow(fix.rule);
+    sink.write(`  ${colors.green("✓")}  ${ruleTag}  ${fix.description}\n`);
+  }
+  sink.write("\n");
+
+  // Remaining violations — these are post-fix (data.violations is the
+  // re-check result in fix mode). Show them so the user knows what
+  // still needs manual review.
+  if (applied.remaining > 0 && data.violations.length > 0) {
+    sink.write(colors.yellow("Not auto-fixed:") + "\n");
+    for (const v of data.violations) {
+      const loc = v.sourceLocation
+        ? colors.dim(formatLocationDisplay(v.sourceLocation)) + "  "
         : "";
-    sink.write(
-      colors.green(
-        `✔ Applied ${data.fixesApplied.count} fix(es), wrote ${formatDisplayPath(data.fixesApplied.writePath)}${tail}\n`,
-      ),
+      sink.write(
+        `  ${colors.yellow("⚠")}  ${loc}${colors.yellow(v.rule)}  ${colors.bold(v.target)}: ${v.message}\n`,
+      );
+    }
+    sink.write("\n");
+  }
+
+  const fixLabel = applied.count === 1 ? "fix" : "fixes";
+  const headlineParts: string[] = [
+    colors.green(`${applied.count} ${fixLabel} applied`),
+  ];
+  if (applied.remaining > 0) {
+    const remainLabel = applied.remaining === 1 ? "violation" : "violations";
+    headlineParts.push(
+      colors.yellow(`${applied.remaining} ${remainLabel} remaining`),
     );
   }
+  const wrote = colors.dim(`wrote ${formatDisplayPath(applied.writePath)}`);
+  const headline = headlineParts.join(colors.dim(" · ")) + "\n" + wrote;
+
+  const titleColor = applied.remaining > 0 ? "yellow" : "green";
+  const titleGlyph = applied.remaining > 0 ? "⚠" : "✓";
+  sink.write(
+    box(headline, {
+      title:
+        titleColor === "green"
+          ? colors.green(`${titleGlyph} check --fix`)
+          : colors.yellow(`${titleGlyph} check --fix`),
+      style: { borderColor: titleColor },
+    }) + "\n",
+  );
 };
 
 // -----------------------------------------------------------------------------

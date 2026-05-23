@@ -112,6 +112,30 @@ describe("aact init", () => {
 });
 
 describe("aact check", () => {
+  interface JsonEditLocation {
+    readonly file: string;
+    readonly start: { readonly offset: number };
+    readonly end: { readonly offset: number };
+  }
+
+  interface JsonEdit {
+    readonly kind: string;
+    readonly range?: JsonEditLocation;
+    readonly anchor?: JsonEditLocation;
+    readonly content?: string;
+  }
+
+  interface JsonFix {
+    readonly rule: string;
+    readonly edits: readonly JsonEdit[];
+  }
+
+  const editKey = (edit: JsonEdit): string => {
+    const loc = edit.range ?? edit.anchor;
+    if (!loc) throw new Error(`edit ${edit.kind} has no location`);
+    return `${edit.kind}:${loc.file}:${loc.start.offset}:${loc.end.offset}:${edit.content ?? ""}`;
+  };
+
   it("reports the seeded CRUD violation from the starter architecture", async () => {
     await runCli(["init"]);
     const result = await runCli(["check"]);
@@ -162,6 +186,21 @@ describe("aact check", () => {
     expect(data.mode).toBe("dry-run");
   });
 
+  it("--dry-run deduplicates identical starter edits across rules", async () => {
+    await runCli(["init"]);
+    const result = await runCli(["check", "--dry-run", "--json"]);
+    expect(result.exitCode).toBe(1);
+    const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
+    const data = envelope.data as Record<string, unknown>;
+    const fixes = data.suggestedFixes as readonly JsonFix[];
+    const edits = fixes.flatMap((fix) => fix.edits);
+    const editKeys = edits.map(editKey);
+
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0]?.rule).toBe("crud");
+    expect(new Set(editKeys).size).toBe(editKeys.length);
+  });
+
   it("--fix exits 0 when all violations are fixed", async () => {
     await runCli(["init"]);
     const result = await runCli(["check", "--fix", "--json"]);
@@ -169,9 +208,19 @@ describe("aact check", () => {
     const envelope = JSON.parse(result.stdout) as Record<string, unknown>;
     const data = envelope.data as Record<string, unknown>;
     expect(data.mode).toBe("fix");
+    expect(data.violations).toEqual([]);
+    expect(data.summary).toMatchObject({ failed: 0, total: 0 });
     const fixesApplied = data.fixesApplied as Record<string, unknown>;
     expect(fixesApplied).toBeDefined();
     expect(fixesApplied.remaining).toBe(0);
+    expect(fixesApplied.count).toBe(1);
+    expect(fixesApplied.before).toMatchObject({
+      summary: { failed: 2, total: 2 },
+    });
+    const diagnostics = envelope.diagnostics as
+      | readonly { readonly kind: string }[]
+      | undefined;
+    expect(diagnostics?.some((d) => d.kind === "fix.editConflict")).toBe(false);
   });
 
   it("--help prints the available options", async () => {

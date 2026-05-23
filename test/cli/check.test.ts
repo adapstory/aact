@@ -11,6 +11,7 @@ import { loadFormat } from "../../src/formats/registry";
 import { structurizrDslSyntax } from "../../src/formats/structurizr/syntax";
 import type { Format } from "../../src/formats/types";
 import type { Model } from "../../src/model";
+import type { RuleDefinition } from "../../src/rules/types";
 import type { ElementSpec } from "../helpers/makeModel";
 import { makeModel } from "../helpers/makeModel";
 import { stripAnsi } from "../helpers/stripAnsi";
@@ -137,40 +138,64 @@ describe("executeCheck — exit code matrix", () => {
     expect(mockWriteFile).toHaveBeenCalledOnce();
   });
 
-  it("surfaces fix.editConflict diagnostics when two rules want overlapping source ranges", async () => {
-    // Both crud and dbPerService want to rewrite `Rel(orders, orders_db)`.
-    // The applier picks one (deterministic first-wins) and reports
-    // the other as a conflict — must NOT silently drop.
+  it("surfaces fix.editConflict diagnostics for different overlapping edits", async () => {
+    const rewriteA: RuleDefinition = {
+      name: "rewriteA",
+      description: "test-only rewrite A",
+      check: () => [
+        { target: "svc", targetKind: "element", message: "rewrite A" },
+      ],
+      fix: ({ model }) => {
+        const range = model.elements.svc?.sourceLocation;
+        return range
+          ? [
+              {
+                rule: "rewriteA",
+                description: "rewrite svc as A",
+                edits: [
+                  { kind: "replace", range, content: "Container(svc_a)" },
+                ],
+              },
+            ]
+          : [];
+      },
+    };
+    const rewriteB: RuleDefinition = {
+      name: "rewriteB",
+      description: "test-only rewrite B",
+      check: () => [
+        { target: "svc", targetKind: "element", message: "rewrite B" },
+      ],
+      fix: ({ model }) => {
+        const range = model.elements.svc?.sourceLocation;
+        return range
+          ? [
+              {
+                rule: "rewriteB",
+                description: "rewrite svc as B",
+                edits: [
+                  { kind: "replace", range, content: "Container(svc_b)" },
+                ],
+              },
+            ]
+          : [];
+      },
+    };
+    const conflictingConfig: AactConfig = {
+      ...plantumlConfig,
+      customRules: [rewriteA, rewriteB],
+    };
     const conflictingModel = () =>
       makeModel({
-        elements: [
-          { name: "orders", relations: [{ to: "orders_db" }] },
-          {
-            name: "orders_repo",
-            tags: ["repo"],
-            relations: [{ to: "orders_db" }],
-          },
-          { name: "extra", relations: [{ to: "orders_db" }] },
-          { name: "orders_db", kind: "ContainerDb" },
-        ],
+        elements: [{ name: "svc" }],
       });
     mockLoadModel
       .mockResolvedValueOnce({ model: conflictingModel(), issues: [] })
       .mockResolvedValueOnce({ model: conflictingModel(), issues: [] });
-    mockReadFile.mockResolvedValue(
-      [
-        "Container(orders)",
-        'Container(orders_repo, "", $tags="repo")',
-        "Container(extra)",
-        "ContainerDb(orders_db)",
-        "Rel(orders, orders_db, lots-of-overlap)",
-        "Rel(orders_repo, orders_db, x)",
-        "Rel(extra, orders_db, y)",
-      ].join("\n"),
-    );
+    mockReadFile.mockResolvedValue("Container(svc)");
     mockWriteFile.mockResolvedValue();
 
-    const result = await executeCheck(plantumlConfig, { fix: true });
+    const result = await executeCheck(conflictingConfig, { fix: true });
     const conflictDiags = result.diagnostics?.filter(
       (d) => d.kind === "fix.editConflict",
     );
@@ -656,13 +681,17 @@ describe("renderCheckText", () => {
             count: 3,
             remaining: 0,
             writePath: "/abs/test.puml",
+            before: {
+              violations: [],
+              summary: { failed: 1, passed: 7, total: 1 },
+            },
           },
         },
         meta: { durationMs: 1, configPath: null, source: null },
       }),
       sink,
     );
-    expect(output()).toContain("Applied 3 fix(es)");
+    expect(output()).toContain("3 fixes applied");
     expect(output()).toContain("/abs/test.puml");
   });
 
