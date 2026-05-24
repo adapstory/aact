@@ -9,12 +9,16 @@ import type { Violation } from "./types";
 const DEFAULT_SHARED_DATABASE_PATTERN = /postgres/i;
 const DEFAULT_BC_TAG_PATTERN = /^bc-\d+$/i;
 const DEFAULT_SCHEMA_MARKER_PATTERN = /schema-per-bc/i;
+const DEFAULT_SCHEMA_OWNER_PATTERN = /schema-owner:[A-Za-z0-9_.:-]+/i;
+const REVIEWED_EVIDENCE_PATTERN =
+    /reviewed[-_\s]?overlay|reviewed overlay/i;
 
 export interface AdapstorySchemaPerBcNotDbPerServiceOptions {
     dbType?: string;
     sharedDatabasePattern?: RegExp;
     bcTagPattern?: RegExp;
     schemaMarkerPattern?: RegExp;
+    schemaOwnerPattern?: RegExp;
 }
 
 const escapeRegExp = (value: string): string =>
@@ -52,6 +56,19 @@ const hasSchemaOwnership = (
     return schemaPattern.test(text);
 };
 
+const hasReviewedLogicalSchemaOwner = (
+    relation: Relation,
+    schemaMarkerPattern: RegExp,
+    schemaOwnerPattern: RegExp,
+): boolean => {
+    const text = relationText(relation);
+    return (
+        matchesPattern(REVIEWED_EVIDENCE_PATTERN, text) &&
+        matchesPattern(schemaMarkerPattern, text) &&
+        matchesPattern(schemaOwnerPattern, text)
+    );
+};
+
 export const checkAdapstorySchemaPerBcNotDbPerService = (
     model: ArchitectureModel,
     options?: AdapstorySchemaPerBcNotDbPerServiceOptions,
@@ -62,6 +79,8 @@ export const checkAdapstorySchemaPerBcNotDbPerService = (
     const bcTagPattern = options?.bcTagPattern ?? DEFAULT_BC_TAG_PATTERN;
     const schemaMarkerPattern =
         options?.schemaMarkerPattern ?? DEFAULT_SCHEMA_MARKER_PATTERN;
+    const schemaOwnerPattern =
+        options?.schemaOwnerPattern ?? DEFAULT_SCHEMA_OWNER_PATTERN;
     const violations: Violation[] = [];
 
     for (const container of model.allContainers) {
@@ -78,6 +97,16 @@ export const checkAdapstorySchemaPerBcNotDbPerService = (
 
             const bcTag = bcTagFor(container, bcTagPattern);
             if (!bcTag) {
+                if (
+                    hasReviewedLogicalSchemaOwner(
+                        relation,
+                        schemaMarkerPattern,
+                        schemaOwnerPattern,
+                    )
+                ) {
+                    continue;
+                }
+
                 violations.push({
                     container: container.name,
                     message: `uses shared database "${relation.to.name}" without bounded context tag for schema-per-BC ownership`,

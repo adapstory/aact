@@ -12,10 +12,11 @@ const container = (
     tags: string[] = [],
     description = "",
     relations: Container["relations"] = [],
+    type = "Container",
 ): Container => ({
     name,
     label: name,
-    type: "Container",
+    type,
     tags,
     description,
     relations,
@@ -50,6 +51,17 @@ describe("Adapstory incubating architecture rules", () => {
                     'UI surface "lesson_plugin_ui" lacks Widget Lake contract evidence',
             },
         ]);
+    });
+
+    it("does not classify the editor plugin package as a Widget Lake surface by name alone", () => {
+        const editorPlugin = container("frontend_editor_plugin", [
+            "frontend",
+            "typescript-frontend",
+        ]);
+
+        expect(
+            checkAdapstoryWidgetLakeContract(model([editorPlugin])),
+        ).toHaveLength(0);
     });
 
     it("requires Smart Line surfaces to carry tenant-scope evidence", () => {
@@ -106,6 +118,20 @@ describe("Adapstory incubating architecture rules", () => {
         ]);
     });
 
+    it("does not infer MCP bypasses from source or target descriptions alone", () => {
+        const redis = container("redis", [], "Cache used by the adapter.");
+        const difyAdapter = container(
+            "dify_plugin",
+            ["source:reviewed-overlay"],
+            "Tenant-aware AI Methodist tool registry allowlist.",
+            [{ to: redis, technology: "Redis" }],
+        );
+
+        expect(
+            checkAdapstoryMcpPluginFirstBoundary(model([difyAdapter, redis])),
+        ).toHaveLength(0);
+    });
+
     it("requires tenant isolation evidence for tenant-scoped surfaces", () => {
         const contentApi = container("content_repository", ["api", "bc-11"]);
         const pluginGateway = container(
@@ -125,6 +151,41 @@ describe("Adapstory incubating architecture rules", () => {
                     'tenant-scoped surface "content_repository" lacks tenant isolation evidence',
             },
         ]);
+    });
+
+    it("does not ask tenant-isolation evidence from people, externals, data-plane, or artifact repositories", () => {
+        const student = container(
+            "student",
+            [],
+            "Uses AI-native learning surfaces.",
+            [],
+            "Person",
+        );
+        const telegram = container(
+            "telegram",
+            ["External"],
+            "Telegram Bot API.",
+            [],
+            "System_Ext",
+        );
+        const postgres = container(
+            "postgres",
+            ["data-plane", "database"],
+            "PostgreSQL data-plane.",
+            [],
+            "ContainerDb",
+        );
+        const nexus = container(
+            "nexus",
+            ["artifact-repository"],
+            "Maven and dependency cache repository.",
+        );
+
+        expect(
+            checkAdapstoryTenantIsolationEvidence(
+                model([student, telegram, postgres, nexus]),
+            ),
+        ).toHaveLength(0);
     });
 
     it("requires AI capability surfaces to declare governance provenance", () => {
@@ -150,5 +211,24 @@ describe("Adapstory incubating architecture rules", () => {
                     'AI capability surface "llm_bridge" lacks manifest/reviewed governance evidence',
             },
         ]);
+    });
+
+    it("does not classify people or data-model services as AI governance surfaces by wording alone", () => {
+        const student = container(
+            "student",
+            [],
+            "Uses AI-native learning surfaces.",
+            [],
+            "Person",
+        );
+        const dataModel = container("data_model_engine", [
+            "api",
+            "bc-15",
+            "java-service",
+        ]);
+
+        expect(
+            checkAdapstoryAiCapabilityGovernance(model([student, dataModel])),
+        ).toHaveLength(0);
     });
 });

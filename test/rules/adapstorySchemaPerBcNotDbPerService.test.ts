@@ -65,6 +65,28 @@ describe("checkAdapstorySchemaPerBcNotDbPerService", () => {
         ]);
     });
 
+    it("allows reviewed logical schema owners for non-core platform or plugin services", () => {
+        const db = postgres();
+        const keycloak = container(
+            "keycloak_service",
+            [],
+            [
+                {
+                    to: db,
+                    tags: [
+                        "reviewed-overlay",
+                        "schema-per-bc",
+                        "schema-owner:identity-platform",
+                    ],
+                },
+            ],
+        );
+
+        expect(
+            checkAdapstorySchemaPerBcNotDbPerService(model([keycloak, db])),
+        ).toHaveLength(0);
+    });
+
     it("rejects schema declarations that do not match the source BC", () => {
         const db = postgres();
         const service = container(

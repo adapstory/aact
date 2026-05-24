@@ -1,4 +1,9 @@
-import type { ArchitectureModel, Container } from "../model";
+import {
+    type ArchitectureModel,
+    type Container,
+    CONTAINER_DB_TYPE,
+    type Relation,
+} from "../model";
 import type { Violation } from "./types";
 
 const DEFAULT_CORE_BC_TAGS = [
@@ -16,6 +21,10 @@ const DEFAULT_PLUGIN_INTERNAL_TAG_PATTERN =
     /(^plugin$|plugin-service|python-plugin-service)/i;
 const DEFAULT_PLUGIN_INTERNAL_NAME_PATTERN = /(^|[_-])plugin($|[_-])/i;
 const DEFAULT_ALLOWED_TARGET_NAME_PATTERN = /^keycloak(_service)?$/i;
+const DEFAULT_REVIEWED_EVIDENCE_PATTERN =
+    /reviewed[-_\s]?overlay|reviewed overlay/i;
+const DEFAULT_ALLOWED_INFRASTRUCTURE_POLICY_PATTERN =
+    /cache-policy:bff-session-store/i;
 
 export interface AdapstoryBffBoundaryOptions {
     bffTagPattern?: RegExp;
@@ -25,6 +34,8 @@ export interface AdapstoryBffBoundaryOptions {
     allowedTargetNamePattern?: RegExp;
     pluginInternalTagPattern?: RegExp;
     pluginInternalNamePattern?: RegExp;
+    reviewedEvidencePattern?: RegExp;
+    allowedInfrastructurePolicyPattern?: RegExp;
 }
 
 const matchesPattern = (pattern: RegExp, value: string): boolean => {
@@ -47,6 +58,9 @@ const hasExactTag = (
 
 const containerText = (container: Container): string =>
     [container.name, container.label, container.description].join(" ");
+
+const relationText = (relation: Relation): string =>
+    [relation.technology ?? "", ...(relation.tags ?? [])].join(" ");
 
 const isBff = (container: Container, bffTagPattern: RegExp): boolean =>
     hasPatternTag(container, bffTagPattern) ||
@@ -76,6 +90,24 @@ const isPluginInternal = (
     return !allowed && matchesPattern(pluginInternalNamePattern, target.name);
 };
 
+const isInfrastructureTarget = (target: Container): boolean =>
+    target.type === CONTAINER_DB_TYPE ||
+    hasExactTag(target, ["data-plane", "cache", "database"]);
+
+const hasReviewedInfrastructurePolicy = (
+    relation: Relation,
+    target: Container,
+    reviewedEvidencePattern: RegExp,
+    allowedInfrastructurePolicyPattern: RegExp,
+): boolean => {
+    if (!isInfrastructureTarget(target)) return false;
+    const text = relationText(relation);
+    return (
+        matchesPattern(reviewedEvidencePattern, text) &&
+        matchesPattern(allowedInfrastructurePolicyPattern, text)
+    );
+};
+
 export const checkAdapstoryBffBoundary = (
     model: ArchitectureModel,
     options?: AdapstoryBffBoundaryOptions,
@@ -93,6 +125,11 @@ export const checkAdapstoryBffBoundary = (
     const pluginInternalNamePattern =
         options?.pluginInternalNamePattern ??
         DEFAULT_PLUGIN_INTERNAL_NAME_PATTERN;
+    const reviewedEvidencePattern =
+        options?.reviewedEvidencePattern ?? DEFAULT_REVIEWED_EVIDENCE_PATTERN;
+    const allowedInfrastructurePolicyPattern =
+        options?.allowedInfrastructurePolicyPattern ??
+        DEFAULT_ALLOWED_INFRASTRUCTURE_POLICY_PATTERN;
     const violations: Violation[] = [];
 
     for (const container of model.allContainers) {
@@ -124,6 +161,17 @@ export const checkAdapstoryBffBoundary = (
             }
 
             if (!allowed) {
+                if (
+                    hasReviewedInfrastructurePolicy(
+                        relation,
+                        target,
+                        reviewedEvidencePattern,
+                        allowedInfrastructurePolicyPattern,
+                    )
+                ) {
+                    continue;
+                }
+
                 violations.push({
                     container: container.name,
                     message: `BFF "${container.name}" calls non-approved target "${target.name}"; target must be allowed BC/API/gateway`,

@@ -93,6 +93,23 @@ describe("checkAdapstoryBffBoundary", () => {
         ]);
     });
 
+    it("allows BFF Redis only with reviewed session-cache policy evidence", () => {
+        const redis = container("redis", [], [], "ContainerDb");
+        const bff = container("bff_admin", ["bff"], [
+            {
+                to: redis,
+                technology: "Redis distributed OAuth session store",
+                tags: [
+                    "reviewed-overlay",
+                    "cache-policy:bff-session-store",
+                    "tenant-scoped",
+                ],
+            },
+        ]);
+
+        expect(checkAdapstoryBffBoundary(model([bff, redis]))).toHaveLength(0);
+    });
+
     it("supports custom allowed BC tags and target names", () => {
         const billing = container("billing_api", ["api", "domain-billing"]);
         const legacyAuth = container("legacy_auth", []);

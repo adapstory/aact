@@ -1,8 +1,15 @@
-import type { ArchitectureModel, Container, Relation } from "../model";
+import {
+    CONTAINER_DB_TYPE,
+    EXTERNAL_SYSTEM_TYPE,
+    PERSON_TYPE,
+    type ArchitectureModel,
+    type Container,
+    type Relation,
+} from "../model";
 import type { Violation } from "./types";
 
 const WIDGET_SURFACE_PATTERN =
-    /widget|sdui|divkit|plugin[-_\s]?ui|ui\.contract|frontend_editor_plugin/i;
+    /widget|sdui|divkit|plugin[-_\s]?ui|ui\.contract/i;
 const WIDGET_CONTRACT_PATTERN =
     /widget[-_\s]?lake|ui\.contract[:=]?\s*widget-lake|@adapstory\/ui\/widget-lake|WidgetShell|PluginSurface|DataPanel/i;
 const SMART_LINE_PATTERN = /smart[-_\s]?line|SmartLine/i;
@@ -17,9 +24,12 @@ const TENANT_SCOPED_SURFACE_PATTERN =
     /(^|[\s+_-])(api|bff|plugin|agent|ai|data-plane|database|cache|vector-store|graph-store|event-stream)([\s+_-]|$)/i;
 const AI_CAPABILITY_PATTERN =
     /(^|[\s+_-])(ai|llm|rag|agent|model|dify|n8n|ollama|whisper|grader|knowledge)([\s+_-]|$)/i;
+const AI_CAPABILITY_EXCLUSION_PATTERN = /data[_-\s]?model/i;
 const COURSE_GENERATOR_PATTERN = /course[_-\s]?generator/i;
 const AI_GOVERNANCE_PATTERN =
     /manifest|reviewed[-_\s]?overlay|reviewed overlay|capability|gateway|plugin|vault|tenant|guardrail|model config|mcp/i;
+const DATA_PLANE_TAG_PATTERN =
+    /^(data-plane|database|cache|vector-store|graph-store|event-stream|search|artifact-repository)$/i;
 
 export interface AdapstoryWidgetLakeContractOptions {
     surfacePattern?: RegExp;
@@ -69,21 +79,22 @@ const containerText = (container: Container): string =>
         ...container.relations.map(relationText),
     ].join(" ");
 
-const relationContextText = (source: Container, relation: Relation): string =>
-    [
-        source.name,
-        source.label,
-        source.description,
-        ...(source.tags ?? []),
-        relationText(relation),
-        relation.to.name,
-        relation.to.label,
-        relation.to.description,
-        ...(relation.to.tags ?? []),
-    ].join(" ");
-
 const hasEvidence = (container: Container, pattern: RegExp): boolean =>
     matchesPattern(pattern, containerText(container));
+
+const isRuntimeEvidenceSubject = (container: Container): boolean => {
+    if (
+        container.type === PERSON_TYPE ||
+        container.type === EXTERNAL_SYSTEM_TYPE ||
+        container.type === CONTAINER_DB_TYPE
+    ) {
+        return false;
+    }
+
+    return !(container.tags ?? []).some((tag) =>
+        matchesPattern(DATA_PLANE_TAG_PATTERN, tag),
+    );
+};
 
 const isPluginGateway = (
     container: Container,
@@ -160,12 +171,7 @@ export const checkAdapstoryMcpPluginFirstBoundary = (
         }
 
         for (const relation of container.relations) {
-            if (
-                !matchesPattern(
-                    mcpPattern,
-                    relationContextText(container, relation),
-                )
-            ) {
+            if (!matchesPattern(mcpPattern, relationText(relation))) {
                 continue;
             }
             if (
@@ -196,6 +202,9 @@ export const checkAdapstoryTenantIsolationEvidence = (
     const violations: Violation[] = [];
 
     for (const container of model.allContainers) {
+        if (!isRuntimeEvidenceSubject(container)) {
+            continue;
+        }
         if (
             !matchesPattern(
                 tenantScopedSurfacePattern,
@@ -226,7 +235,13 @@ export const checkAdapstoryAiCapabilityGovernance = (
     const violations: Violation[] = [];
 
     for (const container of model.allContainers) {
-        const text = containerText(container);
+        if (!isRuntimeEvidenceSubject(container)) {
+            continue;
+        }
+        const text = containerOwnText(container);
+        if (matchesPattern(AI_CAPABILITY_EXCLUSION_PATTERN, text)) {
+            continue;
+        }
         if (
             !matchesPattern(aiCapabilityPattern, text) &&
             !matchesPattern(COURSE_GENERATOR_PATTERN, text)

@@ -53,6 +53,38 @@ describe("checkAdapstoryNoCoreBcCycles", () => {
         ).toHaveLength(0);
     });
 
+    it("ignores explicitly reviewed query/read-model edges when detecting ownership cycles", () => {
+        const dataModelEngine = container("data_model_engine", ["bc-15"]);
+        const multiTenantRuntime = container("multi_tenant_runtime", ["bc-19"]);
+
+        dataModelEngine.relations.push({ to: multiTenantRuntime });
+        multiTenantRuntime.relations.push({
+            to: dataModelEngine,
+            tags: ["reviewed-overlay", "dependency-direction:query-read-model"],
+        });
+
+        expect(
+            checkAdapstoryNoCoreBcCycles(
+                model([dataModelEngine, multiTenantRuntime]),
+            ),
+        ).toHaveLength(0);
+    });
+
+    it("ignores BFF and gateway composition edges in the core BC ownership graph", () => {
+        const schoolBff = container("bff_school", ["bc-16", "bff", "gateway"]);
+        const identity = container("identity_service", ["bc-16"]);
+        const multiTenantRuntime = container("multi_tenant_runtime", ["bc-19"]);
+
+        schoolBff.relations.push({ to: multiTenantRuntime });
+        multiTenantRuntime.relations.push({ to: identity });
+
+        expect(
+            checkAdapstoryNoCoreBcCycles(
+                model([schoolBff, identity, multiTenantRuntime]),
+            ),
+        ).toHaveLength(0);
+    });
+
     it("ignores non-core plugin cycles by default", () => {
         const pluginA = container("plugin_a", ["plugin"]);
         const pluginB = container("plugin_b", ["plugin"]);
