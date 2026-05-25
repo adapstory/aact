@@ -53,7 +53,31 @@ describe("checkAdapstoryNoCoreBcCycles", () => {
         ).toHaveLength(0);
     });
 
-    it("ignores explicitly reviewed query/read-model edges when detecting ownership cycles", () => {
+    it("ignores matrix-approved read-model edges when detecting ownership cycles", () => {
+        const dataModelEngine = container("data_model_engine", ["bc-15"]);
+        const multiTenantRuntime = container("multi_tenant_runtime", ["bc-19"]);
+
+        dataModelEngine.relations.push({ to: multiTenantRuntime });
+        multiTenantRuntime.relations.push({
+            to: dataModelEngine,
+            tags: [
+                "reviewed-overlay",
+                "source:core-dependency-decision-matrix",
+                "core-decision:read-model",
+                "owner-bc:bc-15",
+                "downstream-bc:bc-19",
+                "counts-for-core-cycle:false",
+            ],
+        });
+
+        expect(
+            checkAdapstoryNoCoreBcCycles(
+                model([dataModelEngine, multiTenantRuntime]),
+            ),
+        ).toHaveLength(0);
+    });
+
+    it("does not ignore legacy dependency-direction tags without a decision matrix entry", () => {
         const dataModelEngine = container("data_model_engine", ["bc-15"]);
         const multiTenantRuntime = container("multi_tenant_runtime", ["bc-19"]);
 
@@ -67,7 +91,13 @@ describe("checkAdapstoryNoCoreBcCycles", () => {
             checkAdapstoryNoCoreBcCycles(
                 model([dataModelEngine, multiTenantRuntime]),
             ),
-        ).toHaveLength(0);
+        ).toEqual([
+            {
+                container: "bc-15",
+                message:
+                    "core bounded context cycle detected: bc-15 -> bc-19 -> bc-15",
+            },
+        ]);
     });
 
     it("ignores BFF and gateway composition edges in the core BC ownership graph", () => {

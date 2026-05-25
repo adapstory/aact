@@ -13,15 +13,19 @@ const DEFAULT_CORE_BC_TAGS = [
 
 export interface AdapstoryNoCoreBcCyclesOptions {
     coreBcTags?: string[];
-    ignoredReviewedRelationPattern?: RegExp;
+    ignoredMatrixDecisionPattern?: RegExp;
     ignoredSourceTagPattern?: RegExp;
 }
 
-const DEFAULT_IGNORED_REVIEWED_RELATION_PATTERN =
-    /dependency-direction:(query-read-model|read-model|callback|event-callback|runtime-orchestration)/i;
+const DEFAULT_IGNORED_MATRIX_DECISION_PATTERN =
+    /counts-for-core-cycle:false/i;
 const DEFAULT_IGNORED_SOURCE_TAG_PATTERN = /(^bff$|^gateway$|edge-composition)/i;
 const REVIEWED_EVIDENCE_PATTERN =
     /reviewed[-_\s]?overlay|reviewed overlay/i;
+const MATRIX_SOURCE_PATTERN = /source:core-dependency-decision-matrix/i;
+const CORE_DECISION_PATTERN = /core-decision:(event|read-model|acl|command|edge-composition)/i;
+const OWNER_BC_PATTERN = /owner-bc:bc-\d+/i;
+const DOWNSTREAM_BC_PATTERN = /downstream-bc:bc-\d+/i;
 
 const bcTagFor = (
     container: Container,
@@ -55,14 +59,18 @@ const matchesPattern = (pattern: RegExp, value: string): boolean => {
 const relationText = (relation: Container["relations"][number]): string =>
     [relation.technology ?? "", ...(relation.tags ?? [])].join(" ");
 
-const isIgnoredReviewedRelation = (
+const isIgnoredMatrixDecision = (
     relation: Container["relations"][number],
-    ignoredReviewedRelationPattern: RegExp,
+    ignoredMatrixDecisionPattern: RegExp,
 ): boolean => {
     const text = relationText(relation);
     return (
         matchesPattern(REVIEWED_EVIDENCE_PATTERN, text) &&
-        matchesPattern(ignoredReviewedRelationPattern, text)
+        matchesPattern(MATRIX_SOURCE_PATTERN, text) &&
+        matchesPattern(CORE_DECISION_PATTERN, text) &&
+        matchesPattern(OWNER_BC_PATTERN, text) &&
+        matchesPattern(DOWNSTREAM_BC_PATTERN, text) &&
+        matchesPattern(ignoredMatrixDecisionPattern, text)
     );
 };
 
@@ -103,9 +111,9 @@ export const checkAdapstoryNoCoreBcCycles = (
     options?: AdapstoryNoCoreBcCyclesOptions,
 ): Violation[] => {
     const coreBcTags = options?.coreBcTags ?? DEFAULT_CORE_BC_TAGS;
-    const ignoredReviewedRelationPattern =
-        options?.ignoredReviewedRelationPattern ??
-        DEFAULT_IGNORED_REVIEWED_RELATION_PATTERN;
+    const ignoredMatrixDecisionPattern =
+        options?.ignoredMatrixDecisionPattern ??
+        DEFAULT_IGNORED_MATRIX_DECISION_PATTERN;
     const ignoredSourceTagPattern =
         options?.ignoredSourceTagPattern ?? DEFAULT_IGNORED_SOURCE_TAG_PATTERN;
     const containerBc = new Map<Container, string>();
@@ -129,9 +137,9 @@ export const checkAdapstoryNoCoreBcCycles = (
 
         for (const relation of container.relations) {
             if (
-                isIgnoredReviewedRelation(
+                isIgnoredMatrixDecision(
                     relation,
-                    ignoredReviewedRelationPattern,
+                    ignoredMatrixDecisionPattern,
                 )
             ) {
                 continue;
