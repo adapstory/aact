@@ -49,11 +49,11 @@ Story 1.1 remediation:
 - No architecture rule behavior, CLI behavior, model parsing, or auto-fix logic is
   intentionally changed in this story.
 - Final green phase on 2026-05-13:
-    - `pnpm lint`: passed after formatting cleanup and one scoped ESLint directive
-      relocation in `test/generators/kubernetes.test.ts`.
-    - `pnpm test`: passed, 34 test files, 290 tests.
-    - `pnpm build`: passed.
-    - `pnpm exec tsc --noEmit`: passed.
+  - `pnpm lint`: passed after formatting cleanup and one scoped ESLint directive
+    relocation in `test/generators/kubernetes.test.ts`.
+  - `pnpm test`: passed, 34 test files, 290 tests.
+  - `pnpm build`: passed.
+  - `pnpm exec tsc --noEmit`: passed.
 
 ## .NET Example Test Gap
 

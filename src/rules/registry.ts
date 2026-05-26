@@ -1,149 +1,50 @@
-import type { ArchitectureModel } from "../model";
-import type { AclOptions } from "./acl";
-import { checkAcl } from "./acl";
-import { checkAcyclic } from "./acyclic";
-import type { AdapstoryBffBoundaryOptions } from "./adapstoryBffBoundary";
-import { checkAdapstoryBffBoundary } from "./adapstoryBffBoundary";
-import type { AdapstoryExternalThroughGatewayOrAclOptions } from "./adapstoryExternalThroughGatewayOrAcl";
-import { checkAdapstoryExternalThroughGatewayOrAcl } from "./adapstoryExternalThroughGatewayOrAcl";
-import type {
-    AdapstoryAiCapabilityGovernanceOptions,
-    AdapstoryMcpPluginFirstBoundaryOptions,
-    AdapstorySmartLineTenantScopeOptions,
-    AdapstoryTenantIsolationEvidenceOptions,
-    AdapstoryWidgetLakeContractOptions,
-} from "./adapstoryIncubatingRules";
+import { aclRule } from "./acl";
+import { acyclicRule } from "./acyclic";
+import { adapstoryBffBoundaryRule } from "./adapstoryBffBoundary";
+import { adapstoryExternalThroughGatewayOrAclRule } from "./adapstoryExternalThroughGatewayOrAcl";
 import {
-    checkAdapstoryAiCapabilityGovernance,
-    checkAdapstoryMcpPluginFirstBoundary,
-    checkAdapstorySmartLineTenantScope,
-    checkAdapstoryTenantIsolationEvidence,
-    checkAdapstoryWidgetLakeContract,
+  adapstoryAiCapabilityGovernanceRule,
+  adapstoryMcpPluginFirstBoundaryRule,
+  adapstorySmartLineTenantScopeRule,
+  adapstoryTenantIsolationEvidenceRule,
+  adapstoryWidgetLakeContractRule,
 } from "./adapstoryIncubatingRules";
-import type { AdapstoryNoCoreBcCyclesOptions } from "./adapstoryNoCoreBcCycles";
-import { checkAdapstoryNoCoreBcCycles } from "./adapstoryNoCoreBcCycles";
-import type { AdapstoryPluginCapabilitiesFromManifestOptions } from "./adapstoryPluginCapabilitiesFromManifest";
-import { checkAdapstoryPluginCapabilitiesFromManifest } from "./adapstoryPluginCapabilitiesFromManifest";
-import type { AdapstorySchemaPerBcNotDbPerServiceOptions } from "./adapstorySchemaPerBcNotDbPerService";
-import { checkAdapstorySchemaPerBcNotDbPerService } from "./adapstorySchemaPerBcNotDbPerService";
-import type { ApiGatewayOptions } from "./apiGateway";
-import { checkApiGateway } from "./apiGateway";
-import type { CohesionOptions } from "./cohesion";
-import { checkCohesion } from "./cohesion";
-import { checkCommonReuse } from "./commonReuse";
-import type { CrudOptions } from "./crud";
-import { checkCrud } from "./crud";
-import type { DbPerServiceOptions } from "./dbPerService";
-import { checkDbPerService } from "./dbPerService";
-import type { FixResult, SourceSyntax } from "./fix";
-import { fixAcl } from "./fixAcl";
-import { fixCrud } from "./fixCrud";
-import { fixDbPerService } from "./fixDbPerService";
-import type { StableDependenciesOptions } from "./stableDependencies";
-import { checkStableDependencies } from "./stableDependencies";
-import type { Violation } from "./types";
+import { adapstoryNoCoreBcCyclesRule } from "./adapstoryNoCoreBcCycles";
+import { adapstoryPluginCapabilitiesFromManifestRule } from "./adapstoryPluginCapabilitiesFromManifest";
+import { adapstorySchemaPerBcNotDbPerServiceRule } from "./adapstorySchemaPerBcNotDbPerService";
+import { apiGatewayRule } from "./apiGateway";
+import { cohesionRule } from "./cohesion";
+import { commonReuseRule } from "./commonReuse";
+import { crudRule } from "./crud";
+import { dbPerServiceRule } from "./dbPerService";
+import { stableDependenciesRule } from "./stableDependencies";
+import type { RuleDefinition } from "./types";
 
-export interface RuleDefinition {
-    readonly name: string;
-    readonly check: (
-        model: ArchitectureModel,
-        options?: unknown,
-    ) => Violation[];
-    readonly fix?: (
-        model: ArchitectureModel,
-        violations: Violation[],
-        syntax: SourceSyntax,
-        options?: unknown,
-    ) => FixResult[];
-}
-
-/** Type-safe rule factory — isolates the type erasure to a single point */
-const defineRule = <O>(def: {
-    readonly name: string;
-    readonly check: (model: ArchitectureModel, options?: O) => Violation[];
-    readonly fix?: (
-        model: ArchitectureModel,
-        violations: Violation[],
-        syntax: SourceSyntax,
-        options?: O,
-    ) => FixResult[];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
-}): RuleDefinition => def as any;
-
+/**
+ * Все built-in правила. Порядок определяет default order CLI вывода.
+ * Adding new rule: импорт + строчка в массиве, ничего больше не трогать.
+ *
+ * `check` / `fix` объявлены как методы в `RuleDefinition` (bivariant под
+ * strictFunctionTypes), поэтому typed rules упаковываются в `RuleDefinition[]`
+ * без cast'ов. Это тот же контракт что используют customRules.
+ */
 export const ruleRegistry: readonly RuleDefinition[] = [
-    defineRule<AclOptions>({
-        name: "acl",
-        check: (m, o) => checkAcl(m.allContainers, o),
-        fix: fixAcl,
-    }),
-    defineRule({
-        name: "acyclic",
-        check: (m) => checkAcyclic(m.allContainers),
-    }),
-    defineRule<AdapstoryBffBoundaryOptions>({
-        name: "adapstory-bff-boundary",
-        check: checkAdapstoryBffBoundary,
-    }),
-    defineRule<AdapstoryNoCoreBcCyclesOptions>({
-        name: "adapstory-no-core-bc-cycles",
-        check: checkAdapstoryNoCoreBcCycles,
-    }),
-    defineRule<AdapstoryExternalThroughGatewayOrAclOptions>({
-        name: "adapstory-external-through-gateway-or-acl",
-        check: checkAdapstoryExternalThroughGatewayOrAcl,
-    }),
-    defineRule<AdapstorySchemaPerBcNotDbPerServiceOptions>({
-        name: "adapstory-schema-per-bc-not-db-per-service",
-        check: checkAdapstorySchemaPerBcNotDbPerService,
-    }),
-    defineRule<AdapstoryPluginCapabilitiesFromManifestOptions>({
-        name: "adapstory-plugin-capabilities-from-manifest",
-        check: checkAdapstoryPluginCapabilitiesFromManifest,
-    }),
-    defineRule<AdapstoryWidgetLakeContractOptions>({
-        name: "adapstory-widget-lake-contract",
-        check: checkAdapstoryWidgetLakeContract,
-    }),
-    defineRule<AdapstorySmartLineTenantScopeOptions>({
-        name: "adapstory-smart-line-tenant-scope",
-        check: checkAdapstorySmartLineTenantScope,
-    }),
-    defineRule<AdapstoryMcpPluginFirstBoundaryOptions>({
-        name: "adapstory-mcp-plugin-first-boundary",
-        check: checkAdapstoryMcpPluginFirstBoundary,
-    }),
-    defineRule<AdapstoryTenantIsolationEvidenceOptions>({
-        name: "adapstory-tenant-isolation-evidence",
-        check: checkAdapstoryTenantIsolationEvidence,
-    }),
-    defineRule<AdapstoryAiCapabilityGovernanceOptions>({
-        name: "adapstory-ai-capability-governance",
-        check: checkAdapstoryAiCapabilityGovernance,
-    }),
-    defineRule<ApiGatewayOptions>({
-        name: "apiGateway",
-        check: (m, o) => checkApiGateway(m.allContainers, o),
-    }),
-    defineRule<CrudOptions>({
-        name: "crud",
-        check: (m, o) => checkCrud(m.allContainers, o),
-        fix: fixCrud,
-    }),
-    defineRule<DbPerServiceOptions>({
-        name: "dbPerService",
-        check: (m, o) => checkDbPerService(m.allContainers, o),
-        fix: fixDbPerService,
-    }),
-    defineRule<CohesionOptions>({
-        name: "cohesion",
-        check: (m, o) => checkCohesion(m, o),
-    }),
-    defineRule<StableDependenciesOptions>({
-        name: "stableDependencies",
-        check: (m, o) => checkStableDependencies(m.allContainers, o),
-    }),
-    defineRule({
-        name: "commonReuse",
-        check: (m) => checkCommonReuse(m),
-    }),
+  aclRule,
+  acyclicRule,
+  apiGatewayRule,
+  crudRule,
+  dbPerServiceRule,
+  cohesionRule,
+  stableDependenciesRule,
+  commonReuseRule,
+  adapstoryNoCoreBcCyclesRule,
+  adapstoryBffBoundaryRule,
+  adapstoryExternalThroughGatewayOrAclRule,
+  adapstorySchemaPerBcNotDbPerServiceRule,
+  adapstoryPluginCapabilitiesFromManifestRule,
+  adapstoryWidgetLakeContractRule,
+  adapstorySmartLineTenantScopeRule,
+  adapstoryMcpPluginFirstBoundaryRule,
+  adapstoryTenantIsolationEvidenceRule,
+  adapstoryAiCapabilityGovernanceRule,
 ];

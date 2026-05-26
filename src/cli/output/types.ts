@@ -1,0 +1,101 @@
+/**
+ * Public CLI output contract. Stable from schemaVersion 1: additions only,
+ * removals/renames bump schemaVersion. Consumers (CI parsers, agent loops,
+ * IDE plugins) lock onto this shape.
+ */
+
+export type OutputMode = "text" | "json" | "sarif";
+
+export type ExitCode = 0 | 1 | 2;
+
+/**
+ * Stable diagnostic taxonomy. New kinds may be added (additive). Renaming
+ * existing kinds requires schemaVersion bump.
+ */
+export type DiagnosticKind =
+  // Model validation issues (from validateModel / buildModel)
+  | "model.danglingRelation"
+  | "model.boundaryNotInModel"
+  | "model.elementInBoundaryNotInModel"
+  | "model.boundaryCycle"
+  | "model.duplicateElementName"
+  | "model.duplicateBoundaryName"
+  | "model.duplicateIdentifier"
+  | "model.selfRelation"
+  | "model.unknownKind"
+  | "model.loaderWarning"
+  // Model load-time errors
+  | "model.sourceNotFound"
+  | "model.parseError"
+  | "model.unsupportedLoad"
+  // Config layer
+  | "config.unknownRule"
+  | "config.loadFailed"
+  | "config.invalidSchema"
+  | "config.missingSource"
+  | "config.invalidCustomRule"
+  | "config.outputCollidesWithJson"
+  | "config.missingOutputPath"
+  // Format capability
+  | "format.unsupportedFix"
+  | "format.missingWritePath"
+  | "format.unknown"
+  | "format.emptyOutput"
+  // Fix engine
+  | "fix.editConflict"
+  // Skill installer
+  | "skill.unmanagedDir"
+  | "skill.repoMismatch"
+  // Architecture workbench (`aact view`)
+  | "view.companionMissing"
+  | "view.bootFailed"
+  // Catchall for unexpected internal errors (should never appear in normal flow)
+  | "internal.unexpected";
+
+export interface Diagnostic {
+  readonly kind: DiagnosticKind;
+  readonly message: string;
+  readonly severity: "warning" | "info";
+  readonly context?: Readonly<Record<string, string>>;
+}
+
+export interface EnvelopeMeta {
+  readonly aactVersion: string;
+  readonly durationMs: number;
+  readonly configPath: string | null;
+  readonly source: string | null;
+}
+
+export interface CliEnvelope<TData = unknown> {
+  readonly schemaVersion: 1;
+  readonly command: string;
+  readonly ok: boolean;
+  readonly exitCode: ExitCode;
+  readonly data: TData;
+  readonly diagnostics: readonly Diagnostic[];
+  readonly meta: EnvelopeMeta;
+}
+
+/**
+ * Per-command text renderer. Receives envelope + target write stream
+ * (stdout in the common case; stderr when an artefact has claimed stdout).
+ */
+export type Renderer<TData> = (
+  envelope: CliEnvelope<TData>,
+  sink: NodeJS.WritableStream,
+) => void;
+
+export interface CommandResult<TData = unknown> {
+  readonly envelope: CliEnvelope<TData>;
+  /**
+   * Text-mode hint: command itself wrote to stdout (e.g. `generate --output -`).
+   * When true, HumanReporter renders the envelope to stderr to avoid
+   * corrupting the artefact stream. Ignored in JSON mode (which would have
+   * rejected the stdout collision upfront).
+   */
+  readonly stdoutClaimed?: boolean;
+}
+
+export interface Reporter<TData = unknown> {
+  emit(result: CommandResult<TData>): Promise<void> | void;
+}

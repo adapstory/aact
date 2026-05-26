@@ -1,90 +1,251 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 
-import { defineCommand } from "citty";
-import consola from "consola";
+import path from "pathe";
 
 import type { AactConfig } from "../../config";
-import { generateKubernetes } from "../../generators/kubernetes";
-import { generatePlantumlFromModel } from "../../generators/plantumlFromModel";
-import type { ArchitectureModel } from "../../model";
-import { loadAndValidateConfig } from "../loadConfig";
+import { loadFormat } from "../../formats/registry";
+import { canGenerate } from "../../formats/types";
 import { loadModel } from "../loadModel";
+import type { Diagnostic, Renderer } from "../output";
+import { ToolError } from "../output";
+import { formatDisplayPath } from "../output/hyperlinks";
+import type { ExecuteResult } from "../run";
+import { cliCommandWithConfig } from "../run";
+import { configArg, jsonArg } from "../sharedArgs";
 
-const runPlantuml = async (
-    model: ArchitectureModel,
-    config: AactConfig,
-    outputPath?: string,
-): Promise<void> => {
-    const puml = generatePlantumlFromModel(model, {
-        boundaryLabel: config.generate?.boundaryLabel,
-    });
+// -----------------------------------------------------------------------------
+// Public data shape (envelope.data for `aact generate`)
+// -----------------------------------------------------------------------------
 
-    if (outputPath) {
-        await fs.writeFile(outputPath, puml);
-        consola.success(`Written to ${outputPath}`);
-    } else {
-        console.log(puml);
-    }
-};
+export type GenerateOutputSink = "stdout" | "file" | "directory" | "none";
 
-const runKubernetes = async (
-    model: ArchitectureModel,
-    config: AactConfig,
-    outputDir?: string,
-): Promise<void> => {
-    const outputs = generateKubernetes(model);
+export interface GeneratedFileInfo {
+  /** Path relative to outputPath for directory sinks; basename for file sinks; "<stdout>" for stdout. */
+  readonly path: string;
+  readonly bytes: number;
+}
 
-    const targetDir =
-        outputDir ??
-        config.generate?.kubernetes?.path ??
-        "resources/kubernetes/microservices";
+export interface GenerateData {
+  readonly formatName: string;
+  readonly outputSink: GenerateOutputSink;
+  readonly outputPath: string | null;
+  readonly files: readonly GeneratedFileInfo[];
+}
 
-    await fs.mkdir(targetDir, { recursive: true });
+// -----------------------------------------------------------------------------
+// Sink resolution — UNIX-style: `-` means stdout
+// -----------------------------------------------------------------------------
 
-    await Promise.all(
-        outputs.map((output) =>
-            fs.writeFile(path.join(targetDir, output.fileName), output.content),
-        ),
+type Sink =
+  | { readonly kind: "stdout" }
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "directory"; readonly path: string };
+
+const STDOUT_SENTINEL = "-";
+
+const resolveSink = (
+  args: { output?: string },
+  config: AactConfig,
+  fileCount: number,
+): Sink => {
+  if (fileCount === 1) {
+    if (args.output === STDOUT_SENTINEL) return { kind: "stdout" };
+    if (args.output) return { kind: "file", path: args.output };
+    // No --output for a single-file artefact: stream to stdout (UNIX default).
+    return { kind: "stdout" };
+  }
+
+  // Multi-file: directory sink is required.
+  if (args.output === STDOUT_SENTINEL) {
+    throw new ToolError(
+      "config.missingOutputPath",
+      "Multi-file artefact cannot stream to stdout — provide --output <directory>.",
     );
-
-    consola.success(`Generated ${outputs.length} file(s) in ${targetDir}`);
+  }
+  const dir =
+    args.output ??
+    config.generate?.kubernetes?.path ??
+    "fixtures/kubernetes/microservices";
+  return { kind: "directory", path: dir };
 };
 
-export const generate = defineCommand({
-    meta: { description: "Generate architecture artifacts" },
-    args: {
-        config: {
-            type: "string",
-            description: "Path to aact config file",
-        },
-        output: {
-            type: "string",
-            description:
-                "Output path (file for plantuml, directory for kubernetes)",
-        },
-        format: {
-            type: "string",
-            description: "Output format: plantuml, kubernetes",
-        },
-    },
-    async run({ args }) {
-        const config = await loadAndValidateConfig(args.config);
-        const model = await loadModel(config);
-        const format = args.format ?? "plantuml";
+// -----------------------------------------------------------------------------
+// Pure executor
+// -----------------------------------------------------------------------------
 
-        switch (format) {
-            case "plantuml": {
-                await runPlantuml(model, config, args.output);
-                break;
-            }
-            case "kubernetes": {
-                await runKubernetes(model, config, args.output);
-                break;
-            }
-            default: {
-                throw new Error(`Unknown format: ${format}`);
-            }
-        }
+export interface GenerateArgs {
+  readonly format?: string;
+  readonly output?: string;
+  readonly json?: boolean;
+}
+
+const loadFormatOrThrow = async (formatName: string) => {
+  try {
+    return await loadFormat(formatName);
+  } catch (error) {
+    throw new ToolError(
+      "format.unknown",
+      error instanceof Error ? error.message : String(error),
+      { format: formatName },
+    );
+  }
+};
+
+export const executeGenerate = async (
+  config: AactConfig,
+  args: GenerateArgs,
+): Promise<ExecuteResult<GenerateData>> => {
+  const formatName = args.format ?? "plantuml";
+  const format = await loadFormatOrThrow(formatName);
+
+  if (!canGenerate(format)) {
+    throw new ToolError(
+      "format.unknown",
+      `Format "${format.name}" doesn't support generate`,
+      { format: format.name },
+    );
+  }
+
+  const { model } = await loadModel(config);
+  const output = format.generate(model);
+
+  if (output.files.length === 0) {
+    const diagnostic: Diagnostic = {
+      kind: "format.emptyOutput",
+      message: "Generator produced no files",
+      severity: "warning",
+      context: { format: formatName },
+    };
+    return {
+      data: {
+        formatName,
+        outputSink: "none",
+        outputPath: null,
+        files: [],
+      },
+      exitCode: 0,
+      diagnostics: [diagnostic],
+    };
+  }
+
+  const sink = resolveSink(args, config, output.files.length);
+
+  // JSON mode owns stdout for the envelope; artefact cannot live there.
+  if (args.json === true && sink.kind === "stdout") {
+    throw new ToolError(
+      "config.outputCollidesWithJson",
+      `generate --json requires --output <path> — stdout is reserved for the JSON envelope (single-file artefact would otherwise stream there).`,
+      { format: formatName },
+    );
+  }
+
+  if (sink.kind === "stdout") {
+    const file = output.files[0];
+    process.stdout.write(file.content);
+    return {
+      data: {
+        formatName,
+        outputSink: "stdout",
+        outputPath: null,
+        files: [{ path: "<stdout>", bytes: file.content.length }],
+      },
+      exitCode: 0,
+      stdoutClaimed: true,
+    };
+  }
+
+  if (sink.kind === "file") {
+    const file = output.files[0];
+    await fs.writeFile(sink.path, file.content);
+    return {
+      data: {
+        formatName,
+        outputSink: "file",
+        outputPath: sink.path,
+        files: [{ path: sink.path, bytes: file.content.length }],
+      },
+      exitCode: 0,
+    };
+  }
+
+  // directory sink
+  await fs.mkdir(sink.path, { recursive: true });
+  await Promise.all(
+    output.files.map((f) =>
+      fs.writeFile(path.join(sink.path, f.path), f.content),
+    ),
+  );
+  return {
+    data: {
+      formatName,
+      outputSink: "directory",
+      outputPath: sink.path,
+      files: output.files.map((f) => ({
+        path: f.path,
+        bytes: f.content.length,
+      })),
     },
+    exitCode: 0,
+  };
+};
+
+// -----------------------------------------------------------------------------
+// Text rendering — mirrors current consola.success messages
+// -----------------------------------------------------------------------------
+
+export const renderGenerateText: Renderer<GenerateData> = (envelope, sink) => {
+  const { data } = envelope;
+
+  if (data.outputSink === "none") {
+    sink.write("⚠ Generator produced no files\n");
+    return;
+  }
+
+  if (data.outputSink === "stdout") {
+    // The artefact itself is already on stdout. Envelope goes to stderr via
+    // stdoutClaimed → this writes a brief confirmation.
+    sink.write(
+      `✔ Generated ${data.formatName} artefact (${data.files[0].bytes} bytes) to stdout\n`,
+    );
+    return;
+  }
+
+  // `outputPath` is typed `string | null` because the stdout / none
+  // sinks set it to null upstream; both branches below have already
+  // returned, so anything reaching here has a real path. `?? ""`
+  // keeps TS happy without a non-null assertion in case a future
+  // GenerateOutputSink variant forgets to populate it.
+  const displayPath = formatDisplayPath(data.outputPath ?? "");
+
+  if (data.outputSink === "file") {
+    sink.write(`✔ Written to ${displayPath}\n`);
+    return;
+  }
+
+  // directory
+  sink.write(`✔ Generated ${data.files.length} file(s) in ${displayPath}\n`);
+};
+
+// -----------------------------------------------------------------------------
+// Command definition
+// -----------------------------------------------------------------------------
+
+export const generate = cliCommandWithConfig({
+  name: "generate",
+  meta: { name: "generate", description: "Generate architecture artifacts" },
+  args: {
+    ...configArg,
+    ...jsonArg,
+    output: {
+      type: "string",
+      description:
+        "Output path: file for single-file artefacts, directory for multi-file, '-' for stdout",
+    },
+    format: {
+      type: "string",
+      description: "Target format name (plantuml, kubernetes, ...)",
+    },
+  },
+  renderText: renderGenerateText,
+  execute: (ctx, config) => executeGenerate(config, ctx.args as GenerateArgs),
 });

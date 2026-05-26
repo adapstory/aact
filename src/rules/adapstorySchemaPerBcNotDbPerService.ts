@@ -1,127 +1,131 @@
+import type { Element, Model, Relation } from "./adapstoryUtils";
 import {
-    type ArchitectureModel,
-    type Container,
-    CONTAINER_DB_TYPE,
-    type Relation,
-} from "../model";
-import type { Violation } from "./types";
+  allElements,
+  elementOwnText,
+  elementViolation,
+  isDatabaseElement,
+  matchesPattern,
+  targetOf,
+} from "./adapstoryUtils";
+import type { RuleDefinition, Violation } from "./types";
 
 const DEFAULT_SHARED_DATABASE_PATTERN = /postgres/i;
 const DEFAULT_BC_TAG_PATTERN = /^bc-\d+$/i;
 const DEFAULT_SCHEMA_MARKER_PATTERN = /schema-per-bc/i;
-const DEFAULT_SCHEMA_OWNER_PATTERN = /schema-owner:[A-Za-z0-9_.:-]+/i;
-const REVIEWED_EVIDENCE_PATTERN =
-    /reviewed[-_\s]?overlay|reviewed overlay/i;
+const DEFAULT_SCHEMA_OWNER_PATTERN = /schema-owner:[^\s,;]+/i;
+const REVIEWED_EVIDENCE_PATTERN = /reviewed[-_\s]?overlay|reviewed overlay/i;
 
 export interface AdapstorySchemaPerBcNotDbPerServiceOptions {
-    dbType?: string;
-    sharedDatabasePattern?: RegExp;
-    bcTagPattern?: RegExp;
-    schemaMarkerPattern?: RegExp;
-    schemaOwnerPattern?: RegExp;
+  sharedDatabasePattern?: RegExp;
+  bcTagPattern?: RegExp;
+  schemaMarkerPattern?: RegExp;
+  schemaOwnerPattern?: RegExp;
 }
 
 const escapeRegExp = (value: string): string =>
-    value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-
-const matchesPattern = (pattern: RegExp, value: string): boolean => {
-    pattern.lastIndex = 0;
-    return pattern.test(value);
-};
+  value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
 const bcTagFor = (
-    container: Container,
-    bcTagPattern: RegExp,
+  container: Element,
+  bcTagPattern: RegExp,
 ): string | undefined =>
-    (container.tags ?? []).find((tag) => matchesPattern(bcTagPattern, tag));
+  container.tags.find((tag) => matchesPattern(bcTagPattern, tag));
 
-const databaseText = (container: Container): string =>
-    [container.name, container.label, container.description].join(" ");
+const databaseText = (container: Element): string => elementOwnText(container);
 
 const relationText = (relation: Relation): string =>
-    [...(relation.tags ?? []), relation.technology ?? ""].join(" ");
+  [...relation.tags, relation.technology ?? ""].join(" ");
 
 const hasSchemaOwnership = (
-    relation: Relation,
-    bcTag: string,
-    schemaMarkerPattern: RegExp,
+  relation: Relation,
+  bcTag: string,
+  schemaMarkerPattern: RegExp,
 ): boolean => {
-    const text = relationText(relation);
-    if (!matchesPattern(schemaMarkerPattern, text)) return false;
+  const text = relationText(relation);
+  if (!matchesPattern(schemaMarkerPattern, text)) return false;
 
-    const schemaPattern = new RegExp(
-        String.raw`\bschema\s*(?::|=|-)\s*${escapeRegExp(bcTag)}\b`,
-        "i",
-    );
-    return schemaPattern.test(text);
+  const schemaPattern = new RegExp(
+    String.raw`\bschema\s*(?::|=|-)\s*${escapeRegExp(bcTag)}\b`,
+    "i",
+  );
+  return schemaPattern.test(text);
 };
 
 const hasReviewedLogicalSchemaOwner = (
-    relation: Relation,
-    schemaMarkerPattern: RegExp,
-    schemaOwnerPattern: RegExp,
+  relation: Relation,
+  schemaMarkerPattern: RegExp,
+  schemaOwnerPattern: RegExp,
 ): boolean => {
-    const text = relationText(relation);
-    return (
-        matchesPattern(REVIEWED_EVIDENCE_PATTERN, text) &&
-        matchesPattern(schemaMarkerPattern, text) &&
-        matchesPattern(schemaOwnerPattern, text)
-    );
+  const text = relationText(relation);
+  return (
+    matchesPattern(REVIEWED_EVIDENCE_PATTERN, text) &&
+    matchesPattern(schemaMarkerPattern, text) &&
+    matchesPattern(schemaOwnerPattern, text)
+  );
 };
 
 export const checkAdapstorySchemaPerBcNotDbPerService = (
-    model: ArchitectureModel,
-    options?: AdapstorySchemaPerBcNotDbPerServiceOptions,
+  model: Model,
+  options?: AdapstorySchemaPerBcNotDbPerServiceOptions,
 ): Violation[] => {
-    const dbType = options?.dbType ?? CONTAINER_DB_TYPE;
-    const sharedDatabasePattern =
-        options?.sharedDatabasePattern ?? DEFAULT_SHARED_DATABASE_PATTERN;
-    const bcTagPattern = options?.bcTagPattern ?? DEFAULT_BC_TAG_PATTERN;
-    const schemaMarkerPattern =
-        options?.schemaMarkerPattern ?? DEFAULT_SCHEMA_MARKER_PATTERN;
-    const schemaOwnerPattern =
-        options?.schemaOwnerPattern ?? DEFAULT_SCHEMA_OWNER_PATTERN;
-    const violations: Violation[] = [];
+  const sharedDatabasePattern =
+    options?.sharedDatabasePattern ?? DEFAULT_SHARED_DATABASE_PATTERN;
+  const bcTagPattern = options?.bcTagPattern ?? DEFAULT_BC_TAG_PATTERN;
+  const schemaMarkerPattern =
+    options?.schemaMarkerPattern ?? DEFAULT_SCHEMA_MARKER_PATTERN;
+  const schemaOwnerPattern =
+    options?.schemaOwnerPattern ?? DEFAULT_SCHEMA_OWNER_PATTERN;
+  const violations: Violation[] = [];
 
-    for (const container of model.allContainers) {
-        for (const relation of container.relations) {
-            if (relation.to.type !== dbType) continue;
-            if (
-                !matchesPattern(
-                    sharedDatabasePattern,
-                    databaseText(relation.to),
-                )
-            ) {
-                continue;
-            }
+  for (const container of allElements(model)) {
+    for (const relation of container.relations) {
+      const target = targetOf(model, relation);
+      if (!target || !isDatabaseElement(target)) continue;
+      if (!matchesPattern(sharedDatabasePattern, databaseText(target))) {
+        continue;
+      }
 
-            const bcTag = bcTagFor(container, bcTagPattern);
-            if (!bcTag) {
-                if (
-                    hasReviewedLogicalSchemaOwner(
-                        relation,
-                        schemaMarkerPattern,
-                        schemaOwnerPattern,
-                    )
-                ) {
-                    continue;
-                }
-
-                violations.push({
-                    container: container.name,
-                    message: `uses shared database "${relation.to.name}" without bounded context tag for schema-per-BC ownership`,
-                });
-                continue;
-            }
-
-            if (!hasSchemaOwnership(relation, bcTag, schemaMarkerPattern)) {
-                violations.push({
-                    container: container.name,
-                    message: `uses shared database "${relation.to.name}" without schema-per-BC ownership for ${bcTag}`,
-                });
-            }
+      const bcTag = bcTagFor(container, bcTagPattern);
+      if (!bcTag) {
+        if (
+          hasReviewedLogicalSchemaOwner(
+            relation,
+            schemaMarkerPattern,
+            schemaOwnerPattern,
+          )
+        ) {
+          continue;
         }
-    }
 
-    return violations;
+        violations.push({
+          ...elementViolation(
+            container,
+            `uses shared database "${target.name}" without bounded context tag for schema-per-BC ownership`,
+            relation,
+          ),
+        });
+        continue;
+      }
+
+      if (!hasSchemaOwnership(relation, bcTag, schemaMarkerPattern)) {
+        violations.push({
+          ...elementViolation(
+            container,
+            `uses shared database "${target.name}" without schema-per-BC ownership for ${bcTag}`,
+            relation,
+          ),
+        });
+      }
+    }
+  }
+
+  return violations;
 };
+
+export const adapstorySchemaPerBcNotDbPerServiceRule: RuleDefinition<AdapstorySchemaPerBcNotDbPerServiceOptions> =
+  {
+    name: "adapstory-schema-per-bc-not-db-per-service",
+    description:
+      "Shared PostgreSQL is allowed only when logical schema ownership per bounded context is explicit.",
+    check: checkAdapstorySchemaPerBcNotDbPerService,
+  };
