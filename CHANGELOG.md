@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- **Adapstory regulation-derived incubating rules.** Added typed
+  built-ins for the discovery kit regulation boundaries:
+  `adapstory-frontend-through-bff`,
+  `adapstory-llm-gateway-boundary`,
+  `adapstory-polyglot-data-boundary`,
+  `adapstory-event-contract-evidence`,
+  `adapstory-runtime-observability-evidence`, and
+  `adapstory-stateful-workload-evidence`. They share the same
+  `RuleDefinition` and `rules{}` option surface as custom rules, and
+  are tracked in the Adapstory incubating rule pack metadata.
+
 ## v3.0.0-beta.28 — 2026-05-23
 
 > CLI plan-view round. `aact check --dry-run` is now a dedicated mode

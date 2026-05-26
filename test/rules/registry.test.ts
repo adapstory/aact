@@ -1,7 +1,9 @@
 import { aclRule } from "../../src/rules/acl";
 import { acyclicRule } from "../../src/rules/acyclic";
 import { adapstoryBffBoundaryRule } from "../../src/rules/adapstoryBffBoundary";
+import { adapstoryEventContractEvidenceRule } from "../../src/rules/adapstoryEventContractEvidence";
 import { adapstoryExternalThroughGatewayOrAclRule } from "../../src/rules/adapstoryExternalThroughGatewayOrAcl";
+import { adapstoryFrontendThroughBffRule } from "../../src/rules/adapstoryFrontendThroughBff";
 import {
   adapstoryAiCapabilityGovernanceRule,
   adapstoryMcpPluginFirstBoundaryRule,
@@ -9,9 +11,13 @@ import {
   adapstoryTenantIsolationEvidenceRule,
   adapstoryWidgetLakeContractRule,
 } from "../../src/rules/adapstoryIncubatingRules";
+import { adapstoryLlmGatewayBoundaryRule } from "../../src/rules/adapstoryLlmGatewayBoundary";
 import { adapstoryNoCoreBcCyclesRule } from "../../src/rules/adapstoryNoCoreBcCycles";
 import { adapstoryPluginCapabilitiesFromManifestRule } from "../../src/rules/adapstoryPluginCapabilitiesFromManifest";
+import { adapstoryPolyglotDataBoundaryRule } from "../../src/rules/adapstoryPolyglotDataBoundary";
+import { adapstoryRuntimeObservabilityEvidenceRule } from "../../src/rules/adapstoryRuntimeObservabilityEvidence";
 import { adapstorySchemaPerBcNotDbPerServiceRule } from "../../src/rules/adapstorySchemaPerBcNotDbPerService";
+import { adapstoryStatefulWorkloadEvidenceRule } from "../../src/rules/adapstoryStatefulWorkloadEvidence";
 import { apiGatewayRule } from "../../src/rules/apiGateway";
 import { cohesionRule } from "../../src/rules/cohesion";
 import { commonReuseRule } from "../../src/rules/commonReuse";
@@ -48,6 +54,13 @@ const EXPECTED_BY_NAME = {
   "adapstory-mcp-plugin-first-boundary": adapstoryMcpPluginFirstBoundaryRule,
   "adapstory-tenant-isolation-evidence": adapstoryTenantIsolationEvidenceRule,
   "adapstory-ai-capability-governance": adapstoryAiCapabilityGovernanceRule,
+  "adapstory-frontend-through-bff": adapstoryFrontendThroughBffRule,
+  "adapstory-llm-gateway-boundary": adapstoryLlmGatewayBoundaryRule,
+  "adapstory-polyglot-data-boundary": adapstoryPolyglotDataBoundaryRule,
+  "adapstory-event-contract-evidence": adapstoryEventContractEvidenceRule,
+  "adapstory-runtime-observability-evidence":
+    adapstoryRuntimeObservabilityEvidenceRule,
+  "adapstory-stateful-workload-evidence": adapstoryStatefulWorkloadEvidenceRule,
 } as const;
 
 describe("ruleRegistry", () => {

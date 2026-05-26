@@ -9,10 +9,21 @@ export {
   checkAdapstoryBffBoundary,
 } from "./adapstoryBffBoundary";
 export {
+  type AdapstoryEventContractEvidenceOptions,
+  adapstoryEventContractEvidenceRule,
+  type AdapstoryEvidenceRequirement,
+  checkAdapstoryEventContractEvidence,
+} from "./adapstoryEventContractEvidence";
+export {
   type AdapstoryExternalThroughGatewayOrAclOptions,
   adapstoryExternalThroughGatewayOrAclRule,
   checkAdapstoryExternalThroughGatewayOrAcl,
 } from "./adapstoryExternalThroughGatewayOrAcl";
+export {
+  type AdapstoryFrontendThroughBffOptions,
+  adapstoryFrontendThroughBffRule,
+  checkAdapstoryFrontendThroughBff,
+} from "./adapstoryFrontendThroughBff";
 export {
   type AdapstoryAiCapabilityGovernanceOptions,
   adapstoryAiCapabilityGovernanceRule,
@@ -31,6 +42,11 @@ export {
   checkAdapstoryWidgetLakeContract,
 } from "./adapstoryIncubatingRules";
 export {
+  type AdapstoryLlmGatewayBoundaryOptions,
+  adapstoryLlmGatewayBoundaryRule,
+  checkAdapstoryLlmGatewayBoundary,
+} from "./adapstoryLlmGatewayBoundary";
+export {
   type AdapstoryNoCoreBcCyclesOptions,
   adapstoryNoCoreBcCyclesRule,
   checkAdapstoryNoCoreBcCycles,
@@ -40,12 +56,29 @@ export {
   adapstoryPluginCapabilitiesFromManifestRule,
   checkAdapstoryPluginCapabilitiesFromManifest,
 } from "./adapstoryPluginCapabilitiesFromManifest";
+export {
+  type AdapstoryPolyglotDataBoundaryOptions,
+  adapstoryPolyglotDataBoundaryRule,
+  checkAdapstoryPolyglotDataBoundary,
+} from "./adapstoryPolyglotDataBoundary";
 export * from "./adapstoryRulePack";
+export {
+  type AdapstoryRuntimeEvidenceRequirement,
+  type AdapstoryRuntimeObservabilityEvidenceOptions,
+  adapstoryRuntimeObservabilityEvidenceRule,
+  checkAdapstoryRuntimeObservabilityEvidence,
+} from "./adapstoryRuntimeObservabilityEvidence";
 export {
   type AdapstorySchemaPerBcNotDbPerServiceOptions,
   adapstorySchemaPerBcNotDbPerServiceRule,
   checkAdapstorySchemaPerBcNotDbPerService,
 } from "./adapstorySchemaPerBcNotDbPerService";
+export {
+  type AdapstoryStatefulEvidenceRequirement,
+  type AdapstoryStatefulWorkloadEvidenceOptions,
+  adapstoryStatefulWorkloadEvidenceRule,
+  checkAdapstoryStatefulWorkloadEvidence,
+} from "./adapstoryStatefulWorkloadEvidence";
 export { type ApiGatewayOptions, apiGatewayRule } from "./apiGateway";
 export { type CohesionOptions, cohesionRule } from "./cohesion";
 export { type CommonReuseOptions, commonReuseRule } from "./commonReuse";

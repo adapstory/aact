@@ -3,7 +3,9 @@ import * as v from "valibot";
 import type { AclOptions } from "./rules/acl";
 import type { AcyclicOptions } from "./rules/acyclic";
 import type { AdapstoryBffBoundaryOptions } from "./rules/adapstoryBffBoundary";
+import type { AdapstoryEventContractEvidenceOptions } from "./rules/adapstoryEventContractEvidence";
 import type { AdapstoryExternalThroughGatewayOrAclOptions } from "./rules/adapstoryExternalThroughGatewayOrAcl";
+import type { AdapstoryFrontendThroughBffOptions } from "./rules/adapstoryFrontendThroughBff";
 import type {
   AdapstoryAiCapabilityGovernanceOptions,
   AdapstoryMcpPluginFirstBoundaryOptions,
@@ -11,9 +13,13 @@ import type {
   AdapstoryTenantIsolationEvidenceOptions,
   AdapstoryWidgetLakeContractOptions,
 } from "./rules/adapstoryIncubatingRules";
+import type { AdapstoryLlmGatewayBoundaryOptions } from "./rules/adapstoryLlmGatewayBoundary";
 import type { AdapstoryNoCoreBcCyclesOptions } from "./rules/adapstoryNoCoreBcCycles";
 import type { AdapstoryPluginCapabilitiesFromManifestOptions } from "./rules/adapstoryPluginCapabilitiesFromManifest";
+import type { AdapstoryPolyglotDataBoundaryOptions } from "./rules/adapstoryPolyglotDataBoundary";
+import type { AdapstoryRuntimeObservabilityEvidenceOptions } from "./rules/adapstoryRuntimeObservabilityEvidence";
 import type { AdapstorySchemaPerBcNotDbPerServiceOptions } from "./rules/adapstorySchemaPerBcNotDbPerService";
+import type { AdapstoryStatefulWorkloadEvidenceOptions } from "./rules/adapstoryStatefulWorkloadEvidence";
 import type { ApiGatewayOptions } from "./rules/apiGateway";
 import type { CohesionOptions } from "./rules/cohesion";
 import type { CommonReuseOptions } from "./rules/commonReuse";
@@ -145,6 +151,57 @@ export const AactConfigSchema = v.strictObject({
         aiCapabilityPattern: v.optional(v.instance(RegExp)),
         governancePattern: v.optional(v.instance(RegExp)),
       }),
+      "adapstory-frontend-through-bff": ruleOption({
+        frontendPattern: v.optional(v.instance(RegExp)),
+        bffPattern: v.optional(v.instance(RegExp)),
+        directBackendPattern: v.optional(v.instance(RegExp)),
+        reviewedEvidencePattern: v.optional(v.instance(RegExp)),
+      }),
+      "adapstory-llm-gateway-boundary": ruleOption({
+        aiCallerPattern: v.optional(v.instance(RegExp)),
+        llmProviderPattern: v.optional(v.instance(RegExp)),
+        llmGatewayPattern: v.optional(v.instance(RegExp)),
+      }),
+      "adapstory-polyglot-data-boundary": ruleOption({
+        pythonAiPattern: v.optional(v.instance(RegExp)),
+        postgresPattern: v.optional(v.instance(RegExp)),
+        approvedDataAccessPattern: v.optional(v.instance(RegExp)),
+      }),
+      "adapstory-event-contract-evidence": ruleOption({
+        eventRelationPattern: v.optional(v.instance(RegExp)),
+        requiredEvidence: v.optional(
+          v.array(
+            v.strictObject({
+              label: v.string(),
+              pattern: v.instance(RegExp),
+            }),
+          ),
+        ),
+      }),
+      "adapstory-runtime-observability-evidence": ruleOption({
+        runtimeSurfacePattern: v.optional(v.instance(RegExp)),
+        adapstoryScopePattern: v.optional(v.instance(RegExp)),
+        requiredEvidence: v.optional(
+          v.array(
+            v.strictObject({
+              label: v.string(),
+              pattern: v.instance(RegExp),
+            }),
+          ),
+        ),
+      }),
+      "adapstory-stateful-workload-evidence": ruleOption({
+        statefulSurfacePattern: v.optional(v.instance(RegExp)),
+        adapstoryScopePattern: v.optional(v.instance(RegExp)),
+        requiredEvidence: v.optional(
+          v.array(
+            v.strictObject({
+              label: v.string(),
+              pattern: v.instance(RegExp),
+            }),
+          ),
+        ),
+      }),
     }),
   ),
   // RuleDefinition содержит function fields (check/fix) — valibot не валидирует
@@ -231,6 +288,24 @@ export interface BuiltinRulesConfig {
   readonly "adapstory-ai-capability-governance"?:
     | boolean
     | AdapstoryAiCapabilityGovernanceOptions;
+  readonly "adapstory-frontend-through-bff"?:
+    | boolean
+    | AdapstoryFrontendThroughBffOptions;
+  readonly "adapstory-llm-gateway-boundary"?:
+    | boolean
+    | AdapstoryLlmGatewayBoundaryOptions;
+  readonly "adapstory-polyglot-data-boundary"?:
+    | boolean
+    | AdapstoryPolyglotDataBoundaryOptions;
+  readonly "adapstory-event-contract-evidence"?:
+    | boolean
+    | AdapstoryEventContractEvidenceOptions;
+  readonly "adapstory-runtime-observability-evidence"?:
+    | boolean
+    | AdapstoryRuntimeObservabilityEvidenceOptions;
+  readonly "adapstory-stateful-workload-evidence"?:
+    | boolean
+    | AdapstoryStatefulWorkloadEvidenceOptions;
 }
 
 /**

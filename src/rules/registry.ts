@@ -1,7 +1,9 @@
 import { aclRule } from "./acl";
 import { acyclicRule } from "./acyclic";
 import { adapstoryBffBoundaryRule } from "./adapstoryBffBoundary";
+import { adapstoryEventContractEvidenceRule } from "./adapstoryEventContractEvidence";
 import { adapstoryExternalThroughGatewayOrAclRule } from "./adapstoryExternalThroughGatewayOrAcl";
+import { adapstoryFrontendThroughBffRule } from "./adapstoryFrontendThroughBff";
 import {
   adapstoryAiCapabilityGovernanceRule,
   adapstoryMcpPluginFirstBoundaryRule,
@@ -9,9 +11,13 @@ import {
   adapstoryTenantIsolationEvidenceRule,
   adapstoryWidgetLakeContractRule,
 } from "./adapstoryIncubatingRules";
+import { adapstoryLlmGatewayBoundaryRule } from "./adapstoryLlmGatewayBoundary";
 import { adapstoryNoCoreBcCyclesRule } from "./adapstoryNoCoreBcCycles";
 import { adapstoryPluginCapabilitiesFromManifestRule } from "./adapstoryPluginCapabilitiesFromManifest";
+import { adapstoryPolyglotDataBoundaryRule } from "./adapstoryPolyglotDataBoundary";
+import { adapstoryRuntimeObservabilityEvidenceRule } from "./adapstoryRuntimeObservabilityEvidence";
 import { adapstorySchemaPerBcNotDbPerServiceRule } from "./adapstorySchemaPerBcNotDbPerService";
+import { adapstoryStatefulWorkloadEvidenceRule } from "./adapstoryStatefulWorkloadEvidence";
 import { apiGatewayRule } from "./apiGateway";
 import { cohesionRule } from "./cohesion";
 import { commonReuseRule } from "./commonReuse";
@@ -47,4 +53,10 @@ export const ruleRegistry: readonly RuleDefinition[] = [
   adapstoryMcpPluginFirstBoundaryRule,
   adapstoryTenantIsolationEvidenceRule,
   adapstoryAiCapabilityGovernanceRule,
+  adapstoryFrontendThroughBffRule,
+  adapstoryLlmGatewayBoundaryRule,
+  adapstoryPolyglotDataBoundaryRule,
+  adapstoryEventContractEvidenceRule,
+  adapstoryRuntimeObservabilityEvidenceRule,
+  adapstoryStatefulWorkloadEvidenceRule,
 ];

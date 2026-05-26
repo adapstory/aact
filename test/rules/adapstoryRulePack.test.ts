@@ -36,6 +36,12 @@ describe("Adapstory Architecture Rule Pack", () => {
       "adapstory-mcp-plugin-first-boundary",
       "adapstory-tenant-isolation-evidence",
       "adapstory-ai-capability-governance",
+      "adapstory-frontend-through-bff",
+      "adapstory-llm-gateway-boundary",
+      "adapstory-polyglot-data-boundary",
+      "adapstory-event-contract-evidence",
+      "adapstory-runtime-observability-evidence",
+      "adapstory-stateful-workload-evidence",
     ]);
     expect(
       ADAPSTORY_ARCHITECTURE_INCUBATING_RULE_NAMES.every((ruleName) =>

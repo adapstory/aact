@@ -188,6 +188,108 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
       "attach guardrail, tenant, and secret-management evidence",
     ],
   },
+  {
+    name: "adapstory-frontend-through-bff",
+    status: "incubating",
+    intent:
+      "Frontend clients must reach backend capabilities through the BFF/web-api boundary.",
+    sourceOfTruth: [
+      "03-regulation/bff-development.md",
+      "frontend routes",
+      "BFF OpenAPI",
+      "reviewed frontend integration overlays",
+    ],
+    remediation: [
+      "replace direct /api/bc-* calls with /web-api/adapstory routes",
+      "route backend access through the BFF or approved gateway",
+      "document static/public asset exceptions with reviewed evidence",
+    ],
+  },
+  {
+    name: "adapstory-llm-gateway-boundary",
+    status: "incubating",
+    intent:
+      "AI, LLM, and agent services must reach model providers through BC-10 LLM Gateway.",
+    sourceOfTruth: [
+      "03-regulation/ai-development-regulation.md",
+      "model configuration manifests",
+      "LLM Gateway routes",
+      "reviewed capability-boundary overlays",
+    ],
+    remediation: [
+      "move OpenAI/OpenRouter/Ollama provider calls behind BC-10 LLM Gateway",
+      "declare model provider access in a manifest-backed capability",
+      "remove direct SDK/client wiring from AI services and plugins",
+    ],
+  },
+  {
+    name: "adapstory-polyglot-data-boundary",
+    status: "incubating",
+    intent:
+      "Python AI services must not access transactional PostgreSQL without own-schema/read-model/CDC evidence.",
+    sourceOfTruth: [
+      "03-regulation/architecture-base-principles.md",
+      "03-regulation/integration-rules.md",
+      "GitOps database values",
+      "migration/schema ownership overlays",
+    ],
+    remediation: [
+      "route Java/Python collaboration through REST, gRPC, Kafka, or CDC read models",
+      "add explicit own-schema or schema-per-BC evidence for AI persistence",
+      "remove shared Java BC database access from Python services",
+    ],
+  },
+  {
+    name: "adapstory-event-contract-evidence",
+    status: "incubating",
+    intent:
+      "Kafka/event relations must show CloudEvents, tenant, initiator, and version contract evidence.",
+    sourceOfTruth: [
+      "03-regulation/integration-rules.md",
+      "event schemas",
+      "Kafka topic manifests",
+      "consumer idempotency/DLT overlays",
+    ],
+    remediation: [
+      "add CloudEvents 1.0 and eventversion evidence to the relation",
+      "propagate tenant-id and request-initiator headers",
+      "document topic/schema ownership and idempotent consumer behavior",
+    ],
+  },
+  {
+    name: "adapstory-runtime-observability-evidence",
+    status: "incubating",
+    intent:
+      "Adapstory runtime services must expose metrics, tracing/correlation, and structured logs evidence.",
+    sourceOfTruth: [
+      "03-regulation/monitoring-observability-regulation.md",
+      "ServiceMonitor manifests",
+      "OpenTelemetry environment values",
+      "logging/alerting overlays",
+    ],
+    remediation: [
+      "add /metrics or ServiceMonitor evidence",
+      "propagate trace_id/correlation_id through API/event edges",
+      "declare structured JSON logs and dashboard/alert ownership",
+    ],
+  },
+  {
+    name: "adapstory-stateful-workload-evidence",
+    status: "incubating",
+    intent:
+      "Adapstory stateful surfaces must show PVC/storageClass and backup/restore evidence.",
+    sourceOfTruth: [
+      "03-regulation/storage-data-management-regulation.md",
+      "03-regulation/backup-disaster-recovery-regulation.md",
+      "GitOps Helm values",
+      "reviewed durability gap overlays",
+    ],
+    remediation: [
+      "add explicit PVC/storageClass/storage-tier evidence",
+      "attach backup, snapshot, restore, or retention evidence",
+      "keep durable state on the home data plane unless explicitly reviewed",
+    ],
+  },
 ] as const satisfies readonly AdapstoryArchitectureRulePackRule[];
 
 export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULE_NAMES =
