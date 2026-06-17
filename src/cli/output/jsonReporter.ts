@@ -1,4 +1,4 @@
-import type { CommandResult, Reporter } from "./types";
+import type { CommandResult, Reporter } from "../contracts";
 
 /**
  * Emits the envelope as a single JSON document on stdout. Stdout is reserved

@@ -7,9 +7,8 @@ import { defineCommand } from "citty";
 import path from "pathe";
 
 import { version } from "../../../package.json";
-import type { Renderer } from "../output";
+import type { ExecuteResult, Renderer } from "../contracts";
 import { ToolError } from "../output";
-import type { ExecuteResult } from "../run";
 import { cliCommand } from "../run";
 import { jsonArg } from "../sharedArgs";
 

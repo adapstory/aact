@@ -4,10 +4,9 @@ import { colors } from "consola/utils";
 import type { AactConfig } from "../../config";
 import { ruleRegistry } from "../../rules/registry";
 import type { RuleDefinition } from "../../rules/types";
+import type { ExecuteResult, Renderer } from "../contracts";
 import { loadAndValidateConfig } from "../loadConfig";
-import type { Renderer } from "../output";
 import { ToolError } from "../output";
-import type { ExecuteResult } from "../run";
 import { cliCommand } from "../run";
 import { configArg, jsonArg } from "../sharedArgs";
 

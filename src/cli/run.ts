@@ -3,14 +3,16 @@ import { defineCommand } from "citty";
 import path from "pathe";
 
 import type { AactConfig } from "../config";
-import { loadAndValidateConfig } from "./loadConfig";
 import type {
   CommandResult,
-  Diagnostic,
   ExitCode,
   OutputMode,
   Renderer,
   Reporter,
+} from "./contracts";
+import type { ExecuteResult } from "./contracts";
+import { loadAndValidateConfig } from "./loadConfig";
+import type {
   SarifAdapter,
 } from "./output";
 import {
@@ -21,19 +23,6 @@ import {
   resolveOutputMode,
   SarifReporter,
 } from "./output";
-
-/**
- * What `execute` returns: domain payload + outcome. The wrapper assembles
- * the envelope (command name, meta.durationMs, configPath, source) so
- * commands don't repeat that bookkeeping.
- */
-export interface ExecuteResult<TData> {
-  readonly data: TData;
-  readonly exitCode: ExitCode;
-  readonly diagnostics?: readonly Diagnostic[];
-  /** Text-mode hint when the command itself wrote to stdout. */
-  readonly stdoutClaimed?: boolean;
-}
 
 interface BaseOpts<TArgs extends ArgsDef, TData> {
   /** Command name surfaced in envelope.command (e.g. "analyze", "rule list"). */

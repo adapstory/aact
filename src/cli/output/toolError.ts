@@ -1,4 +1,4 @@
-import type { Diagnostic, DiagnosticKind } from "./types";
+import type { Diagnostic, DiagnosticKind } from "../contracts";
 
 /**
  * Distinguishes tool-failure (config rot, missing source file, bad format)

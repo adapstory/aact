@@ -6,7 +6,7 @@ import type {
   Diagnostic,
   Renderer,
   Reporter,
-} from "./types";
+} from "../contracts";
 
 /**
  * Text-mode reporter. Routes the envelope through the command-supplied

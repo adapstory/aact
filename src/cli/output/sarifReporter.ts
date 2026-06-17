@@ -1,4 +1,4 @@
-import type { CliEnvelope, CommandResult, Reporter } from "./types";
+import type { CliEnvelope, CommandResult, Reporter } from "../contracts";
 
 /**
  * SARIF v2.1.0 — Static Analysis Results Interchange Format, an

@@ -5,7 +5,7 @@ import { loadFormat } from "../formats/registry";
 import type { LoadResult } from "../formats/types";
 import { canLoad } from "../formats/types";
 import type { ModelIssue } from "../model";
-import type { Diagnostic, DiagnosticKind } from "./output";
+import type { Diagnostic, DiagnosticKind } from "./contracts";
 import { ToolError } from "./output";
 
 const issueKindMap: Record<ModelIssue["kind"], DiagnosticKind> = {

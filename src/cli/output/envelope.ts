@@ -1,12 +1,12 @@
 import { version as aactVersion } from "../../../package.json";
-import { ToolError } from "./toolError";
 import type {
   CliEnvelope,
   CommandResult,
   Diagnostic,
   EnvelopeMeta,
   ExitCode,
-} from "./types";
+} from "../contracts";
+import { ToolError } from "./toolError";
 
 export interface BuildEnvelopeInput<TData> {
   readonly command: string;

@@ -2,8 +2,7 @@ import fs from "node:fs/promises";
 
 import path from "pathe";
 
-import type { Renderer } from "../output";
-import type { ExecuteResult } from "../run";
+import type { ExecuteResult, Renderer } from "../contracts";
 import { cliCommand } from "../run";
 import { jsonArg } from "../sharedArgs";
 

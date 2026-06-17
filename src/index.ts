@@ -57,7 +57,7 @@ export type {
   OutputMode,
   Renderer,
   Reporter,
-} from "./cli/output";
+} from "./cli/contracts";
 
 // SARIF v2.1.0 surface — for consumers integrating `aact <command>
 // --sarif` output and for tooling that builds custom `SarifAdapter`s

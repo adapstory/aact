@@ -18,14 +18,13 @@ import type {
   SourceEdit,
   Violation,
 } from "../../rules/types";
+import type { Diagnostic, ExecuteResult, ExitCode, Renderer } from "../contracts";
 import { issueToDiagnostic, loadModel } from "../loadModel";
-import type { Diagnostic, ExitCode, Renderer } from "../output";
 import {
   formatDisplayPath,
   formatLocationDisplay,
   linkSourceLocation,
 } from "../output/hyperlinks";
-import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
 import { configArg, jsonArg, sarifArg } from "../sharedArgs";
 import { checkSarifAdapter } from "./checkSarif";

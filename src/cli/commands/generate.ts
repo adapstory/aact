@@ -5,11 +5,10 @@ import path from "pathe";
 import type { AactConfig } from "../../config";
 import { loadFormat } from "../../formats/registry";
 import { canGenerate } from "../../formats/types";
+import type { Diagnostic, ExecuteResult, Renderer } from "../contracts";
 import { loadModel } from "../loadModel";
-import type { Diagnostic, Renderer } from "../output";
 import { ToolError } from "../output";
 import { formatDisplayPath } from "../output/hyperlinks";
-import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
 import { configArg, jsonArg } from "../sharedArgs";
 

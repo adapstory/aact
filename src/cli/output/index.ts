@@ -1,3 +1,14 @@
+export type {
+  CliEnvelope,
+  CommandResult,
+  Diagnostic,
+  DiagnosticKind,
+  EnvelopeMeta,
+  ExitCode,
+  OutputMode,
+  Renderer,
+  Reporter,
+} from "../contracts";
 export type { BuildEnvelopeInput, ErrorEnvelopeInput } from "./envelope";
 export { buildEnvelope, buildErrorEnvelope, errorResult } from "./envelope";
 export {
@@ -27,14 +38,3 @@ export type {
 } from "./sarifReporter";
 export { SarifReporter } from "./sarifReporter";
 export { ToolError } from "./toolError";
-export type {
-  CliEnvelope,
-  CommandResult,
-  Diagnostic,
-  DiagnosticKind,
-  EnvelopeMeta,
-  ExitCode,
-  OutputMode,
-  Renderer,
-  Reporter,
-} from "./types";

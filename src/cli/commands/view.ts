@@ -4,9 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { AactConfig } from "../../config";
-import type { Renderer } from "../output";
+import type { ExecuteResult, Renderer } from "../contracts";
 import { ToolError } from "../output";
-import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
 import { configArg } from "../sharedArgs";
 

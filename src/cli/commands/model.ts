@@ -9,9 +9,8 @@ import type {
   ModelIssue,
 } from "../../model";
 import { allBoundaries, allElements } from "../../model";
+import type { ExecuteResult, Renderer } from "../contracts";
 import { issueToDiagnostic, loadModel } from "../loadModel";
-import type { Renderer } from "../output";
-import type { ExecuteResult } from "../run";
 import { cliCommandWithConfig } from "../run";
 import { configArg, jsonArg, sarifArg } from "../sharedArgs";
 import { modelSarifAdapter } from "./modelSarif";
