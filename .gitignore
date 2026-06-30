@@ -219,3 +219,14 @@ docs/research/
 ### Studied for grammar and behaviour only, never copied verbatim into this repo (license firewall).
 .parser-refs/
 *.bak
+target/
+temp/
+tmp/
+build/
+out/
+.gradle/
+.idea/
+.vscode/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
