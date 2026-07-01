@@ -267,3 +267,6 @@ logs
 *.pid
 *.seed
 *.pid.lock
+/.turbo/
+\.eslintcache
+.terraform/
