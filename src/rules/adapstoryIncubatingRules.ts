@@ -17,9 +17,10 @@ const WIDGET_CONTRACT_PATTERN =
   /widget[-_\s]?lake|ui\.contract[:=]?\s*widget-lake|@adapstory\/ui\/widget-lake|WidgetShell|PluginSurface|DataPanel/i;
 const SMART_LINE_PATTERN = /smart[-_\s]?line|SmartLine/i;
 const TENANT_EVIDENCE_PATTERN =
-  /tenant[_-]?id|tenantId|X-Tenant-Id|adapstory_tenant_id|tenant-scoped|row-level|plugin_tools/i;
+  /tenant[_-]?id|tenantId|X-Tenant-Id|adapstory_tenant_id|tenant-scoped|row-level|providerBindings/i;
 const MCP_PATTERN =
-  /mcp|tools\/list|tools\/call|tool registry|agent\.tools|plugin_tools/i;
+  /mcp|tools\/list|tools\/call|tool registry|requiredCapabilities|optionalCapabilities|providerBindings/i;
+const LEGACY_MCP_PATTERN = /agent\.tools|plugin_tools/i;
 const PLUGIN_GATEWAY_PATTERN = /plugin[_-\s]?gateway|gateway/i;
 const MANIFEST_OR_REVIEW_PATTERN =
   /manifest|sealed|reviewed[-_\s]?overlay|reviewed overlay/i;
@@ -46,6 +47,7 @@ export interface AdapstorySmartLineTenantScopeOptions {
 
 export interface AdapstoryMcpPluginFirstBoundaryOptions {
   mcpPattern?: RegExp;
+  legacyMcpPattern?: RegExp;
   pluginGatewayPattern?: RegExp;
   manifestPattern?: RegExp;
 }
@@ -139,6 +141,7 @@ export const checkAdapstoryMcpPluginFirstBoundary = (
   options?: AdapstoryMcpPluginFirstBoundaryOptions,
 ): Violation[] => {
   const mcpPattern = options?.mcpPattern ?? MCP_PATTERN;
+  const legacyMcpPattern = options?.legacyMcpPattern ?? LEGACY_MCP_PATTERN;
   const pluginGatewayPattern =
     options?.pluginGatewayPattern ?? PLUGIN_GATEWAY_PATTERN;
   const manifestPattern =
@@ -147,7 +150,14 @@ export const checkAdapstoryMcpPluginFirstBoundary = (
 
   for (const container of allElements(model)) {
     const text = containerOwnText(container);
-    if (
+    if (matchesPattern(legacyMcpPattern, text)) {
+      violations.push({
+        ...elementViolation(
+          container,
+          `MCP surface "${container.name}" declares removed slug-based agent.tools/plugin_tools contract`,
+        ),
+      });
+    } else if (
       matchesPattern(mcpPattern, text) &&
       !isPluginGateway(container, pluginGatewayPattern) &&
       !matchesPattern(manifestPattern, text)
@@ -163,7 +173,18 @@ export const checkAdapstoryMcpPluginFirstBoundary = (
     for (const relation of container.relations) {
       const target = targetOf(model, relation);
       if (!target) continue;
-      if (!matchesPattern(mcpPattern, relationText(relation))) {
+      const text = relationText(relation);
+      if (matchesPattern(legacyMcpPattern, text)) {
+        violations.push({
+          ...elementViolation(
+            container,
+            `MCP relation "${container.name}" -> "${target.name}" declares removed slug-based agent.tools/plugin_tools contract`,
+            relation,
+          ),
+        });
+        continue;
+      }
+      if (!matchesPattern(mcpPattern, text)) {
         continue;
       }
       if (

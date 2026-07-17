@@ -123,12 +123,31 @@ describe("Adapstory incubating architecture rules", () => {
     ).toHaveLength(0);
   });
 
+  it("rejects removed slug-based MCP contracts even on the gateway", () => {
+    const pluginGateway = container(
+      "plugin_gateway",
+      ["gateway", "source:plugin-manifest"],
+      "Resolves agent.tools from the plugin_tools JWT claim.",
+    );
+
+    expect(
+      checkAdapstoryMcpPluginFirstBoundary(model([pluginGateway])),
+    ).toMatchObject([
+      {
+        target: "plugin_gateway",
+        targetKind: "element",
+        message:
+          'MCP surface "plugin_gateway" declares removed slug-based agent.tools/plugin_tools contract',
+      },
+    ]);
+  });
+
   it("requires tenant isolation evidence for tenant-scoped surfaces", () => {
     const contentApi = container("content_repository", ["api", "bc-11"]);
     const pluginGateway = container(
       "plugin_gateway",
       ["gateway", "bc-02"],
-      "Validates plugin_tools JWT claim and tenant_id.",
+      "Validates exact providerBindings grant and tenant_id.",
     );
 
     expect(
@@ -139,6 +158,25 @@ describe("Adapstory incubating architecture rules", () => {
         targetKind: "element",
         message:
           'tenant-scoped surface "content_repository" lacks tenant isolation evidence',
+      },
+    ]);
+  });
+
+  it("does not accept removed plugin_tools claims as tenant evidence", () => {
+    const legacyGateway = container(
+      "plugin_gateway",
+      ["gateway", "bc-02"],
+      "Validates plugin_tools JWT claim.",
+    );
+
+    expect(
+      checkAdapstoryTenantIsolationEvidence(model([legacyGateway])),
+    ).toMatchObject([
+      {
+        target: "plugin_gateway",
+        targetKind: "element",
+        message:
+          'tenant-scoped surface "plugin_gateway" lacks tenant isolation evidence',
       },
     ]);
   });

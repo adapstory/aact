@@ -141,7 +141,7 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
     name: "adapstory-mcp-plugin-first-boundary",
     status: "incubating",
     intent:
-      "MCP tools and plugin-first calls must resolve through Plugin Gateway and manifest-declared plugin capabilities.",
+      "MCP tools and plugin-first calls must resolve through Plugin Gateway and manifest-declared capabilities.",
     sourceOfTruth: [
       "plugin manifests",
       "MCP tool registry",
@@ -151,7 +151,8 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
     remediation: [
       "route MCP tools/list and tools/call through Plugin Gateway",
       "declare MCP capability in plugin manifest",
-      "replace hardcoded plugin slugs with capability resolution",
+      "remove agent.tools and plugin_tools contracts",
+      "replace hardcoded plugin slugs with requiredCapabilities, optionalCapabilities, and providerBindings",
     ],
   },
   {
@@ -166,7 +167,7 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
       "tenant isolation tests",
     ],
     remediation: [
-      "add tenant_id, tenantId, X-Tenant-Id, or plugin_tools evidence",
+      "add tenant_id, tenantId, X-Tenant-Id, or exact providerBindings evidence",
       "document row-level, schema, graph, event, or gateway isolation",
       "add cross-tenant isolation tests for ambiguous surfaces",
     ],
