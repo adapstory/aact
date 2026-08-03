@@ -185,7 +185,8 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
         status: "incubating",
         intent: "Frontend clients must reach backend capabilities through the BFF/web-api boundary.",
         sourceOfTruth: [
-            "03-regulation/bff-development.md",
+            "docs/design-system/implementation.md#platform-alignment",
+            "specs/architecture-inventory/current-architecture.bff-boundary.c4.puml",
             "frontend routes",
             "BFF OpenAPI",
             "reviewed frontend integration overlays",
@@ -201,7 +202,8 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
         status: "incubating",
         intent: "AI, LLM, and agent services must reach model providers through BC-10 LLM Gateway.",
         sourceOfTruth: [
-            "03-regulation/ai-development-regulation.md",
+            "docs/adr/ADR-020-ai-course-modular-pipeline-boundaries.md",
+            "Adapstory-GitOps/infra/ci/jenkins/scripts/test_bc10_model_gateway_gitops_contract.py",
             "model configuration manifests",
             "LLM Gateway routes",
             "reviewed capability-boundary overlays",
@@ -217,8 +219,8 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
         status: "incubating",
         intent: "Python AI services must not access transactional PostgreSQL without own-schema/read-model/CDC evidence.",
         sourceOfTruth: [
-            "03-regulation/architecture-base-principles.md",
-            "03-regulation/integration-rules.md",
+            "docs/adr/ADR-019-architecture-model-source-of-truth.md#authoritative-source-hierarchy",
+            "specs/architecture-inventory/postgres-schema-ownership-decisions.md",
             "GitOps database values",
             "migration/schema ownership overlays",
         ],
@@ -233,7 +235,7 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
         status: "incubating",
         intent: "Kafka/event relations must show CloudEvents, tenant, initiator, and version contract evidence.",
         sourceOfTruth: [
-            "03-regulation/integration-rules.md",
+            "docs/adr/ADR-015-integration-header-contract.md",
             "event schemas",
             "Kafka topic manifests",
             "consumer idempotency/DLT overlays",
@@ -249,7 +251,7 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
         status: "incubating",
         intent: "Adapstory runtime services must expose metrics, tracing/correlation, and structured logs evidence.",
         sourceOfTruth: [
-            "03-regulation/monitoring-observability-regulation.md",
+            "docs/monitoring-observability-regulation.md",
             "ServiceMonitor manifests",
             "OpenTelemetry environment values",
             "logging/alerting overlays",
@@ -265,8 +267,8 @@ export const ADAPSTORY_ARCHITECTURE_INCUBATING_RULES = [
         status: "incubating",
         intent: "Adapstory stateful surfaces must show PVC/storageClass and backup/restore evidence.",
         sourceOfTruth: [
-            "03-regulation/storage-data-management-regulation.md",
-            "03-regulation/backup-disaster-recovery-regulation.md",
+            "docs/storage-retention-policy.md",
+            "Adapstory-GitOps/infra/argocd/templates/applications/backup-system.yaml",
             "GitOps Helm values",
             "reviewed durability gap overlays",
         ],
