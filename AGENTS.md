@@ -17,9 +17,12 @@ maintainability, observability, and future evolution.
 
 ## Mandatory Delivery Cycle
 
-Every AI agent must self-manage the repository delivery cycle for non-trivial work:
+Every AI agent must manage the repository delivery cycle for non-trivial work
+inside the current Codex task. Do not invoke Beads, Coordinator, or AgentLaunch;
+Codex owns scope, review, and quality checks:
 
-1. Start from a tracked beads issue or create one before changing files.
+1. Record the requested outcome, exact files, and acceptance criteria in the
+   current Codex task before changing files.
 2. Clarify product intent and acceptance criteria with the PO when ambiguity
    would change behavior, data contracts, security, cost, or operations.
 3. Investigate root cause before proposing or implementing a fix.
@@ -30,8 +33,9 @@ Every AI agent must self-manage the repository delivery cycle for non-trivial wo
 6. Implement production code and tests together. Keep changes in the owning
    module unless the contract is intentionally cross-cutting.
 7. Run the honest validation gates for the changed scope and fix failures.
-8. Finish with `agent-finish-protocol`: stage exact files, commit, close/update
-   beads, push beads, push Git, and report evidence.
+8. Finish with focused validation and report exact evidence. Publish through
+   native Git only when the user authorizes publication; never bypass Codex
+   quality checks.
 
 ## Engineering Standard
 
@@ -69,9 +73,8 @@ quality gates or hide failures. Forbidden examples include:
   replacing product behavior with superficial mocks to make checks pass.
 
 If a gate is genuinely impossible to run because of a missing external service,
-document the blocker, keep the strongest local gate enabled, and add or update
-an issue that tracks the real recovery. Do not present that as a completed
-verification.
+document the blocker and next action in the current Codex task, keep the
+strongest local gate enabled, and do not present it as completed verification.
 
 ## Validation Expectations
 
@@ -93,6 +96,5 @@ Work is not complete until:
 - acceptance criteria are met,
 - relevant tests and quality gates pass without forbidden shortcuts,
 - operational/documentation changes are updated in the same patch,
-- beads status is closed or accurately updated,
-- commits are pushed to the tracked remote,
+- publication is performed only when the user authorized it,
 - the handoff names exact validation commands and results.
